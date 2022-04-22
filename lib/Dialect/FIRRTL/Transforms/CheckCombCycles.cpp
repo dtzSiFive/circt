@@ -618,10 +618,10 @@ void printPathBetweenModulePorts(SmallString<16> &instancePath,
     current = prev[current];
   }
   std::reverse(path.begin(), path.end());
-  diag.attachNote(start.value.getLoc())
+  diag.attachNote(instance.getLoc())
       << instancePath << "." << instance.getPortName(in).str();
   printPath(path, instancePath, module, false, diag);
-  diag.attachNote(start.value.getLoc())
+  diag.attachNote(instance.getLoc())
       << instancePath << "." << instance.getPortName(out).str();
   instancePath.resize(instancePathSize);
 }
