@@ -508,15 +508,89 @@ SmallVector<Node> sampleCycle(SCCIterator &scc) {
   }
   llvm_unreachable("a cycle must be found in SCC");
 }
+void printPathBetweenModulePorts(SmallString<16> &instancePath,
+                                 InstanceOp instance, unsigned in, unsigned out,
+                                 NodeContext *context,
+                                 mlir::InFlightDiagnostic &diag);
 
-void printPath(SmallVector<Node> &path) {}
+void printPath(SmallVector<Node> &path, SmallString<16> &instancePath,
+               FModuleOp module, bool isCycle, mlir::InFlightDiagnostic &diag) {
+  unsigned pathSize = isCycle ? path.size() + 1 : path.size();
+  // NOTE: We visit the start element twice to explicitly indicate the path
+  // forms a cycle.
+  for (unsigned i = 0, e = pathSize; i < e; ++i) {
+    Node current = path[i % path.size()];
+    bool isCycleEnd = i == path.size();
+    auto attachInfo = [&]() -> mlir::Diagnostic & {
+      return diag.attachNote(current.value.getLoc()) << instancePath << ".";
+    };
 
-void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
-                                InstanceOp instance, unsigned in, unsigned out,
-                                NodeContext *context) {
+    // If the current value is port, emit its name.
+    if (auto arg = current.value.dyn_cast<BlockArgument>()) {
+      attachInfo() << module.getPortName(arg.getArgNumber());
+      continue;
+    }
+
+    TypeSwitch<Operation *>(current.value.getDefiningOp())
+        .Case<WireOp, RegOp, RegResetOp>(
+            // For operations which declare signals, we simply print signal
+            // names.
+            [&](auto op) { attachInfo() << op.name(); })
+        .Case<InstanceOp, SubfieldOp>([&](auto op) {
+          // If the op is InstanceOp or SubfieldOp, it is necessary to
+          // investigate the next value since output values do not expilicty
+          // appear in the cycle.
+          Node next = path[(i + 1) % path.size()];
+          for (auto iter = GT::child_begin(current),
+                    end = GT::child_end(current);
+               iter != end; ++iter) {
+            if ((*iter).value != next.value)
+              continue;
+
+            auto iterImpl = iter.getIteratorImpl();
+            if (std::holds_alternative<InstanceNodeIterator>(iterImpl)) {
+              // Instance. Print names of input and output ports.
+              auto instance = current.value.getDefiningOp<InstanceOp>();
+              auto inputPort = current.value.cast<OpResult>().getResultNumber();
+              auto outputPort =
+                  std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
+              if (isCycleEnd)
+                attachInfo() << instance.name() << "."
+                             << instance.getPortName(inputPort).str();
+              else
+                printPathBetweenModulePorts(instancePath, instance, inputPort,
+                                            outputPort, current.context, diag);
+
+            } else if (std::holds_alternative<SubfieldNodeIterator>(iterImpl)) {
+              // SubfieldNodeIterator represents the connection between addr
+              // port and data port.
+              auto subfieldAddr = current.value.getDefiningOp<SubfieldOp>();
+              auto subfieldData =
+                  std::get<SubfieldNodeIterator>(iterImpl).getDataPort();
+
+              attachInfo() << getFieldName(getFieldRefFromValue(subfieldAddr));
+              if (!isCycleEnd)
+                diag.attachNote(subfieldData.getLoc())
+                    << module.getName().str() << "."
+                    << getFieldName(getFieldRefFromValue(subfieldData));
+            }
+            break;
+          }
+        })
+        .Default([&](auto op) {});
+  }
+}
+
+void printPathBetweenModulePorts(SmallString<16> &instancePath,
+                                 InstanceOp instance, unsigned in, unsigned out,
+                                 NodeContext *context,
+                                 mlir::InFlightDiagnostic &diag) {
   auto module = dyn_cast<FModuleOp>(*instance.getReferencedModule());
   if (!module)
     return;
+  unsigned instancePathSize = instancePath.size();
+  instancePath += ".";
+  instancePath += instance.name();
   auto start = Node(module.getArgument(in), context);
   auto end = Node(module.getArgument(out), context);
   llvm::DenseMap<Node, Node> prev;
@@ -535,76 +609,26 @@ void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
       que.push(child);
     }
   }
+
+  SmallVector<Node> path;
+  Node current = end;
+  while (current.value) {
+    path.push_back(current);
+    current = prev[current];
+  }
+
+  std::reverse(path.begin(), path.end());
+  printPath(path, instancePath, module, false, diag);
+  instancePath.resize(instancePathSize);
 }
 
 void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
                      mlir::InFlightDiagnostic &diag) {
   // Sample a cycle to print.
   SmallVector<Node> cycle = sampleCycle(scc);
-  unsigned cycleSize = cycle.size();
-
-  // NOTE: We visit the start element twice to explicitly indicate the path
-  // forms a cycle.
-  for (unsigned i = 0, e = cycleSize + 1; i < e; ++i) {
-    Node current = cycle[i % cycleSize];
-    bool lastNode = i == cycleSize;
-    auto attachInfo = [&]() -> mlir::Diagnostic & {
-      return diag.attachNote(current.value.getLoc())
-             << module.getName().str() << ".";
-    };
-
-    // If the current value is port, emit its name.
-    if (auto arg = current.value.dyn_cast<BlockArgument>()) {
-      attachInfo() << module.getPortName(arg.getArgNumber());
-      continue;
-    }
-
-    TypeSwitch<Operation *>(current.value.getDefiningOp())
-        .Case<WireOp, RegOp, RegResetOp>(
-            // For operations which declare signals, we simply print signal
-            // names.
-            [&](auto op) { attachInfo() << op.name(); })
-        .Case<InstanceOp, SubfieldOp>([&](auto op) {
-          // If the op is InstanceOp or SubfieldOp, it is necessary to
-          // investigate the next value since output values do not expilicty
-          // appear in the cycle.
-          Node next = cycle[(i + 1) % cycleSize];
-          for (auto iter = GT::child_begin(current),
-                    end = GT::child_end(current);
-               iter != end; ++iter) {
-            if ((*iter).value != next.value)
-              continue;
-
-            auto iterImpl = iter.getIteratorImpl();
-            if (std::holds_alternative<InstanceNodeIterator>(iterImpl)) {
-              // Instance. Print names of input and output ports.
-              auto instance = current.value.getDefiningOp<InstanceOp>();
-              auto inputPort = current.value.cast<OpResult>().getResultNumber();
-              auto outputPort =
-                  std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
-              attachInfo() << instance.name() << "."
-                           << instance.getPortName(inputPort).str();
-              if (!lastNode)
-                attachInfo() << instance.name() << "."
-                             << instance.getPortName(outputPort).str();
-            } else if (std::holds_alternative<SubfieldNodeIterator>(iterImpl)) {
-              // SubfieldNodeIterator represents the connection between addr
-              // port and data port.
-              auto subfieldAddr = current.value.getDefiningOp<SubfieldOp>();
-              auto subfieldData =
-                  std::get<SubfieldNodeIterator>(iterImpl).getDataPort();
-
-              attachInfo() << getFieldName(getFieldRefFromValue(subfieldAddr));
-              if (!lastNode)
-                diag.attachNote(subfieldData.getLoc())
-                    << module.getName().str() << "."
-                    << getFieldName(getFieldRefFromValue(subfieldData));
-            }
-            break;
-          }
-        })
-        .Default([&](auto op) {});
-  }
+  SmallString<16> instancePath;
+  instancePath += module.getName();
+  printPath(cycle, instancePath, module, true, diag);
 }
 
 /// This pass constructs a local graph for each module to detect combinational
