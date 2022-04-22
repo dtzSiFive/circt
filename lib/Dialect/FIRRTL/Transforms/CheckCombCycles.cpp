@@ -509,6 +509,34 @@ SmallVector<Node> sampleCycle(SCCIterator &scc) {
   llvm_unreachable("a cycle must be found in SCC");
 }
 
+void printPath(SmallVector<Node> &path) {}
+
+void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
+                                InstanceOp instance, unsigned in, unsigned out,
+                                NodeContext *context) {
+  auto module = dyn_cast<FModuleOp>(*instance.getReferencedModule());
+  if (!module)
+    return;
+  auto start = Node(module.getArgument(in), context);
+  auto end = Node(module.getArgument(out), context);
+  llvm::DenseMap<Node, Node> prev;
+  std::queue<Node> que;
+  que.push(start);
+  while (!que.empty()) {
+    auto current = que.front();
+    que.pop();
+    if (current == end)
+      break;
+    for (auto child :
+         llvm::make_range(GT::child_begin(current), GT::child_end(current))) {
+      if (prev.count(child))
+        continue;
+      prev.insert({child, current});
+      que.push(child);
+    }
+  }
+}
+
 void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
                      mlir::InFlightDiagnostic &diag) {
   // Sample a cycle to print.
