@@ -613,12 +613,16 @@ void printPathBetweenModulePorts(SmallString<16> &instancePath,
   SmallVector<Node> path;
   Node current = end;
   while (current.value) {
-    path.push_back(current);
+    if (current != end && current != start)
+      path.push_back(current);
     current = prev[current];
   }
-
   std::reverse(path.begin(), path.end());
+  diag.attachNote(start.value.getLoc())
+      << instancePath << "." << instance.getPortName(in).str();
   printPath(path, instancePath, module, false, diag);
+  diag.attachNote(start.value.getLoc())
+      << instancePath << "." << instance.getPortName(out).str();
   instancePath.resize(instancePathSize);
 }
 
