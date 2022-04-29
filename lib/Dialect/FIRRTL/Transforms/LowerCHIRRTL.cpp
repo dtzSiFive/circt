@@ -371,8 +371,9 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
-    // Initialization at the MemoryPortOp.  Connect the address port using a
-    // partialconnect if the address driver is larger than the port width.
+    // Initialization at the MemoryPortOp.  Use helper to connect if the
+    // address driver is larger than the port width.
+    // TODO: simplify to emitConnect, once it creates strictconnect's
     auto addressLHS = address.getType().cast<FIRRTLType>().getPassiveType();
     auto addressRHS =
         cmemoryPortAccess.index().getType().cast<FIRRTLType>().getPassiveType();
