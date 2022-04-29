@@ -598,7 +598,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   // a connect.
   if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
         return use.getOperandNumber() == 1 &&
-               isa<ConnectOp>(use.getOwner());
+               isa<ConnectOp, StrictConnectOp>(use.getOwner());
       }))
     return;
 
