@@ -761,6 +761,7 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
       for (int i = writePath.size() - 2; i >= 0; --i)
         leaf = cloneAccess(builder, writePath[i], leaf);
 
+      // TODO: let emitConnect handle this, once it emits strictconnect's
       if (isa<ConnectOp, StrictConnectOp>(op) ||
           leaf.getType() == op->getOperand(1).getType())
         mkConnect(builder, leaf, op->getOperand(1));
