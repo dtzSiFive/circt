@@ -360,7 +360,10 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     if (!anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation"))
       return false;
 
-    isSubCircuit = anno.getMember<BoolAttr>("isSubCircuit").getValue();
+    bool hasOldEmitJSON = anno.getDict().contains("emitJSON");
+    auto isSub = anno.getMember<BoolAttr>("isSubCircuit");
+    isSubCircuit = hasOldEmitJSON || (isSub && isSub.getValue());
+
     circuitPackage = anno.getMember<StringAttr>("circuitPackage");
     return true;
   });
