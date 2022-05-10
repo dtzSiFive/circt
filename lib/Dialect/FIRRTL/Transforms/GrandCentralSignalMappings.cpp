@@ -136,9 +136,9 @@ void ModuleSignalMappings::run() {
     });
   });
 
-  for (auto mapping: mappings) {
-    llvm::errs() << "mapping: " << mapping << "\n";
-  }
+  // for (auto mapping: mappings) {
+  //   llvm::errs() << "mapping: " << mapping << "\n";
+  // }
 
   auto localMappings = llvm::make_filter_range(mappings, [](auto &m) { return m.local; });
 
@@ -152,21 +152,6 @@ void ModuleSignalMappings::run() {
             connect.erase();
     }
 
-//  // JSON
-//  for (auto mapping: mappings) {
-//    std::string jsonString;
-//    llvm::raw_string_ostream jsonStream(jsonString);
-//    json::OStream j(jsonStream, /* indentSize */ 2);
-//
-//    auto b = OpBuilder::atBlockEnd(circuit.getBody());
-//    auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
-//    jsonOp->setAttr(
-//        "output_file",
-//        hw::OutputFileAttr::getFromFilename(
-//          b.getContext(), Twine(circuitPackage) + ".sigdrive.json", true));
-//
-//  }
-//
   // If this module either
   if (mappings.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
@@ -547,15 +532,19 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     llvm::raw_string_ostream jsonStream(jsonString);
     json::OStream j(jsonStream, 2);
 
+    auto mkRef = [&](FModuleOp module, const SignalMapping &mapping) {
+      return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(), mapping.localName);
+    };
+
     j.object([&] {
         j.attribute("class", signalDriverAnnoClass);
         j.attributeArray("sinkTargets", [&]() { // array of dicts
           for (auto item : result.infoMap) {
-            for (auto &info : item.second.RemoteMappings) {
+            for (auto &mapping : item.second.RemoteMappings) {
               // check dir
               j.object([&] {
-                j.attribute("_1", info.localName.getValue());
-                j.attribute("_2", info.remoteTarget.getValue());
+                j.attribute("_1", mkRef(item.first, mapping));
+                j.attribute("_2", mapping.remoteTarget.getValue());
               });
               // j.attributeObject(
             }
