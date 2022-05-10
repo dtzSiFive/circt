@@ -138,7 +138,8 @@ void ModuleSignalMappings::run() {
     });
   });
 
-  auto localMappings = llvm::make_filter_range(mappings, [](auto &m) { return m.local; });
+  auto localMappings =
+      llvm::make_filter_range(mappings, [](auto &m) { return m.local; });
 
   // Remove connections to sources.  This is done to cleanup invalidations that
   // occur from the Chisel API of Grand Central.
@@ -162,7 +163,7 @@ void ModuleSignalMappings::run() {
     // Pick a name for the module that implements the signal mappings.
     CircuitNamespace circuitNamespace(module->getParentOfType<CircuitOp>());
     mappingsModuleName =
-      circuitNamespace.newName(Twine(module.getName()) + "_signal_mappings");
+        circuitNamespace.newName(Twine(module.getName()) + "_signal_mappings");
 
     // Generate the mappings module.
     auto mappingsModule = emitMappingsModule();
@@ -197,7 +198,6 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   // annotation, which sits in the main circuit, then record if we ever see any
   // forces of module inputs.  These require special fixups due to the fact that
   // SV force will force the entire net connected to the port as well.
-
 
   // forcedport
   if (!mapping.local && mapping.dir == MappingDirection::DriveRemote) {
@@ -409,7 +409,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   };
 
   // XXX: BAD: TODO: FIXME: workaround for testing
-  auto serialTransformReduce = [](auto Begin, auto End, auto Init, auto Reduce, auto Transform) {
+  auto serialTransformReduce = [](auto Begin, auto End, auto Init, auto Reduce,
+                                  auto Transform) {
     for (auto I = Begin; I != End; ++I)
       Init = Reduce(std::move(Init), Transform(*I));
     return std::move(Init);
@@ -419,8 +420,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   // because llvm::parallelTransformReduce uses the "data" method of std::vector
   // which is NOT provided for bool for optimization reasons.
   // Result result = llvm::parallelTransformReduce(
-  Result result = serialTransformReduce(
-      modules.begin(), modules.end(), Result(), reduce, processModule);
+  Result result = serialTransformReduce(modules.begin(), modules.end(),
+                                        Result(), reduce, processModule);
 
   auto *instanceGraph = &getAnalysis<InstanceGraph>();
   DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
@@ -492,7 +493,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
         hw::OutputFileAttr::getFromFilename(
             b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
   } else {
-    auto jsonOut = "sigdrive.json"; // TODO: outputFilename ?, how is this plumbed/used, okay to use/repurpose?
+    auto jsonOut = "sigdrive.json"; // TODO: outputFilename ?, how is this
+                                    // plumbed/used, okay to use/repurpose?
     std::string jsonString;
     llvm::raw_string_ostream jsonStream(jsonString);
     json::OStream j(jsonStream, 2);
@@ -503,7 +505,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
       // if non-local, use placeholder and add NLA to operand list
       if (mapping.nlaSym) {
         // TODO: These get dropped instead of substituted?? :(
-        assert(false && "NLA for signal mapping found, can't proceed as they aren't preserved?");
+        assert(false && "NLA for signal mapping found, can't proceed as they "
+                        "aren't preserved?");
         // auto nla =
         // circuit.lookupSymbol<NonLocalAnchor>(mapping.nlaSym.getAttr());
         // assert(nla);
