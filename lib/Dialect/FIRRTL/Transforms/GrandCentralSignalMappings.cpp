@@ -47,6 +47,7 @@ enum class MappingDirection {
 
 /// The information necessary to connect a local signal in a module to a remote
 /// value (in a different module and/or circuit).
+// TODO: rename fields, separate struct?
 struct SignalMapping {
   /// Whether we force or read from the target.
   MappingDirection dir;
@@ -61,6 +62,12 @@ struct SignalMapping {
   /// module.
   StringAttr localName;
 };
+
+/// Enough to emit the JSON again..
+// struct RemoteSignalMapping {
+//   // _2
+//   StringAttr localTarget;
+// };
 
 /// A helper structure that collects the data necessary to generate the signal
 /// mappings module for an existing `FModuleOp` in the IR.
@@ -141,7 +148,6 @@ void ModuleSignalMappings::run() {
   for (auto mapping: mappings) {
     llvm::errs() << "mapping: " << mapping << "\n";
   }
-  assert(0);
 
   // Remove connections to sources.  This is done to cleanup invalidations that
   // occur from the Chisel API of Grand Central.
@@ -211,24 +217,31 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   // annotation, which sits in the main circuit, then record if we ever see any
   // forces of module inputs.  These require special fixups due to the fact that
   // SV force will force the entire net connected to the port as well.
-  if (anno.getMember<StringAttr>("side").getValue() != "local") {
-    if (mapping.dir != MappingDirection::DriveRemote)
-      return;
-    auto blockArg = value.dyn_cast<BlockArgument>();
-    if (!blockArg)
-      return;
-    auto portIdx = blockArg.getArgNumber();
-    if (module.getPortDirection(portIdx) == Direction::Out)
-      return;
-    forcedInputPorts.insert(portIdx);
-    return;
-  }
+  auto addForcedInputPortIfNeeded =
+      [&]() {
+        if (anno.getMember<StringAttr>("side").getValue() != "local") {
+          llvm::errs() << "remote mapping: " << mapping << "\n";
+          if (mapping.dir != MappingDirection::DriveRemote)
+            return;
+          auto blockArg = value.dyn_cast<BlockArgument>();
+          if (!blockArg)
+            return;
+          auto portIdx = blockArg.getArgNumber();
+          if (module.getPortDirection(portIdx) == Direction::Out)
+            return;
+          forcedInputPorts.insert(portIdx);
+          return;
+        }
+      };
+  addForcedInputPortIfNeeded();
 
-  // Guess a name for the local value. This is only for readability's sake,
-  // giving the pass a hint for picking the names of the generated module ports.
-  if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+      // Guess a name for the local value. This is only for readability's sake,
+      // giving the pass a hint for picking the names of the generated module
+      // ports.
+      if (auto blockArg = value.dyn_cast<BlockArgument>()) {
     mapping.localName = module.getPortNameAttr(blockArg.getArgNumber());
-  } else if (auto op = value.getDefiningOp()) {
+  }
+  else if (auto op = value.getDefiningOp()) {
     mapping.localName = op->getAttrOfType<StringAttr>("name");
   }
 
@@ -360,6 +373,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     if (!anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation"))
       return false;
 
+    // ugh
     bool hasOldEmitJSON = anno.getDict().contains("emitJSON");
     auto isSub = anno.getMember<BoolAttr>("isSubCircuit");
     isSubCircuit = hasOldEmitJSON || (isSub && isSub.getValue());
@@ -368,11 +382,11 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     return true;
   });
 
-  bool emitJSON = isSubCircuit; // for now
-  if (emitJSON && !circuitPackage) {
+  bool emitSubJSON = isSubCircuit; // for now
+  if (emitSubJSON && !circuitPackage) {
     emitError(circuit->getLoc())
-        << "has invalid SignalDriverAnnotation (JSON emission is enabled, but "
-           "no circuitPacakge was provided";
+        << "has invalid SignalDriverAnnotation (subcircuit JSON emission is "
+           "enabled, but no circuitPackage was provided";
     return signalPassFailure();
   }
 
@@ -395,11 +409,6 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   json::OStream mj(mappingsJsonStream, /* indentSize */ 2);
 #endif
   // TODO: add fields we already know to mj
-
-  auto gatherMappings = [](auto & mappings) {
-    for (auto &m: mappings) {
-    };
-  };
 
 #if 0
     auto mb = OpBuilder::atBlockEnd(circuit.getBody());
@@ -492,51 +501,76 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 
   // If this is a subcircuit, then continue on and emit JSON information
   // necessary to drive SiFive tools.
-  if (!emitJSON)
-    return;
+  if (emitSubJSON) {
+    std::string jsonString;
+    llvm::raw_string_ostream jsonStream(jsonString);
+    json::OStream j(jsonStream, 2);
+    j.object([&] {
+      j.attributeObject("vendor", [&]() {
+        j.attributeObject("vcs", [&]() {
+          j.attributeArray("vsrcs", [&]() {
+            for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
+              SmallVector<char> file(outputFilename.begin(),
+                                     outputFilename.end());
+              llvm::sys::fs::make_absolute(file);
+              llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
+              j.value(file);
+            }
+            for (FExtModuleOp ext : extmodules.vsrc) {
+              SmallVector<char> file(outputFilename.begin(),
+                                     outputFilename.end());
+              llvm::sys::fs::make_absolute(file);
+              llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
+              j.value(file);
+            }
+          });
+        });
+        j.attributeObject("verilator", [&]() {
+          j.attributeArray("error", [&]() {
+            j.value("force statement is not supported in verilator");
+          });
+        });
+      });
+      j.attributeArray("remove_vsrcs", []() {});
+      j.attributeArray("vsrcs", []() {});
+      j.attributeArray("load_jsons", [&]() {
+        for (FExtModuleOp extModule : extmodules.json)
+          j.value((Twine(extModule.moduleName()) + ".json").str());
+      });
+    });
+    auto b = OpBuilder::atBlockEnd(circuit.getBody());
+    auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
+    jsonOp->setAttr(
+        "output_file",
+        hw::OutputFileAttr::getFromFilename(
+            b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
+  } else {
+    auto jsonOut = "sigdrive.json"; // TODO: outputFilename ?, how is this plumbed/used, okay to use/repurpose?
+    std::string jsonString;
+    llvm::raw_string_ostream jsonStream(jsonString);
+    json::OStream j(jsonStream, 2);
 
-  std::string jsonString;
-  llvm::raw_string_ostream jsonStream(jsonString);
-  json::OStream j(jsonStream, 2);
-  j.object([&] {
-    j.attributeObject("vendor", [&]() {
-      j.attributeObject("vcs", [&]() {
-        j.attributeArray("vsrcs", [&]() {
-          for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
-            SmallVector<char> file(outputFilename.begin(),
-                                   outputFilename.end());
-            llvm::sys::fs::make_absolute(file);
-            llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
-            j.value(file);
-          }
-          for (FExtModuleOp ext : extmodules.vsrc) {
-            SmallVector<char> file(outputFilename.begin(),
-                                   outputFilename.end());
-            llvm::sys::fs::make_absolute(file);
-            llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
-            j.value(file);
-          }
-        });
-      });
-      j.attributeObject("verilator", [&]() {
-        j.attributeArray("error", [&]() {
-          j.value("force statement is not supported in verilator");
-        });
-      });
+    j.object([&] {
+        j.attribute("class", signalDriverAnnoClass);
+        j.attributeArray("sinkTargets", [&] () {
+            });
+        j.attributeArray("sourceTargets", [&] () {
+            });
+        // TODO: is this needed, used?
+        j.attribute("circuit", "circuit empty :\n  module empty :\n\n    skip\n");
+        // TODO: handle
+        j.attributeArray("annotations", [&] () { });
+        // TODO: handle
+        if (circuitPackage)
+          j.attribute("circuitPackage", circuitPackage.getValue());
     });
-    j.attributeArray("remove_vsrcs", []() {});
-    j.attributeArray("vsrcs", []() {});
-    j.attributeArray("load_jsons", [&]() {
-      for (FExtModuleOp extModule : extmodules.json)
-        j.value((Twine(extModule.moduleName()) + ".json").str());
-    });
-  });
-  auto b = OpBuilder::atBlockEnd(circuit.getBody());
-  auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
-  jsonOp->setAttr(
-      "output_file",
-      hw::OutputFileAttr::getFromFilename(
-          b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
+    auto b = OpBuilder::atBlockEnd(circuit.getBody());
+    auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
+    jsonOp->setAttr(
+        "output_file",
+        hw::OutputFileAttr::getFromFilename(
+            b.getContext(), jsonOut, true));
+  }
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralSignalMappingsPass(
