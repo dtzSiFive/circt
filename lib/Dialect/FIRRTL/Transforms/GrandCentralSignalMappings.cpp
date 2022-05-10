@@ -138,6 +138,11 @@ void ModuleSignalMappings::run() {
     });
   });
 
+  for (auto mapping: mappings) {
+    llvm::errs() << "mapping: " << mapping << "\n";
+  }
+  assert(0);
+
   // Remove connections to sources.  This is done to cleanup invalidations that
   // occur from the Chisel API of Grand Central.
   for (auto mapping : mappings)
@@ -373,13 +378,19 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     DenseMap<FModuleOp, DenseSet<unsigned>> forcedInputPorts;
   } Result;
 
+  // typedef struct {
+  //   bool allAnalysesPreserved;
+  //   DenseMap<FModuleOp, Den
+  // } MainResult;
   // Save gathered mappings
   // TODO: Thread-safe :(
   // DenseMap of SmallVector :(
   // DenseMap<FModuleLike, decltype(ModuleSignalMappings::mappings)> mappingsMap;
+#if 0 
   std::string mappingsJsonString;
   llvm::raw_string_ostream mappingsJsonStream(mappingsJsonString);
   json::OStream mj(mappingsJsonStream, /* indentSize */ 2);
+#endif
   // TODO: add fields we already know to mj
 
   auto gatherMappings = [](auto & mappings) {
@@ -387,16 +398,20 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     };
   };
 
+#if 0
     auto mb = OpBuilder::atBlockEnd(circuit.getBody());
     auto mJsonOp = mb.create<sv::VerbatimOp>(mb.getUnknownLoc(), mappingsJsonString);
     mJsonOp->setAttr(
         "output_file",
         hw::OutputFileAttr::getFromFilename(
-          mb.getContext(), Twine(circuitPackage) + ".sigdrive.json", true));
+          mb.getContext(), /* Twine(circuitPackage) + ".sigdrive.json" */ "sigdrive.json", true));
+#endif
 
-  auto processModule = [this](FModuleOp module) -> Result {
+  auto processModule = [&](FModuleOp module) -> Result {
     ModuleSignalMappings mapper(module, markDut, prefix);
     mapper.run();
+  //  if (!isSubCircuit)
+  //    gatherMappings(mappings);
     // XXX: HACK
     //assert(!mappingsMap.count(module));
     //if (!mapper.mappings.empty())
