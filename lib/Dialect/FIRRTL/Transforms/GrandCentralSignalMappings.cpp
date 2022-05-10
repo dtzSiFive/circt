@@ -425,10 +425,10 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 
     return {mapper.allAnalysesPreserved,
             DenseMap<FModuleOp, Info>(
-                {module,
-                 {mapper.forcedInputPorts,
-                  SmallVector<SignalMapping, 16>(llvm::make_filter_range(
-                      mapper.mappings, [](auto &m) { return !m.local; }))}})};
+                {{module,
+                  {mapper.forcedInputPorts,
+                   SmallVector<SignalMapping, 4>(llvm::make_filter_range(
+                       mapper.mappings, [](auto &m) { return !m.local; }))}}})};
   };
 
   SmallVector<FModuleOp> modules;
