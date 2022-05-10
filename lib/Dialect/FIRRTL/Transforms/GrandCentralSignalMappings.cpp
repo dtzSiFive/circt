@@ -65,12 +65,6 @@ struct SignalMapping {
   bool local;
 };
 
-/// Enough to emit the JSON again..
-// struct RemoteSignalMapping {
-//   // _2
-//   StringAttr localTarget;
-// };
-
 /// A helper structure that collects the data necessary to generate the signal
 /// mappings module for an existing `FModuleOp` in the IR.
 struct ModuleSignalMappings {
@@ -111,11 +105,6 @@ void ModuleSignalMappings::run() {
   // Check whether this module has any `SignalDriverAnnotation`s. These indicate
   // whether the module contains any operations with such annotations and
   // requires processing.
-  // AnnotationSet origAnnos(module);
-  // llvm::errs() << "annos for: " << module.getName() << "\n";
-  // for (auto a: origAnnos) {
-  //   a.dump();
-  // };
   if (!AnnotationSet::removeAnnotations(module, signalDriverAnnoClass)) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
                             << "` (has no annotations)\n");
@@ -227,7 +216,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
 
 
   // forcedport
-  if (!mapping.local && mapping.dir == MappingDirection::ProbeRemote) {
+  if (!mapping.local && mapping.dir == MappingDirection::DriveRemote) {
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
       auto portIdx = blockArg.getArgNumber();
       if (module.getPortDirection(portIdx) == Direction::In)
@@ -390,10 +379,14 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
            "enabled, but no circuitPackage was provided";
     return signalPassFailure();
   }
+  typedef struct {
+    DenseSet<unsigned> forcedInputPorts;
+    SmallVector<SignalMapping, 4> RemoteMappings;
+  } Info;
 
   typedef struct {
     bool allAnalysesPreserved;
-    DenseMap<FModuleOp, DenseSet<unsigned>> forcedInputPorts;
+    DenseMap<FModuleOp, Info> infoMap;
   } Result;
 
   // typedef struct {
@@ -431,8 +424,11 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     //  mappingsMap[module] = mapper.mappings;
 
     return {mapper.allAnalysesPreserved,
-            DenseMap<FModuleOp, DenseSet<unsigned>>(
-                {{module, mapper.forcedInputPorts}})};
+            DenseMap<FModuleOp, Info>(
+                {module,
+                 {mapper.forcedInputPorts,
+                  SmallVector<SignalMapping, 16>(llvm::make_filter_range(
+                      mapper.mappings, [](auto &m) { return !m.local; }))}})};
   };
 
   SmallVector<FModuleOp> modules;
@@ -457,9 +453,9 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   }
 
   auto reduce = [](const Result &acc, Result result) -> Result {
-    DenseMap<FModuleOp, DenseSet<unsigned>> foo = acc.forcedInputPorts;
-    foo.insert(result.forcedInputPorts.begin(), result.forcedInputPorts.end());
-    return {acc.allAnalysesPreserved && result.allAnalysesPreserved, foo};
+    auto merge = acc.infoMap;
+    merge.insert(result.infoMap.begin(), result.infoMap.end());
+    return {acc.allAnalysesPreserved && result.allAnalysesPreserved, merge};
   };
 
   // XXX: BAD: TODO: FIXME: workaround for testing
@@ -478,9 +474,9 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 
   auto *instanceGraph = &getAnalysis<InstanceGraph>();
   DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
-  for (auto fixup : result.forcedInputPorts) {
-    for (auto portIdx : fixup.second) {
-      for (auto *use : instanceGraph->lookup(fixup.first)->uses()) {
+  for (auto item : result.infoMap) {
+    for (auto portIdx : item.second.forcedInputPorts) {
+      for (auto *use : instanceGraph->lookup(item.first)->uses()) {
         auto inst = use->getInstance();
         auto port = inst->getResult(portIdx);
         OpBuilder builder(inst.getContext());
