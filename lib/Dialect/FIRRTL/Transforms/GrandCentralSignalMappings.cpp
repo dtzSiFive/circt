@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -29,20 +30,29 @@ namespace json = llvm::json;
 using namespace circt;
 using namespace firrtl;
 
-static constexpr const char *signalDriverAnnoClass =
-    "sifive.enterprise.grandcentral.SignalDriverAnnotation";
+
+//===- Note about local/remote terminology and emitted mappings -----------===//
+// For SignalDriver annotations, "local" refers to the subcircuit that
+// drives/probes values in the main "remote" circuit.
+// A mappings module is generated and instantiated in the subcircuit that
+// interacts with targeted values in the main circuit.
+// Driven values are "sinks", and are set via 'force XMR = input_port;' statements.
+// Probes are "sources", and are read via 'assign output_port = XMR;' statements.
+//===----------------------------------------------------------------------===//
+
 
 //===----------------------------------------------------------------------===//
 // Per-Module Signal Mappings
 //===----------------------------------------------------------------------===//
 
+
 namespace {
 enum class MappingDirection {
   /// The local signal forces the remote signal.
-  DriveRemote,
+  DriveRemote, // Sink
   /// The local signal is driven to the value of the remote signal through a
   /// connect.
-  ProbeRemote,
+  ProbeRemote, // Source
 };
 
 /// The information necessary to connect a local signal in a module to a remote
@@ -60,6 +70,10 @@ struct SignalMapping {
   /// The name of the local value, for reuse in the generated signal mappings
   /// module.
   StringAttr localName;
+  /// Which "side" we're on
+  bool isLocal;
+  /// NLA, if present
+  FlatSymbolRefAttr nlaSym;
 };
 
 /// A helper structure that collects the data necessary to generate the signal
@@ -73,13 +87,12 @@ struct ModuleSignalMappings {
   void instantiateMappingsModule(FModuleOp mappingsModule);
 
   FModuleOp module;
-  bool allAnalysesPreserved = false;
+  bool allAnalysesPreserved = true;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
 
   StringRef markDut;
   StringRef prefix;
-  DenseSet<unsigned> forcedInputPorts;
 };
 } // namespace
 
@@ -98,6 +111,8 @@ static T &operator<<(T &os, const SignalMapping &mapping) {
 /// references and `ForceOp`s to probe and drive remote signals. This is
 /// dictated by the presence of `SignalDriverAnnotation` on the module and
 /// individual operations inside it.
+/// If the module is the "remote" (main) circuit, gather those mappings
+/// for use handling forced input ports and creating updated mappings.
 void ModuleSignalMappings::run() {
   // Check whether this module has any `SignalDriverAnnotation`s. These indicate
   // whether the module contains any operations with such annotations and
@@ -105,7 +120,6 @@ void ModuleSignalMappings::run() {
   if (!AnnotationSet::removeAnnotations(module, signalDriverAnnoClass)) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
                             << "` (has no annotations)\n");
-    allAnalysesPreserved = true;
     return;
   }
   LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
@@ -133,22 +147,35 @@ void ModuleSignalMappings::run() {
     });
   });
 
-  // Remove connections to sources.  This is done to cleanup invalidations that
-  // occur from the Chisel API of Grand Central.
-  for (auto mapping : mappings)
+  auto localMappings =
+      llvm::make_filter_range(mappings, [](auto &m) { return m.isLocal; });
+
+  // Remove connections to sources in the subcircuit.  This is done to cleanup
+  // invalidations that occur from the Chisel API of Grand Central.
+  // Only the remote value "source" should be connected to source values in local.
+  for (auto mapping : localMappings)
     if (mapping.dir == MappingDirection::ProbeRemote) {
       for (auto &use : llvm::make_early_inc_range(mapping.localValue.getUses()))
         if (auto connect = dyn_cast<FConnectLike>(use.getOwner()))
-          if (connect.dest() == mapping.localValue)
+          if (connect.dest() == mapping.localValue) {
             connect.erase();
+            allAnalysesPreserved = false;
+          };
     }
 
-  // If this module either
-  if (mappings.empty()) {
+  // If there aren't any local-side (subcircuit-side) mappings, we're done.
+  if (localMappings.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
                             << "` (has no non-zero sources or sinks)\n");
-    allAnalysesPreserved = true;
     return;
+  }
+
+  // Changes are coming, mark analyses not preserved
+  allAnalysesPreserved = false;
+
+  if (!llvm::all_of(mappings, [](auto &m) { return m.isLocal; })) {
+    emitWarning(module->getLoc(),
+                "mixed remote/local mappings found on same module");
   }
 
   // Pick a name for the module that implements the signal mappings.
@@ -179,25 +206,8 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   mapping.remoteTarget = anno.getMember<StringAttr>("peer");
   mapping.localValue = value;
   mapping.type = value.getType().cast<FIRRTLType>();
-
-  // Only continue to emit signal driving code for the "local" side of these
-  // annotations, which sits in the sub-circuit and interacts with the main
-  // circuit on the "remote" side.  If we are in the "remote" side of the
-  // annotation, which sits in the main circuit, then record if we ever see any
-  // forces of module inputs.  These require special fixups due to the fact that
-  // SV force will force the entire net connected to the port as well.
-  if (anno.getMember<StringAttr>("side").getValue() != "local") {
-    if (mapping.dir != MappingDirection::DriveRemote)
-      return;
-    auto blockArg = value.dyn_cast<BlockArgument>();
-    if (!blockArg)
-      return;
-    auto portIdx = blockArg.getArgNumber();
-    if (module.getPortDirection(portIdx) == Direction::Out)
-      return;
-    forcedInputPorts.insert(portIdx);
-    return;
-  }
+  mapping.isLocal = anno.getMember<StringAttr>("side").getValue() == "local";
+  mapping.nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
 
   // Guess a name for the local value. This is only for readability's sake,
   // giving the pass a hint for picking the names of the generated module ports.
@@ -219,7 +229,9 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
   // Determine what ports this module will have, given the signal mappings we
   // are supposed to emit.
   SmallVector<PortInfo> ports;
-  for (auto &mapping : mappings) {
+  auto localMappings =
+      llvm::make_filter_range(mappings, [](auto &m) { return m.isLocal; });
+  for (auto &mapping : localMappings) {
     ports.push_back(PortInfo{mapping.localName,
                              mapping.type,
                              mapping.dir == MappingDirection::DriveRemote
@@ -238,7 +250,7 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
   // Generate the connect and force statements inside the module.
   builder.setInsertionPointToStart(mappingsModule.getBody());
   unsigned portIdx = 0;
-  for (auto &mapping : mappings) {
+  for (auto &mapping : localMappings) {
     // TODO: Actually generate a proper XMR here. For now just do some textual
     // replacements. Generating a real IR node (like a proper XMR op) would be
     // much better, but the modules that `EmitSignalMappings` interacts with
@@ -249,11 +261,12 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
     // llvm::errs() << "Rewriting " << circuitName << " " << pathName <<
     // "\nWith: " << markDut << " " << Prefix << "\n";
     bool seenRoot = false;
+    auto [modulePath, varPath] = pathName.split('>');
     if (markDut.empty()) {
-      remoteXmrName += circuitName.drop_front();
+      // If no DUT, top-level is first module in modulePath ("~Top|Foo/b:B" -> "Foo.b")
+      remoteXmrName += modulePath.split('/').first;
       seenRoot = true;
     }
-    auto [modulePath, varPath] = pathName.split('>');
     do {
       auto [item, tail] = modulePath.split(':');
       modulePath = tail;
@@ -303,7 +316,9 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
 
   // Generate the connections to and from the instance.
   unsigned portIdx = 0;
-  for (auto &mapping : mappings) {
+  auto localMappings =
+      llvm::make_filter_range(mappings, [](auto &m) { return m.isLocal; });
+  for (auto &mapping : localMappings) {
     Value dst = inst.getResult(portIdx++);
     Value src = mapping.localValue;
     if (mapping.dir == MappingDirection::ProbeRemote)
@@ -329,35 +344,52 @@ public:
 void GrandCentralSignalMappingsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
 
-  bool emitJSON = false;
   StringAttr circuitPackage;
-  AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
-    if (!anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation"))
-      return false;
+  BoolAttr isSubCircuitAttr;
+  bool circuitHasAnno =
+      AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
+        if (!anno.isClass(
+                "sifive.enterprise.grandcentral.SignalDriverAnnotation"))
+          return false;
 
-    emitJSON = anno.getDict().contains("emitJSON");
-    circuitPackage = anno.getMember<StringAttr>("circuitPackage");
-    return true;
-  });
+        isSubCircuitAttr = anno.getMember<BoolAttr>("isSubCircuit");
+        circuitPackage = anno.getMember<StringAttr>("circuitPackage");
+        return true;
+      });
 
-  if (emitJSON && !circuitPackage) {
+  if (!circuitHasAnno) {
+    // Nothing to do here
+    markAllAnalysesPreserved();
+    return;
+  }
+
+  if (!isSubCircuitAttr) {
+    emitError(circuit->getLoc(), "has invalid SignalDriverAnnotation (missing 'isSubCircuit' field')");
+    return signalPassFailure();
+  }
+  bool isSubCircuit = isSubCircuitAttr.getValue();
+
+  if (isSubCircuit && !circuitPackage) {
     emitError(circuit->getLoc())
-        << "has invalid SignalDriverAnnotation (JSON emission is enabled, but "
-           "no circuitPacakge was provided";
+        << "has invalid SignalDriverAnnotation (subcircuit JSON emission is "
+           "enabled, but no circuitPackage was provided)";
     return signalPassFailure();
   }
 
   typedef struct {
     bool allAnalysesPreserved;
-    DenseMap<FModuleOp, DenseSet<unsigned>> forcedInputPorts;
+    DenseMap<FModuleOp, SmallVector<SignalMapping>> remoteMappings;
   } Result;
 
   auto processModule = [this](FModuleOp module) -> Result {
     ModuleSignalMappings mapper(module, markDut, prefix);
     mapper.run();
-    return {mapper.allAnalysesPreserved,
-            DenseMap<FModuleOp, DenseSet<unsigned>>(
-                {{module, mapper.forcedInputPorts}})};
+    return {
+        mapper.allAnalysesPreserved,
+        DenseMap<FModuleOp, SmallVector<SignalMapping>>(
+            {{module,
+              {SmallVector<SignalMapping>(llvm::make_filter_range(
+                  mapper.mappings, [](auto &m) { return !m.isLocal; }))}}})};
   };
 
   SmallVector<FModuleOp> modules;
@@ -382,87 +414,229 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   }
 
   auto reduce = [](const Result &acc, Result result) -> Result {
-    DenseMap<FModuleOp, DenseSet<unsigned>> foo = acc.forcedInputPorts;
-    foo.insert(result.forcedInputPorts.begin(), result.forcedInputPorts.end());
-    return {acc.allAnalysesPreserved && result.allAnalysesPreserved, foo};
+    auto merge = acc.remoteMappings;
+    merge.insert(result.remoteMappings.begin(), result.remoteMappings.end());
+    return {acc.allAnalysesPreserved && result.allAnalysesPreserved, merge};
   };
-  // Note: this uses (unsigned)true instead of (bool)true for the reduction
-  // because llvm::parallelTransformReduce uses the "data" method of std::vector
-  // which is NOT provided for bool for optimization reasons.
+
   Result result = llvm::parallelTransformReduce(
       modules.begin(), modules.end(), Result(), reduce, processModule);
 
-  auto *instanceGraph = &getAnalysis<InstanceGraph>();
+  // If this is a subcircuit, then emit JSON information necessary to drive
+  // SiFive tools.
+  // Otherwise handle any forced input ports and emit updated mappings.
+  if (isSubCircuit) {
+    if (result.allAnalysesPreserved)
+      markAllAnalysesPreserved();
+
+    std::string jsonString;
+    llvm::raw_string_ostream jsonStream(jsonString);
+    json::OStream j(jsonStream, 2);
+    j.object([&] {
+      j.attributeObject("vendor", [&]() {
+        j.attributeObject("vcs", [&]() {
+          j.attributeArray("vsrcs", [&]() {
+            for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
+              SmallVector<char> file(outputFilename.begin(),
+                                     outputFilename.end());
+              llvm::sys::fs::make_absolute(file);
+              llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
+              j.value(file);
+            }
+            for (FExtModuleOp ext : extmodules.vsrc) {
+              SmallVector<char> file(outputFilename.begin(),
+                                     outputFilename.end());
+              llvm::sys::fs::make_absolute(file);
+              llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
+              j.value(file);
+            }
+          });
+        });
+        j.attributeObject("verilator", [&]() {
+          j.attributeArray("error", [&]() {
+            j.value("force statement is not supported in verilator");
+          });
+        });
+      });
+      j.attributeArray("remove_vsrcs", []() {});
+      j.attributeArray("vsrcs", []() {});
+      j.attributeArray("load_jsons", [&]() {
+        for (FExtModuleOp extModule : extmodules.json)
+          j.value((Twine(extModule.moduleName()) + ".json").str());
+      });
+    });
+    auto b = OpBuilder::atBlockEnd(circuit.getBody());
+    auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
+    jsonOp->setAttr(
+        "output_file",
+        hw::OutputFileAttr::getFromFilename(
+            b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
+    return;
+  }
+
+  // Remote side, main circuit
+
+  // 1) fixup ports that are driven from subcircuit
+  // 2) Generate paths to value from top module (TODO)
+  //    * Handling this properly will require plumbing DUT/prefix
+  //      information to this point (or the subcircuit invocation).
+  //      For now, just drive using `module.name` XMR's
+  //    * Ideally this would be done via NLA args to verbatim
+  // 3) emit updated mappings as SignalDriverAnnotations
+  //    for consumption when processing the subcircuit
+  //    (as replacements for the original annotations)
+
+  // Helper to instantiate module namespaces as-needed
   DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
-  for (auto fixup : result.forcedInputPorts) {
-    for (auto portIdx : fixup.second) {
-      for (auto *use : instanceGraph->lookup(fixup.first)->uses()) {
+  auto getModuleNamespace =
+      [&moduleNamespaces](FModuleOp module) -> ModuleNamespace & {
+    return moduleNamespaces.try_emplace(module, module).first->second;
+  };
+
+  // Scan mappings for unexpected or unsupported values
+  for (auto &[mod, mappings] : result.remoteMappings) {
+    for (auto &mapping : mappings) {
+      // This isn't handled yet, error out instead of doing wrong thing
+      if (mapping.nlaSym) {
+        emitError(mapping.localValue.getLoc())
+            << "value contains unsupported signal driver annotation containing "
+               "an NLA";
+        return signalPassFailure();
+      }
+      // No local-side mappings on main circuit side
+      if (mapping.isLocal) {
+        emitError(mapping.localValue.getLoc())
+            << "local-side annotation in main circuit, mixing not supported";
+        return signalPassFailure();
+      }
+    }
+  }
+
+  auto *instanceGraph = &getAnalysis<InstanceGraph>();
+  DenseSet<unsigned> forcedInputPorts;
+  bool analysesPreserved = result.allAnalysesPreserved;
+  for (auto &[mod, mappings] : result.remoteMappings) {
+    // Walk mappings looking for module ports that are being driven,
+    // and gather their indices for fixing up.
+    forcedInputPorts.clear();
+    for (auto &mapping : mappings) {
+      if (mapping.dir == MappingDirection::DriveRemote /* Sink */) {
+        if (auto blockArg = mapping.localValue.dyn_cast<BlockArgument>()) {
+          auto portIdx = blockArg.getArgNumber();
+          if (mod.getPortDirection(portIdx) == Direction::In) {
+            if (!forcedInputPorts.insert(portIdx).second) {
+              emitError(blockArg.getLoc())
+                  << " module port driven more than once";
+              return signalPassFailure();
+            }
+          }
+        }
+      }
+    }
+
+    // Find all instantiations of this module, and replace uses of the driven
+    // port with a wire that's connected to a wire that connects to the port.
+    // This is done to cause an 'assign' to be created, disconnecting the
+    // forced input port's net from its uses.
+    for (auto portIdx : forcedInputPorts) {
+      unsigned use_count = 0;
+      for (auto *use : instanceGraph->lookup(mod)->uses()) {
+        if (++use_count != 1) {
+          emitError(mod.getLoc())
+              << " found multiple instances of module with input port {0} "
+                 "driven, unsupported";
+          return signalPassFailure();
+        }
+        analysesPreserved = false;
+
         auto inst = use->getInstance();
         auto port = inst->getResult(portIdx);
         OpBuilder builder(inst.getContext());
         builder.setInsertionPointAfter(inst);
         auto parentModule = inst->getParentOfType<FModuleOp>();
-        ModuleNamespace &moduleNamespace = moduleNamespaces[parentModule];
-        auto wire = builder.create<WireOp>(
-            builder.getUnknownLoc(), port.getType(), builder.getStringAttr({}),
+        ModuleNamespace &moduleNamespace = getModuleNamespace(parentModule);
+
+        // Create chain like:
+        // port_result <= foo_dataIn_x_buffer
+        // foo_dataIn_x_buffer <= foo_dataIn_x
+        auto replacementWireName = builder.getStringAttr(
+            mod.moduleName() + "_" + mod.getPortName(portIdx));
+        auto bufferWireName =
+            builder.getStringAttr(replacementWireName.getValue() + "_buffer");
+        auto bufferWire = builder.create<WireOp>(
+            builder.getUnknownLoc(), port.getType(), bufferWireName,
             builder.getArrayAttr({}),
-            builder.getStringAttr(moduleNamespace.newName("_GEN")));
-        port.replaceAllUsesWith(wire);
-        builder.create<StrictConnectOp>(builder.getUnknownLoc(), port, wire);
+            builder.getStringAttr(
+                moduleNamespace.newName(bufferWireName.getValue())));
+        auto replacementWire = builder.create<WireOp>(
+            builder.getUnknownLoc(), port.getType(), replacementWireName,
+            builder.getArrayAttr({}),
+            builder.getStringAttr(
+                moduleNamespace.newName(replacementWireName.getValue())));
+        port.replaceAllUsesWith(replacementWire);
+        builder.create<StrictConnectOp>(builder.getUnknownLoc(), port, bufferWire);
+        builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire, replacementWire);
       }
     }
   }
 
-  if (result.allAnalysesPreserved)
-    markAllAnalysesPreserved();
+  // Simple helper to emit basic 'module.name' XMR's for the mappings.
+  auto mkRef = [&](FModuleOp module, const SignalMapping &mapping) {
+    return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
+                         mapping.localName);
+  };
 
-  // If this is a subcircuit, then continue on and emit JSON information
-  // necessary to drive SiFive tools.
-  if (!emitJSON)
-    return;
+  // Generate and sort new mappings for output stability
+  SmallVector<std::pair<std::string,StringRef>,32> sinks, sources;
+  auto addUpdatedMappings = [&](MappingDirection filter_dir, auto &vec) {
+    for (auto &[mod, mappings] : result.remoteMappings)
+      for (auto &mapping : mappings)
+        if (mapping.dir == filter_dir)
+          vec.emplace_back(mkRef(mod, mapping), mapping.remoteTarget.getValue());
+  };
+  addUpdatedMappings(MappingDirection::DriveRemote, sinks);
+  addUpdatedMappings(MappingDirection::ProbeRemote, sources);
+  llvm::sort(sinks);
+  llvm::sort(sources);
 
+  auto jsonOut = "sigdrive.json"; // TODO: add arg to specify path/name?
   std::string jsonString;
   llvm::raw_string_ostream jsonStream(jsonString);
   json::OStream j(jsonStream, 2);
-  j.object([&] {
-    j.attributeObject("vendor", [&]() {
-      j.attributeObject("vcs", [&]() {
-        j.attributeArray("vsrcs", [&]() {
-          for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
-            SmallVector<char> file(outputFilename.begin(),
-                                   outputFilename.end());
-            llvm::sys::fs::make_absolute(file);
-            llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
-            j.value(file);
-          }
-          for (FExtModuleOp ext : extmodules.vsrc) {
-            SmallVector<char> file(outputFilename.begin(),
-                                   outputFilename.end());
-            llvm::sys::fs::make_absolute(file);
-            llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
-            j.value(file);
-          }
-        });
+
+  j.array([&] {
+    j.object([&] {
+      j.attribute("class", signalDriverAnnoClass);
+      j.attributeArray("sinkTargets", [&]() {
+        for (auto &[remote, local] : sinks) {
+          j.objectBegin();
+          j.attribute("_1", remote);
+          j.attribute("_2", local);
+          j.objectEnd();
+        };
       });
-      j.attributeObject("verilator", [&]() {
-        j.attributeArray("error", [&]() {
-          j.value("force statement is not supported in verilator");
-        });
+      j.attributeArray("sourceTargets", [&]() {
+        for (auto &[remote, local] : sources) {
+          j.objectBegin();
+          j.attribute("_1", remote);
+          j.attribute("_2", local);
+          j.objectEnd();
+        };
       });
-    });
-    j.attributeArray("remove_vsrcs", []() {});
-    j.attributeArray("vsrcs", []() {});
-    j.attributeArray("load_jsons", [&]() {
-      for (FExtModuleOp extModule : extmodules.json)
-        j.value((Twine(extModule.moduleName()) + ".json").str());
+      // Emit these but don't attempt to plumb through their original values
+      j.attribute("circuit", "circuit empty :\n  module empty :\n\n    skip\n");
+      j.attributeArray("annotations", [&]() {});
+      if (circuitPackage)
+        j.attribute("circuitPackage", circuitPackage.getValue());
     });
   });
   auto b = OpBuilder::atBlockEnd(circuit.getBody());
   auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
-  jsonOp->setAttr(
-      "output_file",
-      hw::OutputFileAttr::getFromFilename(
-          b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
+  jsonOp->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                     b.getContext(), jsonOut, true));
+
+  if (analysesPreserved)
+    markAllAnalysesPreserved();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralSignalMappingsPass(
