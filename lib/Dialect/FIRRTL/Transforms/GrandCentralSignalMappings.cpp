@@ -510,39 +510,42 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
                            mapping.localName);
     };
 
-    j.object([&] {
-      j.attribute("class", signalDriverAnnoClass);
-      j.attributeArray("sinkTargets", [&]() { // array of dicts
-        for (auto item : result.infoMap) {
-          for (auto &mapping : item.second.RemoteMappings) {
-            // check dir
-            if (mapping.dir == MappingDirection::DriveRemote)
-              j.object([&] {
-                j.attribute("_1", mkRef(item.first, mapping));
-                j.attribute("_2", mapping.remoteTarget.getValue());
-              });
+    j.array([&] {
+      j.object([&] {
+        j.attribute("class", signalDriverAnnoClass);
+        j.attributeArray("sinkTargets", [&]() { // array of dicts
+          for (auto item : result.infoMap) {
+            for (auto &mapping : item.second.RemoteMappings) {
+              // check dir
+              if (mapping.dir == MappingDirection::DriveRemote)
+                j.object([&] {
+                  j.attribute("_1", mkRef(item.first, mapping));
+                  j.attribute("_2", mapping.remoteTarget.getValue());
+                });
+            }
           }
-        }
-      });
-      j.attributeArray("sourceTargets", [&]() {
-        for (auto item : result.infoMap) {
-          for (auto &mapping : item.second.RemoteMappings) {
-            // check dir
-            if (mapping.dir == MappingDirection::ProbeRemote)
-              j.object([&] {
-                j.attribute("_1", mkRef(item.first, mapping));
-                j.attribute("_2", mapping.remoteTarget.getValue());
-              });
+        });
+        j.attributeArray("sourceTargets", [&]() {
+          for (auto item : result.infoMap) {
+            for (auto &mapping : item.second.RemoteMappings) {
+              // check dir
+              if (mapping.dir == MappingDirection::ProbeRemote)
+                j.object([&] {
+                  j.attribute("_1", mkRef(item.first, mapping));
+                  j.attribute("_2", mapping.remoteTarget.getValue());
+                });
+            }
           }
-        }
+        });
+        // TODO: is this needed, used?
+        j.attribute("circuit",
+                    "circuit empty :\n  module empty :\n\n    skip\n");
+        // TODO: handle
+        j.attributeArray("annotations", [&]() {});
+        // TODO: handle
+        if (circuitPackage)
+          j.attribute("circuitPackage", circuitPackage.getValue());
       });
-      // TODO: is this needed, used?
-      j.attribute("circuit", "circuit empty :\n  module empty :\n\n    skip\n");
-      // TODO: handle
-      j.attributeArray("annotations", [&]() {});
-      // TODO: handle
-      if (circuitPackage)
-        j.attribute("circuitPackage", circuitPackage.getValue());
     });
     auto b = OpBuilder::atBlockEnd(circuit.getBody());
     auto jsonOp = b.create<sv::VerbatimOp>(
