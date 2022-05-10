@@ -1,3 +1,5 @@
+; RUN: firtool --firrtl-grand-central %s --mlir-print-ir-after-all
+; RUN: not true
   ; {
   ;   "class":"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
   ;   "prefix":"prefix1_",

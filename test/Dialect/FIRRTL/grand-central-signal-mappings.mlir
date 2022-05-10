@@ -170,7 +170,7 @@ firrtl.circuit "RemoveDrivers" {
   firrtl.module @RemoveDrivers() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
     %source = firrtl.wire sym @source  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %source, %invalid_ui1
+    // CHECK-NOT: firrtl.strictconnect %source, %invalid_ui1
     firrtl.strictconnect %source, %invalid_ui1 : !firrtl.uint<1>
   }
 }
