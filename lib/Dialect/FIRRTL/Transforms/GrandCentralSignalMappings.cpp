@@ -227,7 +227,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
 
 
   // forcedport
-  if (mapping.local && mapping.dir == MappingDirection::ProbeRemote) {
+  if (!mapping.local && mapping.dir == MappingDirection::ProbeRemote) {
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
       auto portIdx = blockArg.getArgNumber();
       if (module.getPortDirection(portIdx) == Direction::In)
@@ -235,7 +235,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
     }
   }
 
-  if (mapping.local)
+  if (!mapping.local)
     llvm::errs() << "remote mapping: " << mapping << "\n";
 
   // Guess a name for the local value. This is only for readability's sake,
