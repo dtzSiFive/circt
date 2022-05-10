@@ -282,6 +282,10 @@ struct CircuitLoweringState {
           dut = module;
     }
 
+    // for (auto &[first,second]: nlaMap) {
+    //   llvm::errs() << "first: " << first << " second: " << second << "\n";
+    // }
+
     // Figure out which module is the DUT and TestHarness.  If there is no
     // module marked as the DUT, the top module is the DUT. If the DUT and the
     // test harness are the same, then there is no test harness.
