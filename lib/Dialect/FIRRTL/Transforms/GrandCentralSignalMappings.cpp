@@ -102,6 +102,11 @@ void ModuleSignalMappings::run() {
   // Check whether this module has any `SignalDriverAnnotation`s. These indicate
   // whether the module contains any operations with such annotations and
   // requires processing.
+  AnnotationSet origAnnos(module);
+  llvm::errs() << "annos for: " << module.getName() << "\n";
+  for (auto a: origAnnos) {
+    a.dump();
+  };
   if (!AnnotationSet::removeAnnotations(module, signalDriverAnnoClass)) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
                             << "` (has no annotations)\n");
