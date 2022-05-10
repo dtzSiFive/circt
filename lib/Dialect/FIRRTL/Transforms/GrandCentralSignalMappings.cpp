@@ -123,7 +123,7 @@ void ModuleSignalMappings::run() {
         if (!anno.isClass(signalDriverAnnoClass))
           return false;
         addTarget(module.getArgument(i), anno);
-        return false; // KEEP // true;
+        return true;
       });
 
   // Gather the signal driver annotations of the operations within this module.
@@ -134,7 +134,7 @@ void ModuleSignalMappings::run() {
         return false;
       for (auto result : op->getResults())
         addTarget(result, anno);
-      return false; // KEEP // true;
+      return true;
     });
   });
 
@@ -357,7 +357,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     isSubCircuit = hasOldEmitJSON || (isSub && isSub.getValue());
 
     circuitPackage = anno.getMember<StringAttr>("circuitPackage");
-    return false;
+    return true;
   });
 
   bool emitSubJSON = isSubCircuit; // for now
