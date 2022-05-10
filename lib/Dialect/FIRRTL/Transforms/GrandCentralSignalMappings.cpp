@@ -63,6 +63,8 @@ struct SignalMapping {
   StringAttr localName;
   /// Which "side" we're on
   bool local;
+  /// NLA, if present
+  FlatSymbolRefAttr nlaSym;
 };
 
 /// A helper structure that collects the data necessary to generate the signal
@@ -191,6 +193,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   mapping.localValue = value;
   mapping.type = value.getType().cast<FIRRTLType>();
   mapping.local = anno.getMember<StringAttr>("side").getValue() == "local";
+  mapping.nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
 
   // Only continue to emit signal driving code for the "local" side of these
   // annotations, which sits in the sub-circuit and interacts with the main
@@ -533,6 +536,12 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     json::OStream j(jsonStream, 2);
 
     auto mkRef = [&](FModuleOp module, const SignalMapping &mapping) {
+      if (mapping.nlaSym) {
+        auto nla = circuit.lookupSymbol<NonLocalAnchor>(mapping.nlaSym.getAttr());
+        assert(nla);
+        nla.dump();
+        assert(0);
+      }
       return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(), mapping.localName);
     };
 
@@ -546,7 +555,6 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
                 j.attribute("_1", mkRef(item.first, mapping));
                 j.attribute("_2", mapping.remoteTarget.getValue());
               });
-              // j.attributeObject(
             }
           }
         });
