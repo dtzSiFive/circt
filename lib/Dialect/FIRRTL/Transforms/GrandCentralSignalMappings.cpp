@@ -349,17 +349,18 @@ public:
 void GrandCentralSignalMappingsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
 
-  bool emitJSON = false;
+  bool isSubCircuit = false;
   StringAttr circuitPackage;
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
     if (!anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation"))
       return false;
 
-    emitJSON = anno.getDict().contains("emitJSON");
+    isSubCircuit = anno.getMember<BoolAttr>("isSubCircuit").getValue();
     circuitPackage = anno.getMember<StringAttr>("circuitPackage");
     return true;
   });
 
+  bool emitJSON = isSubCircuit; // for now
   if (emitJSON && !circuitPackage) {
     emitError(circuit->getLoc())
         << "has invalid SignalDriverAnnotation (JSON emission is enabled, but "
