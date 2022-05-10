@@ -3,10 +3,24 @@
 ; CHECK: "class":
 ; CHECK-SAME: SignalDriverAnnotation
 ; CHECK-LABEL: "sinkTargets"
+; CHECK: _1
+; CHECK-SAME{LITERAL}: ~Foo|Foo>i
+; CHECK-NEXT: _2
+; CHECK-SAME{LITERAL}: ~signal_driver|signal_driver>Foo_i
+; COM: CHECK: _1
+; COM: CHECK-SAME{LITERAL}: ~Foo|Foo>i
+; COM: CHECK-NEXT: _2
+; COM: CHECK-SAME{LITERAL}: ~signal_driver|signal_driver>Foo_i
 ; CHECK-LABEL: "sourceTargets"
+; CHECK: _1
+; CHECK-SAME{LITERAL}: "~Foo|Foo>o";
+; CHECK-NEXT: _2
+; CHECK-SAME{LITERAL}: ~signal_driver|signal_driver>Foo_o
+; 
 ; CHECK: "circuit"
 ; CHECK: "annotations"
 ; CHECK: "circuitPackage"
+; CHECK: nopers
 
 ; TODO: Add inliner annotations, check things are updated appropriately
 circuit Foo: %[[
