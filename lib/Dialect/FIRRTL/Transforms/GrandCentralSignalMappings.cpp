@@ -102,11 +102,11 @@ void ModuleSignalMappings::run() {
   // Check whether this module has any `SignalDriverAnnotation`s. These indicate
   // whether the module contains any operations with such annotations and
   // requires processing.
-  AnnotationSet origAnnos(module);
-  llvm::errs() << "annos for: " << module.getName() << "\n";
-  for (auto a: origAnnos) {
-    a.dump();
-  };
+  // AnnotationSet origAnnos(module);
+  // llvm::errs() << "annos for: " << module.getName() << "\n";
+  // for (auto a: origAnnos) {
+  //   a.dump();
+  // };
   if (!AnnotationSet::removeAnnotations(module, signalDriverAnnoClass)) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
                             << "` (has no annotations)\n");
@@ -148,6 +148,21 @@ void ModuleSignalMappings::run() {
             connect.erase();
     }
 
+//  // JSON
+//  for (auto mapping: mappings) {
+//    std::string jsonString;
+//    llvm::raw_string_ostream jsonStream(jsonString);
+//    json::OStream j(jsonStream, /* indentSize */ 2);
+//
+//    auto b = OpBuilder::atBlockEnd(circuit.getBody());
+//    auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
+//    jsonOp->setAttr(
+//        "output_file",
+//        hw::OutputFileAttr::getFromFilename(
+//          b.getContext(), Twine(circuitPackage) + ".sigdrive.json", true));
+//
+//  }
+//
   // If this module either
   if (mappings.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
@@ -357,9 +372,18 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     DenseMap<FModuleOp, DenseSet<unsigned>> forcedInputPorts;
   } Result;
 
-  auto processModule = [this](FModuleOp module) -> Result {
+  // Save gathered mappings
+  // TODO: Thread-safe :(
+  // DenseMap of SmallVector :(
+  DenseMap<FModuleLike, decltype(ModuleSignalMappings::mappings)> mappingsMap;
+
+  auto processModule = [this,&mappingsMap](FModuleOp module) -> Result {
     ModuleSignalMappings mapper(module, markDut, prefix);
     mapper.run();
+    // XXX: HACK
+    assert(!mappingsMap.count(module));
+    mappingsMap[module] = mapper.mappings;
+
     return {mapper.allAnalysesPreserved,
             DenseMap<FModuleOp, DenseSet<unsigned>>(
                 {{module, mapper.forcedInputPorts}})};
@@ -391,10 +415,19 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     foo.insert(result.forcedInputPorts.begin(), result.forcedInputPorts.end());
     return {acc.allAnalysesPreserved && result.allAnalysesPreserved, foo};
   };
+
+  // XXX: BAD: TODO: FIXME: workaround for testing
+  auto serialTransformReduce = [](auto Begin, auto End, auto Init, auto Reduce, auto Transform) {
+    for (auto I = Begin; I != End; ++I)
+      Init = Reduce(std::move(Init), Transform(*I));
+    return std::move(Init);
+  };
+
   // Note: this uses (unsigned)true instead of (bool)true for the reduction
   // because llvm::parallelTransformReduce uses the "data" method of std::vector
   // which is NOT provided for bool for optimization reasons.
-  Result result = llvm::parallelTransformReduce(
+  // Result result = llvm::parallelTransformReduce(
+  Result result = serialTransformReduce(
       modules.begin(), modules.end(), Result(), reduce, processModule);
 
   auto *instanceGraph = &getAnalysis<InstanceGraph>();

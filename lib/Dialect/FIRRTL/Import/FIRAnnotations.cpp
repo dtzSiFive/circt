@@ -1617,6 +1617,7 @@ bool circt::firrtl::scatterCustomAnnotations(
         // Build the two annotations.
         for (auto pair : std::array{std::make_pair(localAttr, true),
                                     std::make_pair(remoteAttr, false)}) {
+          // canonTarget = localAttr -- _2
           auto canonTarget = canonicalizeTarget(pair.first.getValue());
           if (!canonTarget)
             return false;
