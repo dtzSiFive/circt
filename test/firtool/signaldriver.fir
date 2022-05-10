@@ -1,27 +1,14 @@
-; RUN: firtool --firrtl-grand-central %s --mlir-print-ir-after-all
-; RUN: not true
-  ; {
-  ;   "class":"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
-  ;   "prefix":"prefix1_",
-  ;   "inclusive":true,
-  ;   "target":"~Foo|Bar"
-  ; },
-  ; {
-  ;   "class":"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
-  ;   "prefix":"prefix2_",
-  ;   "inclusive":true,
-  ;   "target":"~Foo|Baz"
-  ; }
-; Source
-      ;{
-      ;  "_1":"~CoreIPSubsystemVerifTestHarness|BulletTile>clock",
-      ;  "_2":"~signal_driver|signal_driver>clock_sink"
-      ;},
-; Sink
-      ;{
-      ;  "_1":"~CoreIPSubsystemVerifTestHarness|CoreIPSubsystem>clock",
-      ;  "_2":"~signal_driver|signal_driver>reset_stretcher_cg_clock_source"
-      ;}
+; RUN: firtool --firrtl-grand-central %s | FileCheck %s
+; CHECK-LABEL: FILE "sigdrive.json"
+; CHECK: "class":
+; CHECK-SAME: SignalDriverAnnotation
+; CHECK-LABEL: "sinkTargets"
+; CHECK-LABEL: "sourceTargets"
+; CHECK: "circuit"
+; CHECK: "annotations"
+; CHECK: "circuitPackage"
+
+; TODO: Add inliner annotations, check things are updated appropriately
 circuit Foo: %[[
   {
   "class":"sifive.enterprise.grandcentral.SignalDriverAnnotation",
@@ -51,7 +38,6 @@ circuit Foo: %[[
     "circuitPackage":"foodriver"
 }
 ]]
-;circuit Foo:
   module Foo:
     input i: UInt<1>
     output o: UInt<1>
