@@ -138,10 +138,6 @@ void ModuleSignalMappings::run() {
     });
   });
 
-  // for (auto mapping: mappings) {
-  //   llvm::errs() << "mapping: " << mapping << "\n";
-  // }
-
   auto localMappings = llvm::make_filter_range(mappings, [](auto &m) { return m.local; });
 
   // Remove connections to sources.  This is done to cleanup invalidations that
@@ -211,9 +207,6 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
         forcedInputPorts.insert(portIdx);
     }
   }
-
-  if (!mapping.local)
-    llvm::errs() << "remote mapping: " << mapping << "\n";
 
   // Guess a name for the local value. This is only for readability's sake,
   // giving the pass a hint for picking the names of the generated module ports.
@@ -377,40 +370,9 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     DenseMap<FModuleOp, Info> infoMap;
   } Result;
 
-  // typedef struct {
-  //   bool allAnalysesPreserved;
-  //   DenseMap<FModuleOp, Den
-  // } MainResult;
-  // Save gathered mappings
-  // TODO: Thread-safe :(
-  // DenseMap of SmallVector :(
-  // DenseMap<FModuleLike, decltype(ModuleSignalMappings::mappings)> mappingsMap;
-#if 0 
-  std::string mappingsJsonString;
-  llvm::raw_string_ostream mappingsJsonStream(mappingsJsonString);
-  json::OStream mj(mappingsJsonStream, /* indentSize */ 2);
-#endif
-  // TODO: add fields we already know to mj
-
-#if 0
-    auto mb = OpBuilder::atBlockEnd(circuit.getBody());
-    auto mJsonOp = mb.create<sv::VerbatimOp>(mb.getUnknownLoc(), mappingsJsonString);
-    mJsonOp->setAttr(
-        "output_file",
-        hw::OutputFileAttr::getFromFilename(
-          mb.getContext(), /* Twine(circuitPackage) + ".sigdrive.json" */ "sigdrive.json", true));
-#endif
-
   auto processModule = [&](FModuleOp module) -> Result {
     ModuleSignalMappings mapper(module, markDut, prefix);
     mapper.run();
-  //  if (!isSubCircuit)
-  //    gatherMappings(mappings);
-    // XXX: HACK
-    //assert(!mappingsMap.count(module));
-    //if (!mapper.mappings.empty())
-    //  mappingsMap[module] = mapper.mappings;
-
     return {mapper.allAnalysesPreserved,
             DenseMap<FModuleOp, Info>(
                 {{module,
