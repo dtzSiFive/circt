@@ -536,48 +536,49 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     json::OStream j(jsonStream, 2);
 
     SmallVector<Attribute, 8> nlaArgs;
-    auto mkRef = [&](FModuleOp module, const SignalMapping &mapping) -> std::string {
+    auto mkRef = [&](FModuleOp module,
+                     const SignalMapping &mapping) -> std::string {
       // if non-local, use placeholder and add NLA to operand list
       if (mapping.nlaSym) {
-        // auto nla = circuit.lookupSymbol<NonLocalAnchor>(mapping.nlaSym.getAttr());
+        // auto nla =
+        // circuit.lookupSymbol<NonLocalAnchor>(mapping.nlaSym.getAttr());
         // assert(nla);
         // TODO: dedup these, re-use placeholders
         nlaArgs.push_back(mapping.nlaSym);
-        return llvm::formatv("{{{{{0}}}", nlaArgs.size()-1);
+        return llvm::formatv("{{{{{0}}}", nlaArgs.size() - 1);
       }
       // Otherwise, emit a local ref (TODO: syntax)
-      return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(), mapping.localName);
+      return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
+                           mapping.localName);
     };
 
     j.object([&] {
-        j.attribute("class", signalDriverAnnoClass);
-        j.attributeArray("sinkTargets", [&]() { // array of dicts
-          for (auto item : result.infoMap) {
-            for (auto &mapping : item.second.RemoteMappings) {
-              // check dir
-              j.object([&] {
-                j.attribute("_1", mkRef(item.first, mapping));
-                j.attribute("_2", mapping.remoteTarget.getValue());
-              });
-            }
-          }
-        });
-        j.attributeArray("sourceTargets", [&] () {
+      j.attribute("class", signalDriverAnnoClass);
+      j.attributeArray("sinkTargets", [&]() { // array of dicts
+        for (auto item : result.infoMap) {
+          for (auto &mapping : item.second.RemoteMappings) {
+            // check dir
+            j.object([&] {
+              j.attribute("_1", mkRef(item.first, mapping));
+              j.attribute("_2", mapping.remoteTarget.getValue());
             });
-        // TODO: is this needed, used?
-        j.attribute("circuit", "circuit empty :\n  module empty :\n\n    skip\n");
-        // TODO: handle
-        j.attributeArray("annotations", [&] () { });
-        // TODO: handle
-        if (circuitPackage)
-          j.attribute("circuitPackage", circuitPackage.getValue());
+          }
+        }
+      });
+      j.attributeArray("sourceTargets", [&]() {});
+      // TODO: is this needed, used?
+      j.attribute("circuit", "circuit empty :\n  module empty :\n\n    skip\n");
+      // TODO: handle
+      j.attributeArray("annotations", [&]() {});
+      // TODO: handle
+      if (circuitPackage)
+        j.attribute("circuitPackage", circuitPackage.getValue());
     });
     auto b = OpBuilder::atBlockEnd(circuit.getBody());
-    auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString, ValueRange{}, b.getArrayAttr(nlaArgs));
-    jsonOp->setAttr(
-        "output_file",
-        hw::OutputFileAttr::getFromFilename(
-            b.getContext(), jsonOut, true));
+    auto jsonOp = b.create<sv::VerbatimOp>(
+        b.getUnknownLoc(), jsonString, ValueRange{}, b.getArrayAttr(nlaArgs));
+    jsonOp->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                       b.getContext(), jsonOut, true));
   }
 }
 
