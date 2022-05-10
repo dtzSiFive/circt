@@ -540,6 +540,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
                      const SignalMapping &mapping) -> std::string {
       // if non-local, use placeholder and add NLA to operand list
       if (mapping.nlaSym) {
+        // TODO: These get dropped instead of substituted?? :(
+        assert(false && "NLA for signal mapping found, can't proceed as they aren't preserved?");
         // auto nla =
         // circuit.lookupSymbol<NonLocalAnchor>(mapping.nlaSym.getAttr());
         // assert(nla);
