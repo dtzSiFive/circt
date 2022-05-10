@@ -61,6 +61,8 @@ struct SignalMapping {
   /// The name of the local value, for reuse in the generated signal mappings
   /// module.
   StringAttr localName;
+  /// Which "side" we're on
+  bool local;
 };
 
 /// Enough to emit the JSON again..
@@ -149,9 +151,11 @@ void ModuleSignalMappings::run() {
     llvm::errs() << "mapping: " << mapping << "\n";
   }
 
+  auto localMappings = llvm::make_filter_range(mappings, [](auto &m) { return m.local; });
+
   // Remove connections to sources.  This is done to cleanup invalidations that
   // occur from the Chisel API of Grand Central.
-  for (auto mapping : mappings)
+  for (auto mapping : localMappings)
     if (mapping.dir == MappingDirection::ProbeRemote) {
       for (auto &use : llvm::make_early_inc_range(mapping.localValue.getUses()))
         if (auto connect = dyn_cast<FConnectLike>(use.getOwner()))
@@ -182,16 +186,18 @@ void ModuleSignalMappings::run() {
     return;
   }
 
-  // Pick a name for the module that implements the signal mappings.
-  CircuitNamespace circuitNamespace(module->getParentOfType<CircuitOp>());
-  mappingsModuleName =
+  if (!localMappings.empty()) {
+    // Pick a name for the module that implements the signal mappings.
+    CircuitNamespace circuitNamespace(module->getParentOfType<CircuitOp>());
+    mappingsModuleName =
       circuitNamespace.newName(Twine(module.getName()) + "_signal_mappings");
 
-  // Generate the mappings module.
-  auto mappingsModule = emitMappingsModule();
+    // Generate the mappings module.
+    auto mappingsModule = emitMappingsModule();
 
-  // Instantiate the mappings module.
-  instantiateMappingsModule(mappingsModule);
+    // Instantiate the mappings module.
+    instantiateMappingsModule(mappingsModule);
+  };
 }
 
 /// Mark a `value` inside the `module` as being the target of the
@@ -210,6 +216,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   mapping.remoteTarget = anno.getMember<StringAttr>("peer");
   mapping.localValue = value;
   mapping.type = value.getType().cast<FIRRTLType>();
+  mapping.local = anno.getMember<StringAttr>("side").getValue() == "local";
 
   // Only continue to emit signal driving code for the "local" side of these
   // annotations, which sits in the sub-circuit and interacts with the main
@@ -217,31 +224,25 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   // annotation, which sits in the main circuit, then record if we ever see any
   // forces of module inputs.  These require special fixups due to the fact that
   // SV force will force the entire net connected to the port as well.
-  auto addForcedInputPortIfNeeded =
-      [&]() {
-        if (anno.getMember<StringAttr>("side").getValue() != "local") {
-          llvm::errs() << "remote mapping: " << mapping << "\n";
-          if (mapping.dir != MappingDirection::DriveRemote)
-            return;
-          auto blockArg = value.dyn_cast<BlockArgument>();
-          if (!blockArg)
-            return;
-          auto portIdx = blockArg.getArgNumber();
-          if (module.getPortDirection(portIdx) == Direction::Out)
-            return;
-          forcedInputPorts.insert(portIdx);
-          return;
-        }
-      };
-  addForcedInputPortIfNeeded();
 
-      // Guess a name for the local value. This is only for readability's sake,
-      // giving the pass a hint for picking the names of the generated module
-      // ports.
-      if (auto blockArg = value.dyn_cast<BlockArgument>()) {
-    mapping.localName = module.getPortNameAttr(blockArg.getArgNumber());
+
+  // forcedport
+  if (mapping.local && mapping.dir == MappingDirection::ProbeRemote) {
+    if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+      auto portIdx = blockArg.getArgNumber();
+      if (module.getPortDirection(portIdx) == Direction::In)
+        forcedInputPorts.insert(portIdx);
+    }
   }
-  else if (auto op = value.getDefiningOp()) {
+
+  if (mapping.local)
+    llvm::errs() << "remote mapping: " << mapping << "\n";
+
+  // Guess a name for the local value. This is only for readability's sake,
+  // giving the pass a hint for picking the names of the generated module ports.
+  if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+    mapping.localName = module.getPortNameAttr(blockArg.getArgNumber());
+  } else if (auto op = value.getDefiningOp()) {
     mapping.localName = op->getAttrOfType<StringAttr>("name");
   }
 
