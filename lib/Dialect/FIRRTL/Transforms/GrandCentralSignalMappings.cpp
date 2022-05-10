@@ -558,14 +558,26 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
         for (auto item : result.infoMap) {
           for (auto &mapping : item.second.RemoteMappings) {
             // check dir
-            j.object([&] {
-              j.attribute("_1", mkRef(item.first, mapping));
-              j.attribute("_2", mapping.remoteTarget.getValue());
-            });
+            if (mapping.dir == MappingDirection::DriveRemote)
+              j.object([&] {
+                j.attribute("_1", mkRef(item.first, mapping));
+                j.attribute("_2", mapping.remoteTarget.getValue());
+              });
           }
         }
       });
-      j.attributeArray("sourceTargets", [&]() {});
+      j.attributeArray("sourceTargets", [&]() {
+        for (auto item : result.infoMap) {
+          for (auto &mapping : item.second.RemoteMappings) {
+            // check dir
+            if (mapping.dir == MappingDirection::ProbeRemote)
+              j.object([&] {
+                j.attribute("_1", mkRef(item.first, mapping));
+                j.attribute("_2", mapping.remoteTarget.getValue());
+              });
+          }
+        }
+      });
       // TODO: is this needed, used?
       j.attribute("circuit", "circuit empty :\n  module empty :\n\n    skip\n");
       // TODO: handle
