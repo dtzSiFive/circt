@@ -549,12 +549,18 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 
     j.object([&] {
         j.attribute("class", signalDriverAnnoClass);
-        j.attributeArray("sinkTargets", [&] () { // array of dicts
-            for (auto item : result.infoMap) {
-              for (auto & info : item.second) {
+        j.attributeArray("sinkTargets", [&]() { // array of dicts
+          for (auto item : result.infoMap) {
+            for (auto &info : item.second.RemoteMappings) {
+              // check dir
+              j.object([&] {
+                j.attribute("_1", info.localName.getValue());
+                j.attribute("_2", info.remoteTarget.getValue());
+              });
               // j.attributeObject(
-              }
-            });
+            }
+          }
+        });
         j.attributeArray("sourceTargets", [&] () {
             });
         // TODO: is this needed, used?
