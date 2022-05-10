@@ -375,14 +375,31 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   // Save gathered mappings
   // TODO: Thread-safe :(
   // DenseMap of SmallVector :(
-  DenseMap<FModuleLike, decltype(ModuleSignalMappings::mappings)> mappingsMap;
+  // DenseMap<FModuleLike, decltype(ModuleSignalMappings::mappings)> mappingsMap;
+  std::string mappingsJsonString;
+  llvm::raw_string_ostream mappingsJsonStream(mappingsJsonString);
+  json::OStream mj(mappingsJsonStream, /* indentSize */ 2);
+  // TODO: add fields we already know to mj
 
-  auto processModule = [this,&mappingsMap](FModuleOp module) -> Result {
+  auto gatherMappings = [](auto & mappings) {
+    for (auto &m: mappings) {
+    };
+  };
+
+    auto mb = OpBuilder::atBlockEnd(circuit.getBody());
+    auto mJsonOp = mb.create<sv::VerbatimOp>(mb.getUnknownLoc(), mappingsJsonString);
+    mJsonOp->setAttr(
+        "output_file",
+        hw::OutputFileAttr::getFromFilename(
+          mb.getContext(), Twine(circuitPackage) + ".sigdrive.json", true));
+
+  auto processModule = [this](FModuleOp module) -> Result {
     ModuleSignalMappings mapper(module, markDut, prefix);
     mapper.run();
     // XXX: HACK
-    assert(!mappingsMap.count(module));
-    mappingsMap[module] = mapper.mappings;
+    //assert(!mappingsMap.count(module));
+    //if (!mapper.mappings.empty())
+    //  mappingsMap[module] = mapper.mappings;
 
     return {mapper.allAnalysesPreserved,
             DenseMap<FModuleOp, DenseSet<unsigned>>(
