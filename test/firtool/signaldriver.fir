@@ -24,6 +24,14 @@
 ; CHECK: "circuitPackage"
 
 ; TODO: Add inliner annotations, check things are updated appropriately
+
+
+; SINK TARGET
+; NLA not supported yet :(
+;      {
+;        "_1":"~Foo|Foo/b:Bar>i",
+;        "_2":"~signal_driver|signal_driver>Bar_i"
+;      }
 circuit Foo: %[[
   {
   "class":"sifive.enterprise.grandcentral.SignalDriverAnnotation",
@@ -31,10 +39,6 @@ circuit Foo: %[[
       {
         "_1":"~Foo|Foo>i",
         "_2":"~signal_driver|signal_driver>Foo_i"
-      },
-      {
-        "_1":"~Foo|Foo/b:Bar>i",
-        "_2":"~signal_driver|signal_driver>Bar_i"
       }
     ],
     "sourceTargets":[
