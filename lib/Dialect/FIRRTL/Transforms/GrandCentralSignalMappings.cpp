@@ -408,20 +408,11 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     return {acc.allAnalysesPreserved && result.allAnalysesPreserved, merge};
   };
 
-  // XXX: BAD: TODO: FIXME: workaround for testing
-  auto serialTransformReduce = [](auto Begin, auto End, auto Init, auto Reduce,
-                                  auto Transform) {
-    for (auto I = Begin; I != End; ++I)
-      Init = Reduce(std::move(Init), Transform(*I));
-    return std::move(Init);
-  };
-
   // Note: this uses (unsigned)true instead of (bool)true for the reduction
   // because llvm::parallelTransformReduce uses the "data" method of std::vector
   // which is NOT provided for bool for optimization reasons.
-  // Result result = llvm::parallelTransformReduce(
-  Result result = serialTransformReduce(modules.begin(), modules.end(),
-                                        Result(), reduce, processModule);
+  Result result = llvm::parallelTransformReduce(
+      modules.begin(), modules.end(), Result(), reduce, processModule);
 
   auto *instanceGraph = &getAnalysis<InstanceGraph>();
   DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
