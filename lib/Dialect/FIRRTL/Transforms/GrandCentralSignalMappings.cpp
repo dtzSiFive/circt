@@ -534,27 +534,31 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
       }
     }
 
-    // Find all instantiations of this module, and replace uses of the driven
-    // port with a wire that's connected to a wire that connects to the port.
+    // Find all instantiations of this module, and replace uses of each driven
+    // port with a wire that's connected to a wire that is connected to the port.
     // This is done to cause an 'assign' to be created, disconnecting the
     // forced input port's net from its uses.
-    for (auto portIdx : forcedInputPorts) {
-      unsigned use_count = 0;
-      for (auto *use : instanceGraph->lookup(mod)->uses()) {
-        if (++use_count != 1) {
-          emitError(mod.getLoc())
-              << " found multiple instances of module with input port {0} "
-                 "driven, unsupported";
-          return signalPassFailure();
-        }
-        analysesPreserved = false;
+    if (forcedInputPorts.empty())
+      continue;
 
-        auto inst = use->getInstance();
+    analysesPreserved = false;
+    unsigned use_count = 0;
+    for (auto *use : instanceGraph->lookup(mod)->uses()) {
+      // Ensure just the one use for now, this matters if we want
+      // to be able to emit a unique path from the top module.
+      if (++use_count != 1) {
+        emitError(mod.getLoc())
+          << " found multiple instances of module with input port driven, unsupported";
+        return signalPassFailure();
+      }
+      auto inst = use->getInstance();
+      OpBuilder builder(inst.getContext());
+      builder.setInsertionPointAfter(inst);
+      auto parentModule = inst->getParentOfType<FModuleOp>();
+      ModuleNamespace &moduleNamespace = getModuleNamespace(parentModule);
+
+      for (auto portIdx : forcedInputPorts) {
         auto port = inst->getResult(portIdx);
-        OpBuilder builder(inst.getContext());
-        builder.setInsertionPointAfter(inst);
-        auto parentModule = inst->getParentOfType<FModuleOp>();
-        ModuleNamespace &moduleNamespace = getModuleNamespace(parentModule);
 
         // Create chain like:
         // port_result <= foo_dataIn_x_buffer
