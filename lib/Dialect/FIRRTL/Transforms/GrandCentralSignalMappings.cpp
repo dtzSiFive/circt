@@ -606,20 +606,17 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
         // Create chain like:
         // port_result <= foo_dataIn_x_buffer
         // foo_dataIn_x_buffer <= foo_dataIn_x
-        auto replacementWireName = builder.getStringAttr(
-            mod.moduleName() + "_" + mod.getPortName(portIdx));
-        auto bufferWireName =
-            builder.getStringAttr(replacementWireName.getValue() + "_buffer");
+        auto replacementWireName =
+            builder.getStringAttr(moduleNamespace.newName(
+                mod.moduleName() + "_" + mod.getPortName(portIdx)));
+        auto bufferWireName = builder.getStringAttr(moduleNamespace.newName(
+            replacementWireName.getValue() + "_buffer"));
         auto bufferWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), bufferWireName,
-            builder.getArrayAttr({}),
-            builder.getStringAttr(
-                moduleNamespace.newName(bufferWireName.getValue())));
+            builder.getArrayAttr({}), bufferWireName);
         auto replacementWire = builder.create<WireOp>(
             builder.getUnknownLoc(), port.getType(), replacementWireName,
-            builder.getArrayAttr({}),
-            builder.getStringAttr(
-                moduleNamespace.newName(replacementWireName.getValue())));
+            builder.getArrayAttr({}), replacementWireName);
         port.replaceAllUsesWith(replacementWire);
         builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
                                         bufferWire);
