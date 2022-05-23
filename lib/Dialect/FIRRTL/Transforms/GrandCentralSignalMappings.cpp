@@ -637,10 +637,10 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     auto attr = op->getAttrOfType<StringAttr>("inner_sym");
     if (attr)
       return attr;
-    auto module = op->getParentOfType<FModuleOp>();
     StringRef name = "sym";
     if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
       name = nameAttr.getValue();
+    auto module = op->getParentOfType<FModuleOp>();
     name = getModuleNamespace(module).newName(name);
     attr = StringAttr::get(op->getContext(), name);
     op->setAttr("inner_sym", attr);
