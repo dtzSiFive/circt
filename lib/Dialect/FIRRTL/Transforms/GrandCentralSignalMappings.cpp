@@ -672,9 +672,8 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   addUpdatedMappings(MappingDirection::DriveRemote, sinks);
   addUpdatedMappings(MappingDirection::ProbeRemote, sources);
   // Sort on local targets only, remote may contain substitution placeholders
-  auto compSecond = [](auto &a, auto &b) { return a.second < b.second; };
-  llvm::sort(sinks, compSecond);
-  llvm::sort(sources, compSecond);
+  llvm::sort(sinks, llvm::less_second());
+  llvm::sort(sources, llvm::less_second());
 
   // (4) Emit updated mappings for consumption by subcircuit
   std::string jsonString;
