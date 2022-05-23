@@ -345,26 +345,36 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
+/// External modules, for emitting when processing subcircuit
 struct ExtModules {
-  // External modules put in the vsrcs field of the JSON.
+  /// External modules put in the vsrcs field of the JSON.
   SmallVector<FExtModuleOp> vsrc;
-  // External modules put in the "load_jsons" field of the JSON.
+  /// External modules put in the "load_jsons" field of the JSON.
   SmallVector<FExtModuleOp> json;
 };
 
+/// Information gathered about mappings, used for identifying forced input ports
+/// and generating updated mappings for the remote side (main circuit).
 struct ModuleMappingResult {
+  /// Were changes made that invalidate analyses?
   bool allAnalysesPreserved;
+  /// Module scanned
   FModuleOp module;
+  /// Signal mappings whose remote targets are in this circuit
   SmallVector<SignalMapping> remoteMappings;
 };
 
 class GrandCentralSignalMappingsPass
     : public GrandCentralSignalMappingsBase<GrandCentralSignalMappingsPass> {
 
+  /// Generate operation to output list of external modules
+  /// Used when processing the sub- (local) circuit.
   void emitSubCircuitJSON(CircuitOp circuit, StringAttr circuitPackage,
                           StringRef outputFilename,
                           const ExtModules &extmodules);
 
+  /// Fixup forced input ports and emit updated mappings
+  /// Used when processing the main (remote) circuit.
   FailureOr<bool>
   emitUpdatedMappings(CircuitOp circuit, StringAttr circuitPackage,
                       MutableArrayRef<ModuleMappingResult> result);
