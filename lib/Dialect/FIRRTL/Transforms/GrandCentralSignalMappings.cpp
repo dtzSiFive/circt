@@ -345,8 +345,30 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
+struct ExtModules {
+  // External modules put in the vsrcs field of the JSON.
+  SmallVector<FExtModuleOp> vsrc;
+  // External modules put in the "load_jsons" field of the JSON.
+  SmallVector<FExtModuleOp> json;
+};
+
+struct ModuleMappingResult {
+  bool allAnalysesPreserved;
+  FModuleOp module;
+  SmallVector<SignalMapping> remoteMappings;
+};
+
 class GrandCentralSignalMappingsPass
     : public GrandCentralSignalMappingsBase<GrandCentralSignalMappingsPass> {
+
+  void emitSubCircuitJSON(CircuitOp circuit, StringAttr circuitPackage,
+                          StringRef outputFilename,
+                          const ExtModules &extmodules);
+
+  FailureOr<bool>
+  emitUpdatedMappings(CircuitOp circuit, StringAttr circuitPackage,
+                      MutableArrayRef<ModuleMappingResult> result);
+
   void runOnOperation() override;
 
 public:
@@ -392,12 +414,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   }
 
   SmallVector<FModuleOp> modules;
-  struct {
-    // External modules put in the vsrcs field of the JSON.
-    SmallVector<FExtModuleOp> vsrc;
-    // External modules put in the "load_jsons" field of the JSON.
-    SmallVector<FExtModuleOp> json;
-  } extmodules;
+  ExtModules extmodules;
 
   for (auto op : circuit.body().getOps<FModuleLike>()) {
     if (auto *extModule = dyn_cast<FExtModuleOp>(&op)) {
@@ -412,14 +429,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     }
   }
 
-  struct Result {
-    bool allAnalysesPreserved;
-    FModuleOp module;
-    SmallVector<SignalMapping> remoteMappings;
-  };
-
   // Pre-allocate result vector
-  SmallVector<Result> results;
+  SmallVector<ModuleMappingResult> results;
   results.resize(modules.size());
 
   mlir::parallelForEachN(
@@ -439,256 +450,272 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   // SiFive tools.
   // Otherwise handle any forced input ports and emit updated mappings.
   if (isSubCircuit) {
-    std::string jsonString;
-    llvm::raw_string_ostream jsonStream(jsonString);
-    json::OStream j(jsonStream, 2);
-    j.object([&] {
-      j.attributeObject("vendor", [&]() {
-        j.attributeObject("vcs", [&]() {
-          j.attributeArray("vsrcs", [&]() {
-            for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
-              SmallVector<char> file(outputFilename.begin(),
-                                     outputFilename.end());
-              llvm::sys::fs::make_absolute(file);
-              llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
-              j.value(file);
-            }
-            for (FExtModuleOp ext : extmodules.vsrc) {
-              SmallVector<char> file(outputFilename.begin(),
-                                     outputFilename.end());
-              llvm::sys::fs::make_absolute(file);
-              llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
-              j.value(file);
-            }
-          });
-        });
-        j.attributeObject("verilator", [&]() {
-          j.attributeArray("error", [&]() {
-            j.value("force statement is not supported in verilator");
-          });
-        });
-      });
-      j.attributeArray("remove_vsrcs", []() {});
-      j.attributeArray("vsrcs", []() {});
-      j.attributeArray("load_jsons", [&]() {
-        for (FExtModuleOp extModule : extmodules.json)
-          j.value((Twine(extModule.moduleName()) + ".json").str());
-      });
-    });
-    auto b = OpBuilder::atBlockEnd(circuit.getBody());
-    auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
-    jsonOp->setAttr(
-        "output_file",
-        hw::OutputFileAttr::getFromFilename(
-            b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
+    emitSubCircuitJSON(circuit, circuitPackage, outputFilename, extmodules);
   } else {
-    // Remote side, main circuit
-
-    // 1) Sanity checking
-    // 2) Fixup ports that are driven from subcircuit
-    // 3) Generate new remote references
-    //    For now, just drive/probe using `module.name` XMR's,
-    //    it's much simpler than emitting hierarchical paths
-    //    from the top module/DUT, and works for now.
-    // 4) Emit updated mappings as SignalDriverAnnotations
-    //    for consumption when processing the subcircuit
-    //    (as replacements for the original annotations)
-
-    // Helper to instantiate module namespaces as-needed
-    DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
-    auto getModuleNamespace =
-        [&moduleNamespaces](FModuleOp module) -> ModuleNamespace & {
-      return moduleNamespaces.try_emplace(module, module).first->second;
-    };
-
-    // (1) Scan mappings for unexpected or unsupported values
-    for (auto const &[_, mod, mappings] : results) {
-      for (auto &mapping : mappings) {
-        // This isn't handled yet, error out instead of doing wrong thing
-        if (mapping.nlaSym) {
-          emitError(mapping.localValue.getLoc())
-              << "non-local value targeted by SignalDriverAnnotation, "
-                 "unsupported (NLA found)";
-          return signalPassFailure();
-        }
-        // No local-side mappings on main circuit side
-        if (mapping.isLocal) {
-          emitError(mapping.localValue.getLoc())
-              << "local-side SignalDriverAnnotation found in main circuit, "
-                 "mixing not supported";
-          return signalPassFailure();
-        }
-      }
-    }
-
-    // (2) Find input ports that are sinks, insert wires at instantiation points
-    auto *instanceGraph = &getAnalysis<InstanceGraph>();
-    DenseSet<unsigned> forcedInputPorts;
-    for (auto &[_, mod, mappings] : results) {
-      // Walk mappings looking for module ports that are being driven,
-      // and gather their indices for fixing up.
-      forcedInputPorts.clear();
-      for (auto &mapping : mappings) {
-        if (mapping.dir == MappingDirection::DriveRemote /* Sink */) {
-          if (auto blockArg = mapping.localValue.dyn_cast<BlockArgument>()) {
-            auto portIdx = blockArg.getArgNumber();
-            if (mod.getPortDirection(portIdx) == Direction::In) {
-              if (!forcedInputPorts.insert(portIdx).second) {
-                emitError(blockArg.getLoc())
-                    << "module port driven more than once, unsupported "
-                       "SignalDriverAnnotation";
-                return signalPassFailure();
-              }
-            }
-          }
-        }
-      }
-
-      // Find all instantiations of this module, and replace uses of each driven
-      // port with a wire that's connected to a wire that is connected to the
-      // port. This is done to cause an 'assign' to be created, disconnecting
-      // the forced input port's net from its uses.
-      if (forcedInputPorts.empty())
-        continue;
-
-      unsigned useCount = 0;
-      for (auto *use : instanceGraph->lookup(mod)->uses()) {
-        // Ensure just the one use for now, this matters if we want
-        // to be able to emit a unique path from the top module.
-        if (++useCount != 1) {
-          emitError(mod.getLoc())
-              << "module with input port driven instantiated more than once, "
-                 "unsupported SignalDriverAnnotation";
-
-          return signalPassFailure();
-        }
-        allAnalysesPreserved = false;
-
-        auto inst = use->getInstance();
-        OpBuilder builder(inst.getContext());
-        builder.setInsertionPointAfter(inst);
-        auto parentModule = inst->getParentOfType<FModuleOp>();
-        ModuleNamespace &moduleNamespace = getModuleNamespace(parentModule);
-
-        for (auto portIdx : forcedInputPorts) {
-          auto port = inst->getResult(portIdx);
-
-          // Create chain like:
-          // port_result <= foo_dataIn_x_buffer
-          // foo_dataIn_x_buffer <= foo_dataIn_x
-          auto replacementWireName = builder.getStringAttr(
-              mod.moduleName() + "_" + mod.getPortName(portIdx));
-          auto bufferWireName =
-              builder.getStringAttr(replacementWireName.getValue() + "_buffer");
-          auto bufferWire = builder.create<WireOp>(
-              builder.getUnknownLoc(), port.getType(), bufferWireName,
-              builder.getArrayAttr({}),
-              builder.getStringAttr(
-                  moduleNamespace.newName(bufferWireName.getValue())));
-          auto replacementWire = builder.create<WireOp>(
-              builder.getUnknownLoc(), port.getType(), replacementWireName,
-              builder.getArrayAttr({}),
-              builder.getStringAttr(
-                  moduleNamespace.newName(replacementWireName.getValue())));
-          port.replaceAllUsesWith(replacementWire);
-          builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
-                                          bufferWire);
-          builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire,
-                                          replacementWire);
-        }
-      }
-    }
-
-    // (3) Generate updated remote references
-    // Helpers to emit basic 'module.name' XMR's for the mappings.
-    // Use inner_sym for non-ports
-    SmallVector<Attribute> symbols;
-    auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
-      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-      if (attr)
-        return attr;
-      auto module = op->getParentOfType<FModuleOp>();
-      StringRef name = "sym";
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-        name = nameAttr.getValue();
-      name = getModuleNamespace(module).newName(name);
-      attr = StringAttr::get(op->getContext(), name);
-      op->setAttr("inner_sym", attr);
-      return attr;
-    };
-    auto mkRef = [&](FModuleOp module,
-                     const SignalMapping &mapping) -> std::string {
-      if (mapping.localValue.isa<BlockArgument>()) {
-        return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
-                             mapping.localName);
-      }
-      auto idx = symbols.size();
-      symbols.push_back(hw::InnerRefAttr::get(
-          SymbolTable::getSymbolName(module),
-          getOrAddInnerSym(mapping.localValue.getDefiningOp())));
-      return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
-                           "{{" + Twine(idx) + "}}");
-    };
-
-    // Generate and sort new mappings for (better) output stability
-    SmallVector<std::pair<std::string, StringRef>, 32> sinks, sources;
-    auto addUpdatedMappings = [&](MappingDirection filterDir, auto &vec) {
-      for (auto const &[_, mod, mappings] : results)
-        for (auto &mapping : mappings)
-          if (mapping.dir == filterDir)
-            vec.emplace_back(mkRef(mod, mapping),
-                             mapping.remoteTarget.getValue());
-    };
-    addUpdatedMappings(MappingDirection::DriveRemote, sinks);
-    addUpdatedMappings(MappingDirection::ProbeRemote, sources);
-    // Sort on local targets only, remote may contain substitution placeholders
-    auto compSecond = [](auto &a, auto &b) { return a.second < b.second; };
-    llvm::sort(sinks, compSecond);
-    llvm::sort(sources, compSecond);
-
-    // (4) Emit updated mappings for consumption by subcircuit
-    std::string jsonString;
-    llvm::raw_string_ostream jsonStream(jsonString);
-    json::OStream j(jsonStream, 2);
-
-    j.array([&] {
-      j.object([&] {
-        j.attribute("class", signalDriverAnnoClass);
-        j.attributeArray("sinkTargets", [&]() {
-          for (auto &[remote, local] : sinks) {
-            j.objectBegin();
-            j.attribute("_1", remote);
-            j.attribute("_2", local);
-            j.objectEnd();
-          };
-        });
-        j.attributeArray("sourceTargets", [&]() {
-          for (auto &[remote, local] : sources) {
-            j.objectBegin();
-            j.attribute("_1", remote);
-            j.attribute("_2", local);
-            j.objectEnd();
-          };
-        });
-        // Emit these but don't attempt to plumb through their original values
-        j.attribute("circuit",
-                    "circuit empty :\n  module empty :\n\n    skip\n");
-        j.attributeArray("annotations", [&]() {});
-        if (circuitPackage)
-          j.attribute("circuitPackage", circuitPackage.getValue());
-      });
-    });
-    auto b = OpBuilder::atBlockEnd(circuit.getBody());
-    auto jsonOp = b.create<sv::VerbatimOp>(
-        b.getUnknownLoc(), jsonString, ValueRange{}, b.getArrayAttr(symbols));
-    // TODO: plumb option to specify path/name?
-    constexpr char jsonOutFile[] = "sigdrive.json";
-    jsonOp->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
-                                       b.getContext(), jsonOutFile, true));
+    auto result = emitUpdatedMappings(circuit, circuitPackage, results);
+    if (failed(result))
+      return signalPassFailure();
+    allAnalysesPreserved &= *result;
   }
 
   if (allAnalysesPreserved)
     markAllAnalysesPreserved();
+}
+
+void GrandCentralSignalMappingsPass::emitSubCircuitJSON(
+    CircuitOp circuit, StringAttr circuitPackage, StringRef outputFilename,
+    const ExtModules &extmodules) {
+  std::string jsonString;
+  llvm::raw_string_ostream jsonStream(jsonString);
+  json::OStream j(jsonStream, 2);
+  j.object([&] {
+    j.attributeObject("vendor", [&]() {
+      j.attributeObject("vcs", [&]() {
+        j.attributeArray("vsrcs", [&]() {
+          for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
+            SmallVector<char> file(outputFilename.begin(),
+                                   outputFilename.end());
+            llvm::sys::fs::make_absolute(file);
+            llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
+            j.value(file);
+          }
+          for (FExtModuleOp ext : extmodules.vsrc) {
+            SmallVector<char> file(outputFilename.begin(),
+                                   outputFilename.end());
+            llvm::sys::fs::make_absolute(file);
+            llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
+            j.value(file);
+          }
+        });
+      });
+      j.attributeObject("verilator", [&]() {
+        j.attributeArray("error", [&]() {
+          j.value("force statement is not supported in verilator");
+        });
+      });
+    });
+    j.attributeArray("remove_vsrcs", []() {});
+    j.attributeArray("vsrcs", []() {});
+    j.attributeArray("load_jsons", [&]() {
+      for (FExtModuleOp extModule : extmodules.json)
+        j.value((Twine(extModule.moduleName()) + ".json").str());
+    });
+  });
+  auto b = OpBuilder::atBlockEnd(circuit.getBody());
+  auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
+  jsonOp->setAttr(
+      "output_file",
+      hw::OutputFileAttr::getFromFilename(
+          b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
+}
+
+FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
+    CircuitOp circuit, StringAttr circuitPackage,
+    MutableArrayRef<ModuleMappingResult> results) {
+  bool allAnalysesPreserved = true;
+
+  // 1) Sanity checking
+  // 2) Fixup ports that are driven from subcircuit
+  // 3) Generate new remote references
+  //    For now, just drive/probe using `module.name` XMR's,
+  //    it's much simpler than emitting hierarchical paths
+  //    from the top module/DUT, and works for now.
+  // 4) Emit updated mappings as SignalDriverAnnotations
+  //    for consumption when processing the subcircuit
+  //    (as replacements for the original annotations)
+
+  // Helper to instantiate module namespaces as-needed
+  DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
+  auto getModuleNamespace =
+      [&moduleNamespaces](FModuleOp module) -> ModuleNamespace & {
+    return moduleNamespaces.try_emplace(module, module).first->second;
+  };
+
+  // (1) Scan mappings for unexpected or unsupported values
+  for (auto const &[_, mod, mappings] : results) {
+    for (auto &mapping : mappings) {
+      // This isn't handled yet, error out instead of doing wrong thing
+      if (mapping.nlaSym) {
+        emitError(mapping.localValue.getLoc())
+            << "non-local value targeted by SignalDriverAnnotation, "
+               "unsupported (NLA found)";
+        return failure();
+      }
+      // No local-side mappings on main circuit side
+      if (mapping.isLocal) {
+        emitError(mapping.localValue.getLoc())
+            << "local-side SignalDriverAnnotation found in main circuit, "
+               "mixing not supported";
+        return failure();
+      }
+    }
+  }
+
+  // (2) Find input ports that are sinks, insert wires at instantiation points
+  auto *instanceGraph = &getAnalysis<InstanceGraph>();
+  DenseSet<unsigned> forcedInputPorts;
+  for (auto &[_, mod, mappings] : results) {
+    // Walk mappings looking for module ports that are being driven,
+    // and gather their indices for fixing up.
+    forcedInputPorts.clear();
+    for (auto &mapping : mappings) {
+      if (mapping.dir == MappingDirection::DriveRemote /* Sink */) {
+        if (auto blockArg = mapping.localValue.dyn_cast<BlockArgument>()) {
+          auto portIdx = blockArg.getArgNumber();
+          if (mod.getPortDirection(portIdx) == Direction::In) {
+            if (!forcedInputPorts.insert(portIdx).second) {
+              emitError(blockArg.getLoc())
+                  << "module port driven more than once, unsupported "
+                     "SignalDriverAnnotation";
+              return failure();
+            }
+          }
+        }
+      }
+    }
+
+    // Find all instantiations of this module, and replace uses of each driven
+    // port with a wire that's connected to a wire that is connected to the
+    // port. This is done to cause an 'assign' to be created, disconnecting
+    // the forced input port's net from its uses.
+    if (forcedInputPorts.empty())
+      continue;
+
+    unsigned useCount = 0;
+    for (auto *use : instanceGraph->lookup(mod)->uses()) {
+      // Ensure just the one use for now, this matters if we want
+      // to be able to emit a unique path from the top module.
+      if (++useCount != 1) {
+        emitError(mod.getLoc())
+            << "module with input port driven instantiated more than once, "
+               "unsupported SignalDriverAnnotation";
+
+        return failure();
+      }
+      allAnalysesPreserved = false;
+
+      auto inst = use->getInstance();
+      OpBuilder builder(inst.getContext());
+      builder.setInsertionPointAfter(inst);
+      auto parentModule = inst->getParentOfType<FModuleOp>();
+      ModuleNamespace &moduleNamespace = getModuleNamespace(parentModule);
+
+      for (auto portIdx : forcedInputPorts) {
+        auto port = inst->getResult(portIdx);
+
+        // Create chain like:
+        // port_result <= foo_dataIn_x_buffer
+        // foo_dataIn_x_buffer <= foo_dataIn_x
+        auto replacementWireName = builder.getStringAttr(
+            mod.moduleName() + "_" + mod.getPortName(portIdx));
+        auto bufferWireName =
+            builder.getStringAttr(replacementWireName.getValue() + "_buffer");
+        auto bufferWire = builder.create<WireOp>(
+            builder.getUnknownLoc(), port.getType(), bufferWireName,
+            builder.getArrayAttr({}),
+            builder.getStringAttr(
+                moduleNamespace.newName(bufferWireName.getValue())));
+        auto replacementWire = builder.create<WireOp>(
+            builder.getUnknownLoc(), port.getType(), replacementWireName,
+            builder.getArrayAttr({}),
+            builder.getStringAttr(
+                moduleNamespace.newName(replacementWireName.getValue())));
+        port.replaceAllUsesWith(replacementWire);
+        builder.create<StrictConnectOp>(builder.getUnknownLoc(), port,
+                                        bufferWire);
+        builder.create<StrictConnectOp>(builder.getUnknownLoc(), bufferWire,
+                                        replacementWire);
+      }
+    }
+  }
+
+  // (3) Generate updated remote references
+  // Helpers to emit basic 'module.name' XMR's for the mappings.
+  // Use inner_sym for non-ports
+  SmallVector<Attribute> symbols;
+  auto getOrAddInnerSym = [&](Operation *op) -> StringAttr {
+    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    if (attr)
+      return attr;
+    auto module = op->getParentOfType<FModuleOp>();
+    StringRef name = "sym";
+    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      name = nameAttr.getValue();
+    name = getModuleNamespace(module).newName(name);
+    attr = StringAttr::get(op->getContext(), name);
+    op->setAttr("inner_sym", attr);
+    return attr;
+  };
+  auto mkRef = [&](FModuleOp module,
+                   const SignalMapping &mapping) -> std::string {
+    if (mapping.localValue.isa<BlockArgument>()) {
+      return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
+                           mapping.localName);
+    }
+    auto idx = symbols.size();
+    symbols.push_back(hw::InnerRefAttr::get(
+        SymbolTable::getSymbolName(module),
+        getOrAddInnerSym(mapping.localValue.getDefiningOp())));
+    return llvm::formatv("~{0}|{1}>{2}", circuit.name(), module.getName(),
+                         "{{" + Twine(idx) + "}}");
+  };
+
+  // Generate and sort new mappings for (better) output stability
+  SmallVector<std::pair<std::string, StringRef>, 32> sinks, sources;
+  auto addUpdatedMappings = [&](MappingDirection filterDir, auto &vec) {
+    for (auto const &[_, mod, mappings] : results)
+      for (auto &mapping : mappings)
+        if (mapping.dir == filterDir)
+          vec.emplace_back(mkRef(mod, mapping),
+                           mapping.remoteTarget.getValue());
+  };
+  addUpdatedMappings(MappingDirection::DriveRemote, sinks);
+  addUpdatedMappings(MappingDirection::ProbeRemote, sources);
+  // Sort on local targets only, remote may contain substitution placeholders
+  auto compSecond = [](auto &a, auto &b) { return a.second < b.second; };
+  llvm::sort(sinks, compSecond);
+  llvm::sort(sources, compSecond);
+
+  // (4) Emit updated mappings for consumption by subcircuit
+  std::string jsonString;
+  llvm::raw_string_ostream jsonStream(jsonString);
+  json::OStream j(jsonStream, 2);
+
+  j.array([&] {
+    j.object([&] {
+      j.attribute("class", signalDriverAnnoClass);
+      j.attributeArray("sinkTargets", [&]() {
+        for (auto &[remote, local] : sinks) {
+          j.objectBegin();
+          j.attribute("_1", remote);
+          j.attribute("_2", local);
+          j.objectEnd();
+        };
+      });
+      j.attributeArray("sourceTargets", [&]() {
+        for (auto &[remote, local] : sources) {
+          j.objectBegin();
+          j.attribute("_1", remote);
+          j.attribute("_2", local);
+          j.objectEnd();
+        };
+      });
+      // Emit these but don't attempt to plumb through their original values
+      j.attribute("circuit", "circuit empty :\n  module empty :\n\n    skip\n");
+      j.attributeArray("annotations", [&]() {});
+      if (circuitPackage)
+        j.attribute("circuitPackage", circuitPackage.getValue());
+    });
+  });
+  auto b = OpBuilder::atBlockEnd(circuit.getBody());
+  auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString,
+                                         ValueRange{}, b.getArrayAttr(symbols));
+  // TODO: plumb option to specify path/name?
+  constexpr char jsonOutFile[] = "sigdrive.json";
+  jsonOp->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                     b.getContext(), jsonOutFile, true));
+
+  return allAnalysesPreserved;
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralSignalMappingsPass(
