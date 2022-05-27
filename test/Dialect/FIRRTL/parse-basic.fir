@@ -50,8 +50,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   extmodule IntegerParamsModule :
     ; CHECK-SAME: a: ui32 = 1
     parameter a = 1
-    ; CHECK-SAME: b: ui40 = 4294967296
+    ; CHECK-SAME: b: ui34 = 4294967296
     parameter b = 4294967296
+    ; CHECK-SAME: c: ui32 = 2147483647
+    parameter c = 2147483647
+    ; CHECK-SAME: d: si32 = -2147483647
+    parameter d = -2147483647
+    ; CHECK-SAME: e: ui32 = 0
+    parameter e = -0
 
   ; Module to test type parsing.
 

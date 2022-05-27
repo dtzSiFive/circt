@@ -616,12 +616,19 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     if (isNegative)
       result = -result;
 
-    // If this was parsed as >32 bits, but can be represented in 32 bits,
-    // truncate off the extra width.  This is important for extmodules which
-    // like parameters to be 32-bits, and insulates us from some arbitraryness
-    // in StringRef::getAsInteger.
-    if (result.getBitWidth() > 32 && result.getMinSignedBits() <= 32)
-      result = result.trunc(32);
+    // Truncate unneeded width, conservatively, truncating to smallest
+    // width needed to represent the value if it was signed.
+    //
+    // This leaves a (zero) bit before positive values, but truncates
+    // negatives to smallest width needed for representation.
+    //
+    // It's important to parse values as <= 32bits when possible,
+    // for compatibility with extmodule parameters.
+    //
+    // This truncation also insulates us from the arbitrariness of the width
+    // returned from the integer parsing logic.
+    if (result.getBitWidth() > result.getSignificantBits())
+      result = result.trunc(result.getSignificantBits());
 
     consumeToken();
     return success();
