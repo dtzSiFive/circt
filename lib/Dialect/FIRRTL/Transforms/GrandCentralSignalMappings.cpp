@@ -608,10 +608,10 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
 
   // For instance path references, determine where to start.
   // This is either the main module or the DUT if any.
-  auto pathTop = circuit.getMainModule();
+  auto dut = circuit.getMainModule();
   for (auto op : circuit.body().getOps<FModuleOp>())
     if (AnnotationSet(op).hasAnnotation(dutAnnoClass)) {
-      pathTop = op;
+      dut = op;
       break;
     }
 
@@ -654,7 +654,7 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     TokenAnnoTarget target;
 
     SmallString<32> circuitStr, moduleStr, nameStr;
-    target.circuit = mkSymPlaceholder(FlatSymbolRefAttr::get(pathTop), circuitStr);
+    target.circuit = mkSymPlaceholder(FlatSymbolRefAttr::get(dut), circuitStr);
     target.module = mkSymPlaceholder(FlatSymbolRefAttr::get(module), moduleStr);
     target.component = {};
 
@@ -677,14 +677,14 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
 
       // Start from root of NLA, or from top/DUT if through it
       bool seenRoot = false;
-      bool usesTop = nla.hasModule(pathTop.moduleNameAttr());
+      bool usesTop = nla.hasModule(dut.moduleNameAttr());
       ArrayRef<Attribute> path = nla.namepath().getValue();
       SmallVector<SmallString<8>, 16> stringStorage;
       stringStorage.resize(path.drop_back().size() * 2);
       for (auto attr : llvm::enumerate(path.drop_back())) {
         auto ref = attr.value().cast<hw::InnerRefAttr>();
         if (usesTop && !seenRoot) {
-          if (ref.getModule() == pathTop.moduleNameAttr())
+          if (ref.getModule() == dut.moduleNameAttr())
             seenRoot = true;
         }
 
