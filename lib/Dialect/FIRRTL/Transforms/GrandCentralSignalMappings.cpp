@@ -644,17 +644,31 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
   };
   auto mkRef = [&](FModuleOp module,
                    const SignalMapping &mapping) -> std::string {
-    SmallString<128> targetRef;
-    auto appendSym = [&](Attribute symbol) {
-      ("{{" + Twine(getSymIdx(symbol)) + "}}").toVector(targetRef);
+    // Generate placeholder into specified storage, return StringRef for it
+    auto mkSymPlaceholder = [&](Attribute symbol, auto &out) -> StringRef {
+      ("{{" + Twine(getSymIdx(symbol)) + "}}").toVector(out);
+      return out;
     };
 
-    // Start with "circuit", which is top (or DUT?), doesn't matter
-    targetRef = "~";
-    appendSym(FlatSymbolRefAttr::get(pathTop));
-    targetRef.push_back('|');
+    // Construct target using placeholders:
+    TokenAnnoTarget target;
 
-    // If there's an NLA, emit hierarchical path.
+    SmallString<32> circuitStr, moduleStr, nameStr;
+    target.circuit = mkSymPlaceholder(FlatSymbolRefAttr::get(pathTop), circuitStr);
+    target.module = mkSymPlaceholder(FlatSymbolRefAttr::get(module), moduleStr);
+    target.component = {};
+
+    if (mapping.localValue.isa<BlockArgument>())
+      // TODO: inner_sym for ports too
+      target.name = mapping.localName;
+    else
+      target.name = mkSymPlaceholder(
+          hw::InnerRefAttr::get(
+              SymbolTable::getSymbolName(module),
+              getOrAddInnerSym(mapping.localValue.getDefiningOp())),
+          nameStr);
+
+    // If there's an NLA, add instance path information.
     if (mapping.nlaSym) {
       auto nla =
           cast<HierPathOp>(circuit.lookupSymbol(mapping.nlaSym.getAttr()));
@@ -665,34 +679,26 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
       bool seenRoot = false;
       bool usesTop = nla.hasModule(pathTop.moduleNameAttr());
       ArrayRef<Attribute> path = nla.namepath().getValue();
-      for (auto attr : path.drop_back()) {
-        auto ref = attr.cast<hw::InnerRefAttr>();
+      SmallVector<SmallString<8>, 16> stringStorage;
+      stringStorage.resize(path.drop_back().size() * 2);
+      for (auto attr : llvm::enumerate(path.drop_back())) {
+        auto ref = attr.value().cast<hw::InnerRefAttr>();
         if (usesTop && !seenRoot) {
           if (ref.getModule() == pathTop.moduleNameAttr())
             seenRoot = true;
         }
 
         if (!usesTop || seenRoot) {
-          appendSym(ref.getModuleRef());
-          targetRef.push_back('/');
-          appendSym(hw::InnerRefAttr::get(ref.getModule(), ref.getName()));
-          targetRef.push_back(':');
+          target.instances.emplace_back(
+              mkSymPlaceholder(ref.getModuleRef(),
+                               stringStorage[attr.index() * 2]),
+              mkSymPlaceholder(
+                  hw::InnerRefAttr::get(ref.getModule(), ref.getName()),
+                  stringStorage[attr.index() * 2 + 1]));
         }
       };
     }
-
-    appendSym(FlatSymbolRefAttr::get(module));
-    targetRef.push_back('>');
-
-    if (mapping.localValue.isa<BlockArgument>())
-      // TODO: inner_sym for ports too
-      targetRef += mapping.localName;
-    else
-      appendSym(hw::InnerRefAttr::get(
-          SymbolTable::getSymbolName(module),
-          getOrAddInnerSym(mapping.localValue.getDefiningOp())));
-
-    return std::string(targetRef);
+    return target.str();
   };
 
   // Generate and sort new mappings for (better) output stability
