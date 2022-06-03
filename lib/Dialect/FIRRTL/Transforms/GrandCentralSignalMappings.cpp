@@ -651,9 +651,9 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
     };
 
     // Construct target using placeholders:
-    TokenAnnoTarget target;
-
     SmallString<32> circuitStr, moduleStr, nameStr;
+    SmallVector<SmallString<8>, 16> stringStorage; // For instance data
+    TokenAnnoTarget target;
     target.circuit = mkSymPlaceholder(FlatSymbolRefAttr::get(dut), circuitStr);
     target.module = mkSymPlaceholder(FlatSymbolRefAttr::get(module), moduleStr);
     target.component = {};
@@ -679,7 +679,6 @@ FailureOr<bool> GrandCentralSignalMappingsPass::emitUpdatedMappings(
       bool seenRoot = false;
       bool usesTop = nla.hasModule(dut.moduleNameAttr());
       ArrayRef<Attribute> path = nla.namepath().getValue();
-      SmallVector<SmallString<8>, 16> stringStorage;
       stringStorage.resize(path.drop_back().size() * 2);
       for (auto attr : llvm::enumerate(path.drop_back())) {
         auto ref = attr.value().cast<hw::InnerRefAttr>();
