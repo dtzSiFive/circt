@@ -28,6 +28,7 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "lower-annos"
 
@@ -393,19 +394,27 @@ void LowerAnnotationsPass::runOnOperation() {
   circuit->removeAttr(rawAnnotations);
 
   // Grab the annotations.
+  llvm::errs() << "foreach (" << annotations.size() << ")\n";
   for (auto anno : annotations)
     worklistAttrs.push_back(anno.cast<DictionaryAttr>());
+  llvm::errs() << "done()\n";
   size_t numFailures = 0;
   auto addToWorklist = [&](DictionaryAttr anno) {
     worklistAttrs.push_back(anno);
   };
   ApplyState state{circuit, modules, addToWorklist};
   LLVM_DEBUG(llvm::dbgs() << "Processing annotations:\n");
+  size_t annos = 0;
   while (!worklistAttrs.empty()) {
+    ++annos;
+
+    //if (++annos % 256 == 0)
+    //  llvm::errs() << "anno's: " << annos << "\n";
     auto attr = worklistAttrs.pop_back_val();
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
+  llvm::errs() << "anno's: " << annos << "\n";
   if (numFailures)
     signalPassFailure();
 }

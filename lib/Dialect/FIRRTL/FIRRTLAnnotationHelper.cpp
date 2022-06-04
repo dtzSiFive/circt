@@ -32,6 +32,19 @@ static bool hasName(StringRef name, Operation *op) {
 /// Find a matching name in an operation (usually FModuleOp).  This walk could
 /// be cached in the future.  This finds a port or operation for a given name.
 static AnnoTarget findNamedThing(StringRef name, Operation *op) {
+  // FModuleLike mod = cast<FModuleLike>(op);
+  static DenseMap<Operation*,llvm::StringMap<AnnoTarget>> cache;
+  auto opIt = cache.find(op);
+  if (opIt != cache.end()) {
+    // TODO: Consider building full list first time visited,
+    // as opposed to early-exit when find what looking for
+    // return opIt->getSecond().lookup(name);
+    auto &names = opIt->getSecond();
+    auto nameIt = names.find(name);
+    if (nameIt != names.end())
+      return nameIt->second;
+  }
+  // llvm::errs() << "findNamedThing: " << name << ", in mod: " << mod.moduleName() << " (cache miss)\n";
   AnnoTarget retval;
   auto nameChecker = [name, &retval](Operation *op) -> WalkResult {
     if (auto mod = dyn_cast<FModuleLike>(op)) {
@@ -51,6 +64,7 @@ static AnnoTarget findNamedThing(StringRef name, Operation *op) {
     return WalkResult::advance();
   };
   op->walk(nameChecker);
+  cache[op][name] = retval;
   return retval;
 }
 
