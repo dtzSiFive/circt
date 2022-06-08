@@ -327,6 +327,7 @@ firrtl.circuit "NLAInlining" {
   // CHECK: firrtl.module @NLAInlining
   firrtl.module @NLAInlining() {
     %foo_port = firrtl.instance foo sym @foo @Foo(in port: !firrtl.uint<1>) // nla[1-6]
+    // CHECK: XXXX TODO FIXME XXX
     // CHECK-NEXT: %foo_port = firrtl.wire {{.+}} [{class = "nla6"}]
     // CHECK-NEXT: firrtl.instance foo_bar {{.+}}annotations = [
     // CHECK-NOT: @nla4
@@ -364,12 +365,14 @@ firrtl.circuit "NLAInliningNotMainRoot" {
   }
   // CHECK: firrtl.module private @Foo
   firrtl.module private @Foo() {
+    // CHECK: XXXX TODO FIXME XXX
     // CHECK-NEXT: firrtl.instance bar_baz {{.+}} [{circt.nonlocal = @nla1_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla2_0, class = "circt.nonlocal"}]
     firrtl.instance bar @Bar()
   }
   // CHECK: firrtl.module @NLAInliningNotMainRoot
   firrtl.module @NLAInliningNotMainRoot() {
     firrtl.instance foo @Foo()
+    // CHECK: XXXX TODO FIXME XXX
     // CHECK: firrtl.instance bar_baz {{.+}} [{circt.nonlocal = @nla1, class = "circt.nonlocal"}, {circt.nonlocal = @nla2, class = "circt.nonlocal"}]
     firrtl.instance bar @Bar()
     %baz_port = firrtl.instance baz @Baz(in port: !firrtl.uint<1>)
@@ -413,6 +416,7 @@ firrtl.circuit "NLAFlattening" {
   }
   // CHECK: firrtl.module @NLAFlattening
   firrtl.module @NLAFlattening() {
+    // CHECK: XXXX TODO FIXME XXX
     // CHECK-NEXT: firrtl.instance foo {{.+}} [{circt.nonlocal = @nla1, class = "circt.nonlocal"}, {circt.nonlocal = @nla2, class = "circt.nonlocal"}]
     firrtl.instance foo sym @foo @Foo() // nla[1-3]
   }
@@ -451,6 +455,7 @@ firrtl.circuit "NLAFlatteningChildRoot" {
   }
   // CHECK: firrtl.module private @Baz
   firrtl.module private @Baz() {
+    // CHECK: XXXX TODO FIXME XXX
     // CHECK-NEXT: firrtl.instance {{.+}} [{circt.nonlocal = @nla3, class = "circt.nonlocal"}, {circt.nonlocal = @nla4, class = "circt.nonlocal"}]
     firrtl.instance quz sym @quz @Quz(in port: !firrtl.uint<1>) // nla3, nla4
   }
@@ -548,6 +553,7 @@ firrtl.circuit "CollidingSymbolsReTop" {
   }
   // CHECK: firrtl.module @Foo
   firrtl.module @Foo() {
+    // CHECK: XXXX TODO FIXME XXX
     // CHECK-NEXT: firrtl.instance bar_baz sym @[[FoobazSym]] {{.+}} [{circt.nonlocal = @nla1_0, class = "circt.nonlocal"}]
     firrtl.instance bar @Bar()
     %colliding_baz = firrtl.wire sym @baz : !firrtl.uint<1>
@@ -556,6 +562,7 @@ firrtl.circuit "CollidingSymbolsReTop" {
   // CHECK: firrtl.module @CollidingSymbolsReTop
   firrtl.module @CollidingSymbolsReTop() {
     firrtl.instance foo @Foo()
+    // CHECK: XXXX TODO FIXME XXX
     // CHECK: firrtl.instance bar_baz sym @[[TopbazSym]]{{.+}} [{circt.nonlocal = @nla1, class = "circt.nonlocal"}]
     firrtl.instance bar @Bar()
     firrtl.instance baz @Baz()
