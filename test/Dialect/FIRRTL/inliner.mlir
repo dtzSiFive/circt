@@ -538,8 +538,8 @@ firrtl.circuit "CollidingSymbolsPort" {
 //
 // CHECK-LABEL: firrtl.circuit "CollidingSymbolsReTop"
 firrtl.circuit "CollidingSymbolsReTop" {
-  // CHECK-NOT:  #hw.innerNameRef<@CollidingSymbolsReTop::@baz>
-  // CHECK-NOT:  #hw.innerNameRef<@Foo::@baz>
+  // CHECK-NOT:  @CollidingSymbolsReTop::@baz
+  // CHECK-NOT:  @Foo::@baz
   // CHECK-NEXT: firrtl.hierpath @nla1 [@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]], @Baz::@a]
   // CHECK-NEXT: firrtl.hierpath @nla1_0 [@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]], @Baz::@a]
   firrtl.hierpath @nla1 [@Bar::@baz, @Baz::@a]
