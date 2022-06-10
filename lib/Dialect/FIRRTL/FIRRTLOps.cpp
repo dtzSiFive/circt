@@ -3635,8 +3635,7 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // 6. The last element of the namepath, can be an InnerRefAttr on either a
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
-LogicalResult
-HierPathOp::verifyInnerRefs(InnerRefNamespace & ns) {
+LogicalResult HierPathOp::verifyInnerRefs(InnerRefNamespace &ns) {
   if (namepath().size() <= 1)
     return emitOpError()
            << "the instance path cannot be empty/single element, it "
@@ -3666,8 +3665,7 @@ HierPathOp::verifyInnerRefs(InnerRefNamespace & ns) {
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
     auto *fmod = ns.symTable.lookup(innerRef.getModule());
     auto mod = cast<FModuleLike>(fmod);
-    if (!hasPortNamed(mod, innerRef.getName()) &&
-        !ns.lookup(innerRef)) {
+    if (!hasPortNamed(mod, innerRef.getName()) && !ns.lookup(innerRef)) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }

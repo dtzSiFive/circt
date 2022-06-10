@@ -35,7 +35,6 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   // Save
   this->innerSymTblOp = op;
 
-
   // Build table
 
   // TODO: cache port lookups, in a sanely generic way? :(
@@ -48,14 +47,15 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   // Add all operations
   // op->getRegion(0).walk([&](Operation *symOp) {
   op->walk([&](Operation *symOp) {
-      auto attr = symOp->getAttrOfType<StringAttr>(InnerSymbolTable::getInnerSymbolAttrName());
-      if (!attr)
-        return;
-      auto it = symbolTable.insert({attr, symOp});
-      if (!it.second) {
-        // TODO: obv this should be a diagnostic or something :)
-        assert(0 && "repeated symbol found");
-      }
+    auto attr = symOp->getAttrOfType<StringAttr>(
+        InnerSymbolTable::getInnerSymbolAttrName());
+    if (!attr)
+      return;
+    auto it = symbolTable.insert({attr, symOp});
+    if (!it.second) {
+      // TODO: obv this should be a diagnostic or something :)
+      assert(0 && "repeated symbol found");
+    }
   });
 }
 
@@ -80,7 +80,8 @@ InnerSymbolTableCollection::getInnerSymbolTable(Operation *op) {
   return *it.first->second;
 }
 
-void InnerSymbolTableCollection::constructTablesInParallelFor(ArrayRef<Operation*> ops) {
+void InnerSymbolTableCollection::constructTablesInParallelFor(
+    ArrayRef<Operation *> ops) {
   if (ops.empty())
     return;
   auto *ctx = ops[0]->getContext();
@@ -90,8 +91,10 @@ void InnerSymbolTableCollection::constructTablesInParallelFor(ArrayRef<Operation
 
   // Construct them in parallel
   mlir::parallelForEach(ctx, ops, [&](auto *op) {
-      auto it = symbolTables.find(op);
-      assert(it != symbolTables.end());
+    auto it = symbolTables.find(op);
+    assert(it != symbolTables.end());
+    // Create table if doesn't exist
+    if (!it->second)
       it->second = ::std::make_unique<InnerSymbolTable>(op);
   });
 }
@@ -123,35 +126,37 @@ LogicalResult verifyInnerRefs(Operation *op) {
   InnerSymbolTableCollection innerSymTables;
   // TODO: below, must be SymbolTable op (so our arg must be too)
   SymbolTable symbolTable(op);
-  InnerRefNamespace ns{symbolTable,innerSymTables};
+  InnerRefNamespace ns{symbolTable, innerSymTables};
 
   // Gather top-level ops to process in parallel
   SmallVector<Operation *> childOps(
       llvm::make_pointer_range(op->getRegion(0).front()));
+
   // Filter these to those that have the InnerSymbolTable trait,
   // these will be walked in parallel to find all inner symbols.
-  SmallVector<Operation *> innerSymTableOps(llvm::make_filter_range(childOps, [&](Operation *op) { return op->hasTrait<OpTrait::InnerSymbolTable>();}));
+  SmallVector<Operation *> innerSymTableOps(
+      llvm::make_filter_range(childOps, [&](Operation *op) {
+        return op->hasTrait<OpTrait::InnerSymbolTable>();
+      }));
+
+  // Build up the InnerSymbolTables for each op w/InnerSymbolTable trait
   innerSymTables.constructTablesInParallelFor(innerSymTableOps);
 
+  // Invoke verifyInnerRefs() on operations with InnerRefUserOpInterface
   auto verifySymbolUserFn = [&](Operation *op) -> WalkResult {
     if (auto user = dyn_cast<InnerRefUserOpInterface>(op))
       return WalkResult(user.verifyInnerRefs(ns));
     return WalkResult::advance();
   };
-  return mlir::failableParallelForEach(op->getContext(), childOps, [&](auto *op) {
-    return success(!op->walk(verifySymbolUserFn).wasInterrupted());
-  });
 
-  // For now, just walk everything and verify inner ref users
-  // Parallelizing would be nice, but care re:lazy creation of InnerSymbolTables.
-  // Controlling walk re:nested symboltables or innersymboltables, maybe?
-  //WalkResult result =
-  //  op->walk(verifySymbolUserFn);
-  //    // walkSymbolTable(op->getRegions(), verifySymbolUserFn);
-  //return success(!result.wasInterrupted());
+  // Walk all operations in this InnerRefNamespace,
+  // parallelizing at the top-level of operations.
+  return mlir::failableParallelForEach(
+      op->getContext(), childOps, [&](auto *op) {
+        return success(!op->walk(verifySymbolUserFn).wasInterrupted());
+      });
 }
 
 } // namespace detail
 } // namespace firrtl
 } // namespace circt
-

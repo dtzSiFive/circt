@@ -17,8 +17,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
@@ -66,7 +66,7 @@ struct PortInfo {
 LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 
 namespace detail {
-  LogicalResult verifyInnerRefs(Operation *op);
+LogicalResult verifyInnerRefs(Operation *op);
 } // namespace detail
 
 /// Table of inner_sym's
@@ -103,20 +103,23 @@ private:
   DenseMap<StringAttr, Operation *> symbolTable;
 };
 
+/// Collection of InnerSymbolTables and utilities for constructing them
 class InnerSymbolTableCollection {
 public:
-  // Get or create the InnerSymbolTable for the specified operation
-  InnerSymbolTable & getInnerSymbolTable(Operation *op);
+  /// Get or create the InnerSymbolTable for the specified operation
+  InnerSymbolTable &getInnerSymbolTable(Operation *op);
 
-  void constructTablesInParallelFor(ArrayRef<Operation*> ops);
+  /// Ensure the specified operations have tables, creating them in parallel.
+  /// The operation list must not contain duplicates.
+  void constructTablesInParallelFor(ArrayRef<Operation *> ops);
+
 private:
-
   /// This maps Operations to their InnnerSymbolTables, constructed lazily
-  DenseMap<Operation*, std::unique_ptr<InnerSymbolTable>> symbolTables;
+  DenseMap<Operation *, std::unique_ptr<InnerSymbolTable>> symbolTables;
 };
 
-class InnerRefNamespace {
-public:
+/// Represents the namespace in which InnerRef's can be resolved.
+struct InnerRefNamespace {
   SymbolTable &symTable;
   InnerSymbolTableCollection &innerSymTables;
 
@@ -125,8 +128,8 @@ public:
   /// Note that some InnerRef's target ports and must be handled separately.
   Operation *lookup(hw::InnerRefAttr inner);
   template <typename T>
-  T lookup(hw::InnerRefAttr name) {
-    return dyn_cast_or_null<T>(lookup(name));
+  T lookup(hw::InnerRefAttr inner) {
+    return dyn_cast_or_null<T>(lookup(inner));
   }
 };
 
@@ -156,7 +159,8 @@ public:
     // Must be nested within an op with InnerRefNamespace
     // For now, check the immediate parent has the trait.
     // We could also check `op->getParentWithTrait<...>()`
-    // Don't check if 'op' has SymbolTable trait, although that's expected for innerref's
+    // Don't check if 'op' has SymbolTable trait, although that's expected for
+    // innerref's
     auto *parent = op->getParentOp();
     return success(parent && parent->hasTrait<InnerRefNamespace>());
   }
