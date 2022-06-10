@@ -11,8 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
-
-#include <variant>
+#include "mlir/IR/Threading.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -81,6 +80,22 @@ InnerSymbolTableCollection::getInnerSymbolTable(Operation *op) {
   return *it.first->second;
 }
 
+void InnerSymbolTableCollection::constructTablesInParallelFor(ArrayRef<Operation*> ops) {
+  if (ops.empty())
+    return;
+  auto *ctx = ops[0]->getContext();
+
+  // Ensure entries exist for each operation
+  llvm::for_each(ops, [&](auto *op) { symbolTables.try_emplace(op, nullptr); });
+
+  // Construct them in parallel
+  mlir::parallelForEach(ctx, ops, [&](auto *op) {
+      auto it = symbolTables.find(op);
+      assert(it != symbolTables.end());
+      it->second = ::std::make_unique<InnerSymbolTable>(op);
+  });
+}
+
 //===----------------------------------------------------------------------===//
 // InnerRefNamespace
 //===----------------------------------------------------------------------===//
@@ -105,26 +120,35 @@ LogicalResult verifyInnerRefs(Operation *op) {
     return op->emitOpError() << "Operations with a 'InnerRefNamespace' must "
                                 "have exactly one block";
 
-  // Verify any nested symbol user operations.
   InnerSymbolTableCollection innerSymTables;
   // TODO: below, must be SymbolTable op (so our arg must be too)
   SymbolTable symbolTable(op);
-
   InnerRefNamespace ns{symbolTable,innerSymTables};
+
+  // Gather top-level ops to process in parallel
+  SmallVector<Operation *> childOps(
+      llvm::make_pointer_range(op->getRegion(0).front()));
+  // Filter these to those that have the InnerSymbolTable trait,
+  // these will be walked in parallel to find all inner symbols.
+  SmallVector<Operation *> innerSymTableOps(llvm::make_filter_range(childOps, [&](Operation *op) { return op->hasTrait<OpTrait::InnerSymbolTable>();}));
+  innerSymTables.constructTablesInParallelFor(innerSymTableOps);
 
   auto verifySymbolUserFn = [&](Operation *op) -> WalkResult {
     if (auto user = dyn_cast<InnerRefUserOpInterface>(op))
       return WalkResult(user.verifyInnerRefs(ns));
     return WalkResult::advance();
   };
+  return mlir::failableParallelForEach(op->getContext(), childOps, [&](auto *op) {
+    return success(!op->walk(verifySymbolUserFn).wasInterrupted());
+  });
 
   // For now, just walk everything and verify inner ref users
   // Parallelizing would be nice, but care re:lazy creation of InnerSymbolTables.
   // Controlling walk re:nested symboltables or innersymboltables, maybe?
-  WalkResult result =
-    op->walk(verifySymbolUserFn);
-      // walkSymbolTable(op->getRegions(), verifySymbolUserFn);
-  return success(!result.wasInterrupted());
+  //WalkResult result =
+  //  op->walk(verifySymbolUserFn);
+  //    // walkSymbolTable(op->getRegions(), verifySymbolUserFn);
+  //return success(!result.wasInterrupted());
 }
 
 } // namespace detail

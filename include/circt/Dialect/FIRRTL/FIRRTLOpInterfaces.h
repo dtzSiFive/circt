@@ -108,6 +108,7 @@ public:
   // Get or create the InnerSymbolTable for the specified operation
   InnerSymbolTable & getInnerSymbolTable(Operation *op);
 
+  void constructTablesInParallelFor(ArrayRef<Operation*> ops);
 private:
 
   /// This maps Operations to their InnnerSymbolTables, constructed lazily
