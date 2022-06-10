@@ -26,7 +26,6 @@ namespace firrtl {
 InnerSymbolTable::InnerSymbolTable(Operation *op) {
   assert(op->hasTrait<OpTrait::InnerSymbolTable>() &&
          "expected operation to have InnerSymbolTable trait");
-  // TODO: relax these for, e.g., extmodule ?
   assert(op->getNumRegions() == 1 &&
          "expected operation to have a single region");
   assert(llvm::hasSingleElement(op->getRegion(0)) &&
@@ -37,15 +36,7 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
 
   // Build table
 
-  // TODO: cache port lookups, in a sanely generic way? :(
-
-  // if (auto mod = dyn_cast<FModuleLike>(op)) {
-  //   for (auto p : llvm::enumerate(mod.getPorts()))
-  //     symbolTable.insert({p.value().name, p.index())});
-  // }
-
   // Add all operations
-  // op->getRegion(0).walk([&](Operation *symOp) {
   op->walk([&](Operation *symOp) {
     auto attr = symOp->getAttrOfType<StringAttr>(
         InnerSymbolTable::getInnerSymbolAttrName());
