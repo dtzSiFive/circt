@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Support/Timing.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -107,6 +108,13 @@ Operation *InnerRefNamespace::lookup(hw::InnerRefAttr inner) {
 namespace detail {
 
 LogicalResult verifyInnerRefs(Operation *op) {
+  mlir::DefaultTimingManager tm;
+  assert(!tm.isEnabled());
+  tm.setEnabled(true);
+  auto ts = tm.getRootScope(); // .nest("verifying inner refs...");
+  // op->emitWarning("verify inner refs...");
+  llvm::errs() << "verifying inner refs...\n";
+
   if (op->getNumRegions() != 1)
     return op->emitOpError() << "Operations with a 'InnerRefNamespace' must "
                                 "have exactly one region";
@@ -116,7 +124,9 @@ LogicalResult verifyInnerRefs(Operation *op) {
 
   InnerSymbolTableCollection innerSymTables;
   // TODO: below, must be SymbolTable op (so our arg must be too)
+  auto stTimer = ts.nest("creating symboltable");
   SymbolTable symbolTable(op);
+  stTimer.stop();
   InnerRefNamespace ns{symbolTable, innerSymTables};
 
   // Gather top-level ops to process in parallel
@@ -130,8 +140,12 @@ LogicalResult verifyInnerRefs(Operation *op) {
         return op->hasTrait<OpTrait::InnerSymbolTable>();
       }));
 
+  auto constructTimer = ts.nest("constructing tables");
+
   // Build up the InnerSymbolTables for each op w/InnerSymbolTable trait
   innerSymTables.constructTablesInParallelFor(innerSymTableOps);
+
+  constructTimer.stop();
 
   // Invoke verifyInnerRefs() on operations with InnerRefUserOpInterface
   auto verifySymbolUserFn = [&](Operation *op) -> WalkResult {
@@ -140,12 +154,14 @@ LogicalResult verifyInnerRefs(Operation *op) {
     return WalkResult::advance();
   };
 
+  auto verifyTimer = ts.nest("verifying");
   // Walk all operations in this InnerRefNamespace,
   // parallelizing at the top-level of operations.
   return mlir::failableParallelForEach(
       op->getContext(), childOps, [&](auto *op) {
         return success(!op->walk(verifySymbolUserFn).wasInterrupted());
       });
+  ts.stop();
 }
 
 } // namespace detail
