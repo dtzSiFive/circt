@@ -146,9 +146,9 @@ template <typename ConcreteType>
 class InnerRefNamespace : public TraitBase<ConcreteType, InnerRefNamespace> {
 public:
   static LogicalResult verifyRegionTrait(Operation *op) {
-    // InnerRefNamespace's must also have SymbolTable
     if (!op->hasTrait<OpTrait::SymbolTable>())
-      return failure();
+      return op->emitError(
+          "InnerRefNamespace must also have SymbolTable trait");
 
     // Verify all InnerRef users
     return ::circt::firrtl::detail::verifyInnerRefs(op);
@@ -159,17 +159,22 @@ template <typename ConcreteType>
 class InnerSymbolTable : public TraitBase<ConcreteType, InnerSymbolTable> {
 public:
   static LogicalResult verifyRegionTrait(Operation *op) {
-    // TODO: Walk looking for inner_syms, ensure they're unique ?
 
     // Must be nested within an op with InnerRefNamespace.
     // Check the immediate parent has the trait.
     auto *parent = op->getParentOp();
     if (!parent || !parent->hasTrait<InnerRefNamespace>())
-      return failure();
+      return op->emitError(
+          "InnerSymbolTable must have InnerRefNamespace parent");
 
     // Insist that ops with InnerSymbolTable's provide a Symbol.
     // This is essential to how InnerRef's work.
-    return success(isa<SymbolOpInterface>(op));
+    if (!isa<SymbolOpInterface>(op))
+      return op->emitError("InnerSymbolTable must provide a Symbol");
+
+    // TODO: Walk looking for inner_syms, ensure they're unique ?
+
+    return success();
   }
 };
 } // namespace OpTrait
