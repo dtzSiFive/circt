@@ -202,8 +202,7 @@ public:
   Operation *getParent() { return parent; }
 
   /// Returns pointer to member of operation list.
-  static NodeList InstanceGraphBase::*
-  getSublistAccessgetSublistAccess(Operation *) {
+  static NodeList InstanceGraphBase::*getSublistAccess(Operation *) {
     return &InstanceGraphBase::nodes;
   }
 
