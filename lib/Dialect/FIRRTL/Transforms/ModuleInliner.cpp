@@ -1102,7 +1102,7 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
   // Reduction operator
   auto mergeSets = [](auto &&a, auto &&b) {
     a.insert(b.begin(), b.end());
-    return std::move(a);
+    return std::forward<decltype(a)>(a);
   };
 
   // Walk modules in parallel, scanning for references to NLA's

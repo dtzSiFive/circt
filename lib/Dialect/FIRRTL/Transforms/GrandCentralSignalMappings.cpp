@@ -367,7 +367,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   }
 
   LLVM_DEBUG(llvm::dbgs() << "  - " << mapping << "\n");
-  mappings.push_back(std::move(mapping));
+  mappings.push_back(mapping);
 }
 
 /// Create a separate mappings module that contains cross-module references and
