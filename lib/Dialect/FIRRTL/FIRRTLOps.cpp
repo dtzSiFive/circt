@@ -140,6 +140,8 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         return swap();
       })
       .Case<MemOp>([&](auto op) { return swap(); })
+      .Case<RefResolveOp>(
+          [&](auto op) { return foldFlow(op->getOperand(0), accumulatedFlow); })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
 }
@@ -3961,6 +3963,53 @@ void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
+}
+
+//===----------------------------------------------------------------------===//
+// Cross Module Reference verifiers.
+//===----------------------------------------------------------------------===//
+
+LogicalResult RefSendOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
+    return failure();
+
+  return success();
+}
+
+LogicalResult RefRecvOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this, /*disallowOutputPortSink=*/true)))
+    return failure();
+
+  // Check constraints on RefType.
+  if (failed(checkRefTypeFlow(*this)))
+    return failure();
+
+  // The result of the ref recv op (xmr write) cannot be used as the destination
+  // of any connect op in the module.
+  Value res = getResult();
+  if (res.hasOneUse())
+    return success();
+  for (auto u : res.getUsers())
+    if (auto cLike = dyn_cast<FConnectLike>(u)) {
+      if (cLike.getDest() != res)
+        continue;
+      auto resRef = getFieldRefFromValue(res);
+      bool rootKnown;
+      auto resName = getFieldName(resRef, rootKnown);
+      auto diag = emitError() << "ref recv result ";
+      if (rootKnown)
+        diag << "\"" << resName << "\" ";
+      diag << "cannot be used as the destination of a connect";
+      return diag.attachNote(cLike.getLoc()) << "the connect was defined here";
+    }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
