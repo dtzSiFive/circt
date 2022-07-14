@@ -791,7 +791,7 @@ firrtl.circuit "Top" {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog and is not a ref type, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.analog
   }
 }
@@ -800,7 +800,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog and is not a ref type, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.vector<analog, 2>
   }
 }
@@ -905,12 +905,101 @@ firrtl.circuit "DupSymField" {
 }
 
 // -----
+// Check single usage of reference ports
+firrtl.circuit "Foo" {
+  firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Foo(in %fa: !firrtl.ref<uint<1>>) {
+    %bar_a = firrtl.instance bar @Bar(in _a: !firrtl.ref<uint<1>>)
+
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @+1 {{reference port operand cannot be reused by any other op}}
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %0, %zero : !firrtl.uint<1>
+    firrtl.strictconnect %fa, %bar_a : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check upward reference XMRs
+
+firrtl.circuit "MyView_mapping" {
+  firrtl.module @MyView_mapping(in %ref_in1: !firrtl.ref<uint<1>>) {
+    // expected-error @+1 {{'firrtl.ref.resolve' op failed to verify that it cannot have module port as an operand because it implies upward reference XMR, which are not supported. The reference operand must be a port from firrtl.instance}}
+    %0 = firrtl.ref.resolve %ref_in1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
 // Check upward reference XMRs
 
 firrtl.circuit "func2" {
   firrtl.module @func2(in %ref_in1: !firrtl.ref<uint<1>>, out %ref_out: !firrtl.ref<uint<1>>) {
     // expected-error @+1 {{connect has invalid flow for Ref type ports: the source expression "ref_in1" and destination expression "ref_out" both have same port kind, expected Module port to Instance connections only}}
     firrtl.strictconnect %ref_out, %ref_in1 : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check flow semantics for ref.recv
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{source was defined here}}
+  firrtl.module @Foo(out %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{connect has invalid flow: the source expression "_a" has sink flow, expected source or duplex flow}}
+    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check flow semantics for ref.send
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{destination was defined here}}
+  firrtl.module @Foo(in  %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
+    firrtl.ref.send %_a, %a : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Check flow semantics for ref.recv
+
+firrtl.circuit "Bar" {
+  firrtl.module @Bar(in %_a: !firrtl.ref<uint<1>>) {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %b = firrtl.wire : !firrtl.uint<1>
+    // expected-error @+1 {{ref recv result "a" cannot be used as the destination of a connect}}
+    firrtl.ref.recv %a, %_a : !firrtl.ref<uint<1>>
+    // expected-note @+1 {{the connect was defined here}}
+    firrtl.strictconnect %a, %b : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Reference port cannot be reused
+
+firrtl.circuit "ForwardToInstance2x" {
+  firrtl.module @Bar2(out %_a: !firrtl.ref<uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.ref.send %_a, %zero : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
+    %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
+    %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
+    // expected-error @+1 {{connect operands of Ref type cannot be reused}}
+    firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %_a, %y : !firrtl.ref<uint<1>>
+  }
+  firrtl.module @ForwardToInstance2x() {
+    %bar_a = firrtl.instance bar @Bar(out _a: !firrtl.ref<uint<1>>)
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.resolve %bar_a : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
 }
 
@@ -939,9 +1028,10 @@ firrtl.circuit "NonRefRegister" {
 
 firrtl.circuit "MyView" {
   firrtl.module @MyView() {
-  // expected-error @+1 {{'firrtl.wire' op result #0 must be a base type, but got '!firrtl.ref<uint<1>>'}}
+    // expected-error @+1 {{'firrtl.wire' op result #0 must be a base type, but got '!firrtl.ref<uint<1>>'}}
     %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
     %in1 = firrtl.wire : !firrtl.uint<1>
+    firrtl.ref.send  %ref_in1, %in1 : !firrtl.ref<uint<1>>
   }
 }
 
