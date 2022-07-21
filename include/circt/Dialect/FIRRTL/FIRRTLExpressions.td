@@ -652,7 +652,12 @@ class RefTypeConstraint<string ref, string base>
                    ref, base,
                    "$_self.cast<RefType>().getType()">;
 
-def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">]> {
+class RefSingleUserConstraint<string ref>
+  : PredOpTrait<"reference port operand cannot be reused by any other op",
+                CPred<"$" # ref # ".hasOneUse()">>;
+
+def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">,
+                                    RefSingleUserConstraint<"ref">]> {
   let summary = "FIRRTL XMR Get";
   let description = [{
     Resolve a remote reference (XMR) for reading/writing.
@@ -661,12 +666,12 @@ def XMRGetOp : FIRRTLOp<"xmr.get", [RefTypeConstraint<"ref","result">]> {
   }];
   let arguments = (ins RefType:$ref);
   let results = (outs FIRRTLType:$result);
-  let hasVerifier = 1;
 
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">]> {
+def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">,
+                                    RefSingleUserConstraint<"ref">]> {
   let summary = "FIRRTL XMR Read";
   let description = [{
     Endpoint of remote reference (XMR), read from
@@ -677,7 +682,8 @@ def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">]> {
   let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
 }
 
-def XMRWriteOp : FIRRTLOp<"xmr.write", [RefTypeConstraint<"ref","result">]> {
+def XMRWriteOp : FIRRTLOp<"xmr.write", [RefTypeConstraint<"ref","result">,
+                                    RefSingleUserConstraint<"ref">]> {
   let summary = "FIRRTL XMR Write";
   let description = [{
     Endpoint of remote reference (XMR), written from
