@@ -691,6 +691,7 @@ def XMRReadOp : FIRRTLOp<"xmr.read", [RefTypeConstraint<"ref","result">,
     the firrtl.xmr.get op.
   }];
   let arguments = (ins RefType:$ref, FIRRTLType:$result);
+  let hasVerifier = 1;
 
   let assemblyFormat = "$ref `,` $result attr-dict `:` qualified(type($ref))";
 }
@@ -705,6 +706,7 @@ def XMRWriteOp : FIRRTLOp<"xmr.write", [RefTypeConstraint<"ref","result">,
     other write to $result.
   }];
   let arguments = (ins FIRRTLType:$result, RefType:$ref);
+  let hasVerifier = 1;
 
   let assemblyFormat = "$result `,` $ref attr-dict `:` qualified(type($ref))";
 }
