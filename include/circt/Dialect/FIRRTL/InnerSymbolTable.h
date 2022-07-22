@@ -171,6 +171,22 @@ struct InnerRefNamespace {
   }
 };
 
+/// Printing InnerSymTarget's.
+template <typename OS>
+OS &operator<<(OS &os, const InnerSymTarget &target) {
+  if (!target)
+    return os << "<invalid>";
+  if (target.isPort())
+    os << "<port " << target.getPort() << " on @"
+       << InnerSymbolTable::getInnerSymbol(target.getOp()) << ">";
+  else
+    os << "<op " << (void *)target.getOp() << ">";
+
+  if (target.isField())
+    os << "[field=" << target.getField() << "]";
+  return os;
+}
+
 } // namespace firrtl
 } // namespace circt
 
