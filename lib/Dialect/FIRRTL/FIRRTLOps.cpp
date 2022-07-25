@@ -3942,8 +3942,9 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
-// TblGen Generated Logic.
+// Cross Module Reference verifiers.
 //===----------------------------------------------------------------------===//
+
 LogicalResult XMRReadOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
