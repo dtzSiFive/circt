@@ -72,29 +72,21 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
     assert(name && !name.getValue().empty());
     return callback(name, target);
   };
-
-  auto walkSyms = [&](InnerSymAttr symAttr,
-                      const InnerSymTarget &baseTarget) -> LogicalResult {
-    assert(baseTarget.getField() == 0);
-    for (const auto &symProp : symAttr.getProps()) {
-      if (failed(walkSym(symProp.getName(),
-                         InnerSymTarget::getTargetForSubfield(
-                             baseTarget, symProp.getFieldID()))))
-        return failure();
-    }
-    return success();
-  };
-
   // Walk the operation and add InnerSymbolTarget's to the table.
   return success(
       !op->walk<mlir::WalkOrder::PreOrder>([&](Operation *curOp) -> WalkResult {
-           if (auto symOp = dyn_cast<InnerSymbolOpInterface>(curOp))
-             if (auto symAttr = symOp.getInnerSymAttr())
-               if (failed(walkSyms(symAttr, InnerSymTarget(symOp))))
-                 return WalkResult::interrupt();
+           if (auto symOp = dyn_cast<InnerSymbolOpInterface>(curOp)) {
+             bool noFailures = true;
+             symOp.walkSymbols([&](auto attr, const auto &target) {
+               if (noFailures) // Ignore after first failure.
+                 if (failed(walkSym(attr, target)))
+                   noFailures = false;
+             });
+             return success(noFailures);
+           }
 
            // Check for ports
-           // TODO: Add fields per port, once they work that way (use addSyms)
+           // TODO: Add fields per port, once they work that way.
            if (auto mod = dyn_cast<FModuleLike>(curOp)) {
              for (const auto &p : llvm::enumerate(mod.getPorts()))
                if (auto sym = p.value().sym; sym && !sym.getValue().empty())

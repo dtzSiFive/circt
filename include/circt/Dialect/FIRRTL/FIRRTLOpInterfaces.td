@@ -356,6 +356,20 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
               circt::firrtl::InnerSymbolTable::getInnerSymbolAttrName());
       }]
     >,
+    InterfaceMethod<[{
+        Walk all inner symbols and invoke a callback for each.
+
+        Use this to discover all the inner symbols within this operation.
+
+        The callback contains the name and an appropriate InnerSymTarget.
+      }],
+      "void", "walkSymbols", (ins "::llvm::function_ref<void(::mlir::StringAttr, const ::circt::firrtl::InnerSymTarget &)>":$callback), [{}],
+      /*defaultImplementation=*/[{
+        if (auto symAttr = this->getInnerSymAttr())
+          for (const auto &prop: symAttr.getProps())
+            callback(prop.getName(), InnerSymTarget($_op, prop.getFieldID()));
+      }]
+    >,
   ];
 
   let verify = [{
