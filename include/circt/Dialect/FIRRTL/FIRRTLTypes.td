@@ -67,10 +67,14 @@ def FConnectable : FIRRTLDialectType<
     ]>,
     "a connectable type (base type or ref type)", "::circt::firrtl::FIRRTLType">;
 
-def SizedType : FIRRTLDialectType<
+def SizedBaseOrRefType : FIRRTLDialectType<
+  Or<[
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "!$_self.cast<FIRRTLBaseType>().hasUninferredWidth()">,
-    "a sized type (contains no unifered widths)", "::circt::firrtl::FIRRTLType">;
+    CPred<"$_self.isa<RefType>() && "
+          "!$_self.cast<RefType>().getType().hasUninferredWidth()">,
+    ]>,
+  "a sized base or ref type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 
 def UInt1Type : FIRRTLDialectType<
     CPred<"$_self.isa<UIntType>() && "
