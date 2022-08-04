@@ -81,6 +81,10 @@ def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
+def RefType : DialectType<FIRRTLDialect,
+   CPred<"$_self.isa<RefType>()">,
+  "reference type", "::circt::firrtl::RefType">;
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
@@ -98,7 +102,7 @@ def AnyResetType : FIRRTLDialectType<
 def AnyRegisterType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "$_self.cast<FIRRTLBaseType>().isRegisterType()">,
-    "a passive type that does not contain analog",
+    "a passive base type that does not contain analog",
     "::circt::firrtl::FIRRTLBaseType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
