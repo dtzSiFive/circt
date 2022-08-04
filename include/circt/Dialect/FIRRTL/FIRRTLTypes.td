@@ -61,8 +61,11 @@ def FVectorType : FIRRTLDialectType<CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
 def FConnectable : FIRRTLDialectType<
+  Or<[
     CPred<"$_self.isa<FIRRTLBaseType>()">,
-    "a connectable type (base type)", "::circt::firrtl::FIRRTLType">;
+    CPred<"$_self.isa<RefType>()">,
+    ]>,
+    "a connectable type (base type or ref type)", "::circt::firrtl::FIRRTLType">;
 
 def SizedType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
@@ -90,6 +93,10 @@ def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
+def RefType : DialectType<FIRRTLDialect,
+   CPred<"$_self.isa<RefType>()">,
+  "reference type", "::circt::firrtl::RefType">;
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
@@ -107,7 +114,7 @@ def AnyResetType : FIRRTLDialectType<
 def AnyRegisterType : FIRRTLDialectType<
     CPred<"$_self.isa<FIRRTLBaseType>() && "
           "$_self.cast<FIRRTLBaseType>().isRegisterType()">,
-    "a passive type that does not contain analog",
+    "a passive base type that does not contain analog",
     "::circt::firrtl::FIRRTLBaseType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
