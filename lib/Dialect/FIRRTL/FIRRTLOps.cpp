@@ -2769,12 +2769,10 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
-  auto base = input.dyn_cast<FIRRTLBaseType>();
-  if (base) {
-    int32_t width = base.getBitWidthOrSentinel();
-    if (width != -2)
-      return UIntType::get(input.getContext(), width);
-  }
+  auto base = input.cast<FIRRTLBaseType>();
+  int32_t width = base.getBitWidthOrSentinel();
+  if (width != -2)
+    return UIntType::get(input.getContext(), width);
   if (loc)
     mlir::emitError(*loc, "operand must be a scalar type");
   return {};
@@ -2782,12 +2780,10 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
                                                     Optional<Location> loc) {
-  auto base = input.dyn_cast<FIRRTLBaseType>();
-  if (base) {
-    int32_t width = base.getBitWidthOrSentinel();
-    if (width == -1 || width == 1)
-      return AsyncResetType::get(input.getContext());
-  }
+  auto base = input.cast<FIRRTLBaseType>();
+  int32_t width = base.getBitWidthOrSentinel();
+  if (width == -1 || width == 1)
+    return AsyncResetType::get(input.getContext());
   if (loc)
     mlir::emitError(*loc, "operand must be single bit scalar type");
   return {};
