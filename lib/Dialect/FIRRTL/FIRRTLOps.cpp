@@ -2036,7 +2036,7 @@ static LogicalResult checkRefTypeFlow(Operation *connect) {
       bool rootKnown;
       auto srcName = getFieldName(srcRef, rootKnown);
       auto diag = emitError(connect->getLoc())
-                  << "connect has invalid flow for Ref type ports: the source "
+                  << "connect has invalid flow for ref type ports: the source "
                      "expression ";
       if (rootKnown)
         diag << "\"" << srcName << "\" ";
