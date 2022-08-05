@@ -1226,7 +1226,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown && !isa<ConnectOp, StrictConnectOp, AttachOp>(op))
+  if (allWidthsKnown &&
+      !isa<ConnectOp, StrictConnectOp, AttachOp, RefSendOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1516,6 +1517,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
             unifyTypes(FieldRef(result, portType.getFieldID(fieldIndex)),
                        firstData, dataType);
         }
+      })
+
+      .Case<RefSendOp>(
+          [&](auto op) { constrainTypes(op.getRef(), op.getResult()); })
+      .Case<RefResolveOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        // Both directions, resolve may flow either way.
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getRef(), 0),
+                   op.getResult().getType().template cast<FIRRTLType>());
       })
 
       .Default([&](auto op) {
