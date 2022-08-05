@@ -791,7 +791,7 @@ firrtl.circuit "Top" {
 
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog and is not a ref type, but got '!firrtl.analog'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.analog'}}
     %r = firrtl.reg %clock : !firrtl.analog
   }
 }
@@ -800,7 +800,7 @@ firrtl.circuit "AnalogRegister" {
 
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog and is not a ref type, but got '!firrtl.vector<analog, 2>'}}
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
     %r = firrtl.reg %clock : !firrtl.vector<analog, 2>
   }
 }
@@ -991,7 +991,7 @@ firrtl.circuit "ForwardToInstance2x" {
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
-    // expected-error @+1 {{connect operands of Ref type cannot be reused}}
+    // expected-error @+1 {{connect operands of ref type cannot be reused}}
     firrtl.strictconnect %_a, %x : !firrtl.ref<uint<1>>
     firrtl.strictconnect %_a, %y : !firrtl.ref<uint<1>>
   }
