@@ -89,10 +89,6 @@ def RefType : DialectType<FIRRTLDialect,
    CPred<"$_self.isa<RefType>()">,
   "reference type", "::circt::firrtl::RefType">;
 
-def RefType : DialectType<FIRRTLDialect,
-   CPred<"$_self.isa<RefType>() && $_self.cast<RefType>().getType().isGround()">,
-  "reference type", "::circt::firrtl::RefType">;
-
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
@@ -121,10 +117,6 @@ def OneBitCastableType : AnyTypeOf<
   [OneBitType, AnyResetType, AsyncResetType, ClockType],
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
-
-def FIRRTLnonRefType : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<FIRRTLType>() && !$_self.isa<RefType>()">,
-  "a base type, it cannot be a Ref Type", "::circt::firrtl::FIRRTLType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Enum Definitions

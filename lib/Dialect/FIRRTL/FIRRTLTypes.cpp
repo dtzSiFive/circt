@@ -350,7 +350,6 @@ bool FIRRTLBaseType::isGround() {
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
       .Case<BundleType, FVectorType>([](Type) { return false; })
-      .Case<RefType>([](auto type) { return type.getType().isGround(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
@@ -375,10 +374,6 @@ RecursiveTypeProperties FIRRTLBaseType::getRecursiveTypeProperties() {
       .Case<FVectorType>([](FVectorType vectorType) {
         return vectorType.getRecursiveTypeProperties();
       })
-      .Case<RefType>([](auto type) {
-        // Forward properties of underlying type.
-        return type.getType().getRecursiveTypeProperties();
-      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -394,7 +389,6 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
           [](BundleType bundleType) { return bundleType.getPassiveType(); })
       .Case<FVectorType>(
           [](FVectorType vectorType) { return vectorType.getPassiveType(); })
-      .Case<RefType>([](RefType ref) { return ref.getType().getPassiveType(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -445,8 +439,6 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
         return FVectorType::get(a.getElementType().getWidthlessType(),
                                 a.getNumElements());
       })
-      .Case<RefType>(
-          [](RefType ref) { return ref.getType().getWidthlessType(); })
       .Default([](auto) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLBaseType();
@@ -465,8 +457,6 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
       .Case<AnalogType>(
           [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
       .Case<BundleType, FVectorType>([](Type) { return -2; })
-      .Case<RefType>(
-          [](RefType ref) { return ref.getType().getBitWidthOrSentinel(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return -2;
@@ -481,7 +471,6 @@ bool FIRRTLBaseType::isResetType() {
       .Case<ResetType, AsyncResetType>([](Type) { return true; })
       .Case<UIntType>(
           [](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
-      .Case<RefType>([](RefType ref) { return ref.getType().isResetType(); })
       .Default([](Type) { return false; });
 }
 
@@ -491,7 +480,6 @@ unsigned FIRRTLBaseType::getMaxFieldID() {
             UIntType>([](Type) { return 0; })
       .Case<BundleType, FVectorType>(
           [](auto type) { return type.getMaxFieldID(); })
-      .Case<RefType>([](RefType ref) { return ref.getType().getMaxFieldID(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return -1;
@@ -508,9 +496,6 @@ FIRRTLBaseType::getSubTypeByFieldID(unsigned fieldID) {
       })
       .Case<BundleType, FVectorType>(
           [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
-      .Case<RefType>([&](RefType ref) {
-        return ref.getType().getSubTypeByFieldID(fieldID);
-      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return std::pair(FIRRTLBaseType(), 0);
@@ -531,9 +516,6 @@ std::pair<unsigned, bool> FIRRTLBaseType::rootChildFieldID(unsigned fieldID,
             UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
       .Case<BundleType, FVectorType>(
           [&](auto type) { return type.rootChildFieldID(fieldID, index); })
-      .Case<RefType>([&](RefType ref) {
-        return ref.getType().rootChildFieldID(fieldID, index);
-      })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return std::make_pair(0, false);
