@@ -2064,7 +2064,10 @@ static LogicalResult checkRefTypeFlow(Operation *connect) {
               "connections only";
       return diag;
     }
-    if (!src.hasOneUse() || !dst.hasOneUse()) {
+    // TODO: handle this better, this may not be a 'connect'
+    // If this is a RefSendOp, src won't be ref, let it be used elsewhere.
+    if ((src.getType().isa<RefType>() && !src.hasOneUse()) ||
+        !dst.hasOneUse()) {
       auto diag = emitError(connect->getLoc());
       diag << "connect operands of ref type cannot be reused";
       return diag;
