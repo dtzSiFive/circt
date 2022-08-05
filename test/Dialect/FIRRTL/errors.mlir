@@ -919,7 +919,7 @@ firrtl.circuit "func2" {
 
 firrtl.circuit "NonRefNode" {
 firrtl.module @NonRefNode(in %in1 : !firrtl.ref<uint<8>>) {
-  // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive type (contain no flips), but got '!firrtl.ref<uint<8>>'}}
+  // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive base type (contain no flips), but got '!firrtl.ref<uint<8>>'}}
   %n1 = firrtl.node %in1 : !firrtl.ref<uint<8>>
   %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
 }
@@ -988,7 +988,7 @@ firrtl.circuit "InvalidRef" {
 firrtl.circuit "MuxRef" {
   firrtl.module @MuxRef(in %a: !firrtl.ref<uint<1>>, in %b: !firrtl.ref<uint<1>>,
                           in %cond: !firrtl.uint<1>) {
-    // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive type (contain no flips), but got '!firrtl.ref<uint<1>>'}}
+    // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.ref<uint<1>>'}}
     %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>) -> !firrtl.ref<uint<1>>
   }
 }

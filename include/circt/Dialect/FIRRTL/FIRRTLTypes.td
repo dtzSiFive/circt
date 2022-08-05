@@ -83,7 +83,7 @@ def ResetType : FIRRTLDialectType<
 
 def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
-  "a passive type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
+  "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
 def RefType : DialectType<FIRRTLDialect,
    CPred<"$_self.isa<RefType>()">,
