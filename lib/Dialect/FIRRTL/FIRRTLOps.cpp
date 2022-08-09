@@ -2735,7 +2735,13 @@ LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
 
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
-  int32_t width = input.cast<FIRRTLBaseType>().getBitWidthOrSentinel();
+  auto base = input.dyn_cast<FIRRTLBaseType>();
+  if (!base) {
+    if (loc)
+      mlir::emitError(*loc, "operand must be a scalar base type");
+    return {};
+  }
+  int32_t width = base.getBitWidthOrSentinel();
   if (width == -2) {
     if (loc)
       mlir::emitError(*loc, "operand must be a scalar type");
@@ -2746,7 +2752,13 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               Optional<Location> loc) {
-  int32_t width = input.cast<FIRRTLBaseType>().getBitWidthOrSentinel();
+  auto base = input.dyn_cast<FIRRTLBaseType>();
+  if (!base) {
+    if (loc)
+      mlir::emitError(*loc, "operand must be a scalar base type");
+    return {};
+  }
+  int32_t width = base.getBitWidthOrSentinel();
   if (width == -2) {
     if (loc)
       mlir::emitError(*loc, "operand must be a scalar type");
@@ -2757,7 +2769,13 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
                                                     Optional<Location> loc) {
-  int32_t width = input.cast<FIRRTLBaseType>().getBitWidthOrSentinel();
+  auto base = input.dyn_cast<FIRRTLBaseType>();
+  if (!base) {
+    if (loc)
+      mlir::emitError(*loc, "operand must be single bit scalar base type");
+    return {};
+  }
+  int32_t width = base.cast<FIRRTLBaseType>().getBitWidthOrSentinel();
   if (width == -2 || width == 0 || width > 1) {
     if (loc)
       mlir::emitError(*loc, "operand must be single bit scalar type");
@@ -3022,9 +3040,14 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       Optional<Location> loc) {
-  auto high = operands[1].getType().cast<FIRRTLBaseType>();
-  auto low = operands[2].getType().cast<FIRRTLBaseType>();
-  return inferMuxReturnType(high, low, loc);
+  auto highType = operands[1].getType().dyn_cast<FIRRTLBaseType>();
+  auto lowType = operands[2].getType().dyn_cast<FIRRTLBaseType>();
+  if (!highType || !lowType) {
+    if (loc)
+      mlir::emitError(*loc, "operands must be base type");
+    return {};
+  }
+  return inferMuxReturnType(highType, lowType, loc);
 }
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
