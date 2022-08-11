@@ -636,53 +636,29 @@ void IMConstPropPass::visitRegResetOp(RegResetOp regReset) {
 }
 
 void IMConstPropPass::visitRefSend(RefSendOp send) {
-  // Send connects the result value (source) to the ref (dest).
-  if (!send.getResult().getType().cast<FIRRTLBaseType>().isGround())
-    return markOverdefined(send.getRef());
+  // Send connects the base value (source) to the result (dest).
 
-  auto srcValue = getExtendedLatticeValue(
-      send.getResult(), send.getResult().getType().cast<FIRRTLBaseType>());
+  // No aggregate support yet in IMCP, skip if not ground.
+  if (!send.getType().getType().isGround())
+    return markOverdefined(send.getResult());
+
+  auto srcValue =
+      getExtendedLatticeValue(send.getBase(), send.getType().getType());
   if (srcValue.isUnknown())
     return;
 
-  // Driving result ports propagates the value to each instance using the
-  // module.
-  if (auto blockArg = send.getRef().dyn_cast<BlockArgument>()) {
-    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, srcValue);
-    // Output ports are wire-like and may have users.
-    mergeLatticeValue(send.getRef(), srcValue);
-    return;
-  }
-
-  auto dest = send.getRef().cast<mlir::OpResult>();
-
-  // Driving an instance argument port drives the corresponding argument of the
-  // referenced module.
-  if (auto instance = dest.getDefiningOp<InstanceOp>()) {
-    // Update the dest, when its an instance op.
-    mergeLatticeValue(send.getRef(), srcValue);
-    auto module =
-        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
-    if (!module)
-      return;
-
-    BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
-    return mergeLatticeValue(modulePortVal, srcValue);
-  }
-
-  send.emitError("ref.send unhandled by IMConstProp")
-          .attachNote(send.getRef().getLoc())
-      << "ref destination is here";
+  return mergeLatticeValue(send.getResult(), srcValue);
 }
 
 void IMConstPropPass::visitRefResolve(RefResolveOp resolve) {
   // Resolve connects the ref value (source) to result (dest).
-  if (!resolve.getResult().getType().cast<FIRRTLBaseType>().isGround())
+  // If writes are ever supported, this will need to work differently!
+
+  // No aggregate support yet in IMCP, skip if not ground.
+  if (!resolve.getType().isGround())
     return markOverdefined(resolve.getResult());
 
-  auto srcValue = getExtendedLatticeValue(
-      resolve.getRef(), resolve.getResult().getType().cast<FIRRTLBaseType>());
+  auto srcValue = getExtendedLatticeValue(resolve.getRef(), resolve.getType());
   if (srcValue.isUnknown())
     return;
 
