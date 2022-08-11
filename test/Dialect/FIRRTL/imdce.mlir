@@ -180,3 +180,52 @@ firrtl.circuit "ForwardConstant" {
     firrtl.strictconnect %zero, %sub_zero : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "RefPorts" {
+  // CHECK-NOT: @dead_ref_writeonly
+  firrtl.module private @dead_ref_writeonly(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
+    %dead_node = firrtl.node %source: !firrtl.uint<1>
+    %not = firrtl.not %dead_node : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %ref_not = firrtl.ref.send %not : !firrtl.uint<1>
+    firrtl.connect %dest, %ref_not : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+  }
+
+  // CHECK-NOT: @dead_ref_module
+  firrtl.module private @dead_ref_module(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
+  }
+
+  // CHECK-NOT: @dead_ref_resolved
+  firrtl.module private @dead_ref_resolved(in %source: !firrtl.uint<1>, out %dest: !firrtl.ref<uint<1>>) {
+    %ref_source = firrtl.ref.send %source: !firrtl.uint<1>
+    firrtl.connect %dest, %ref_source : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+  }
+
+  // CHECK-NOT: @dead_ref_local
+  firrtl.module private @dead_ref_local(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
+    %ref_source = firrtl.ref.send %source: !firrtl.uint<1>
+    %back_again = firrtl.ref.resolve %ref_source: !firrtl.ref<uint<1>>
+    firrtl.strictconnect %dest, %back_again : !firrtl.uint<1>
+  }
+
+  firrtl.module @RefPorts(in %source : !firrtl.uint<1>, out %dest : !firrtl.uint<1>) {
+    // CHECK-NOT: @dead_ref_writeonly
+    %source1, %dest1 = firrtl.instance dead_ref_writeonly @dead_ref_writeonly(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %source1, %source : !firrtl.uint<1>
+
+    // CHECK-NOT: @dead_ref_module
+    %source2, %dest2 = firrtl.instance dead_ref_module @dead_ref_module(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %source2, %source : !firrtl.uint<1>
+
+    // CHECK-NOT: @dead_ref_resolved
+    // Check that an unused resolve doesn't keep module alive
+    %source3, %dest3 = firrtl.instance dead_ref_resolved @dead_ref_resolved(in source: !firrtl.uint<1>, out dest: !firrtl.ref<uint<1>>)
+    firrtl.strictconnect %source3, %source : !firrtl.uint<1>
+    %unused = firrtl.ref.resolve %dest3 : !firrtl.ref<uint<1>>
+
+    // CHECK-NOT: @dead_ref_local
+    %source4, %dest4 = firrtl.instance dead_ref_local @dead_ref_local(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>)
+    firrtl.strictconnect %source4, %source : !firrtl.uint<1>
+  }
+}

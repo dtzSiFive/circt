@@ -173,6 +173,8 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
       continue;
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
+    else if (isa<RefSendOp, RefResolveOp>(op))
+      continue;
     else if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
       markUnknownSideEffectOp(&op);
 
@@ -348,6 +350,15 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
       continue;
     }
 
+    // Delete dead ref ops
+    if (isa<RefSendOp, RefResolveOp>(&op) && isAssumedDead(op.getResult(0))) {
+      LLVM_DEBUG(llvm::dbgs() << "DEAD: " << op << "\n";);
+      assert(op.use_empty() && "users should be already removed");
+      op.erase();
+      ++numErasedOps;
+      continue;
+    }
+
     // Remove non-sideeffect op using `isOpTriviallyDead`.
     if (mlir::isOpTriviallyDead(&op)) {
       op.erase();
@@ -394,6 +405,10 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
                        [&](Value result) { return isAssumedDead(result); });
 
       if (!deadOutputPortAtAnyInstantiation)
+        continue;
+
+      // RefType can't be a wire, especially if it won't be erased.  Skip.
+      if (argument.getType().isa<RefType>())
         continue;
 
       // Ok, this port is used only within its defined module. So we can replace
