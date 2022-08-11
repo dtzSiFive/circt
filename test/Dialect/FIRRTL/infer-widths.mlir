@@ -806,7 +806,8 @@ firrtl.circuit "Foo" {
   // CHECK: out %x: !firrtl.ref<uint<2>>
   firrtl.module private @SubRef(out %x: !firrtl.ref<uint>) {
     %w = firrtl.wire : !firrtl.uint
-    firrtl.ref.send %x, %w : !firrtl.ref<uint>
+    %ref_w = firrtl.ref.send %w : !firrtl.uint
+    firrtl.connect %x, %ref_w : !firrtl.ref<uint>, !firrtl.ref<uint>
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>

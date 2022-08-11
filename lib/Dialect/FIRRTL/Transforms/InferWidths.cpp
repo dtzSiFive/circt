@@ -1227,7 +1227,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       allWidthsKnown = false;
   }
   if (allWidthsKnown &&
-      !isa<ConnectOp, StrictConnectOp, AttachOp, RefSendOp>(op))
+      !isa<ConnectOp, StrictConnectOp, AttachOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1519,8 +1519,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         }
       })
 
-      .Case<RefSendOp>(
-          [&](auto op) { constrainTypes(op.getRef(), op.getResult()); })
+      .Case<RefSendOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getBase());
+      })
       .Case<RefResolveOp>([&](auto op) {
         declareVars(op.getResult(), op.getLoc());
         // Both directions, resolve may flow either way.
