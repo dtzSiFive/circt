@@ -17,6 +17,7 @@ target_link_libraries(firtool PRIVATE
   CIRCTSVTransforms
   CIRCTTransforms
 
+  MLIRBytecodeWriter
   MLIRParser
   MLIRSupport
   MLIRIR
