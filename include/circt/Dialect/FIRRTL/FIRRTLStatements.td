@@ -118,8 +118,8 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
     StrAttr:$message,
     Variadic<AnyType>:$substitutions,
     StrAttr:$name,
-    DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
-    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl
+    DefaultValuedOptionalAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedOptionalAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl
   );
 
   let hasCanonicalizer = true;

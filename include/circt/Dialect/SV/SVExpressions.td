@@ -31,7 +31,7 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
-                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
+                  DefaultValuedOptionalAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
     $format_string (`(` $substitutions^ `)`)?
@@ -67,7 +67,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
     }];
 
   let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
-                 DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols );
+                 DefaultValuedOptionalAttr<NameRefArrayAttr,"{}">:$symbols );
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
     $format_string (`(` $substitutions^ `)`)?

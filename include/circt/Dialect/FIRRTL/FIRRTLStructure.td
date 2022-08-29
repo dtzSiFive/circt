@@ -22,7 +22,7 @@ def CircuitOp : FIRRTLOp<"circuit",
     containing a list of modules.
   }];
   let arguments = (ins StrAttr:$name,
-                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+                   DefaultValuedOptionalAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -63,7 +63,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     the module.
   }];
   let arguments =
-            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+            (ins DefaultValuedOptionalAttr<AnnotationArrayAttr, "{}">:$annotations);
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -120,7 +120,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
                    ParamDeclArrayAttr:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations
+                   DefaultValuedOptionalAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);

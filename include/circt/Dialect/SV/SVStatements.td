@@ -350,10 +350,10 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let description = "See SystemVerilog 2017 12.5.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
-                                         "CaseStmtType::CaseStmt">:$caseStyle,
+  let arguments = (ins DefaultValuedOptionalAttr<CaseStmtTypeAttr,
+                         "CaseStmtType::CaseStmt">:$caseStyle,
                        AnyType:$cond, ArrayAttr:$casePatterns,
-                       DefaultValuedAttr<ValidationQualifierTypeAttr,
+                       DefaultValuedOptionalAttr<ValidationQualifierTypeAttr,
                        "ValidationQualifierTypeEnum::ValidationQualifierPlain">:
                       $validationQualifier);
   let results = (outs);
@@ -506,7 +506,7 @@ def VerbatimOp : SVOp<"verbatim"> {
     sv.verbatim allows operand substitutions with {{0}} syntax.
   }];
   let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
-                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
+                  DefaultValuedOptionalAttr<NameRefArrayAttr,"{}">:$symbols);
 
   let assemblyFormat = [{
     $format_string (`(` $substitutions^ `)` `:`
@@ -583,7 +583,7 @@ def BindInterfaceOp : SVOp<"bind.interface",
 /// - `1`: Prints simulation time and location (default)
 /// - `2`: Prints simulation time, location, and statistics about the memory and
 ///   CPU time used in simulation
-def VerbosityIntAttr : DefaultValuedAttr<ConfinedAttr<I8Attr,
+def VerbosityIntAttr : DefaultValuedOptionalAttr<ConfinedAttr<I8Attr,
   [IntMinValue<0>, IntMaxValue<2>]>, "1">;
 
 /// Commonalities between `StopOp` and `FinishOp`.

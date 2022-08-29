@@ -582,7 +582,7 @@ def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
   }];
 
   let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
-                       DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
+                       DefaultValuedOptionalAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs FIRRTLBaseType:$result);
   let assemblyFormat = [{
     $text (`(` $substitutions^ `)`)?
@@ -616,7 +616,7 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
   }];
 
   let arguments = (ins StrAttr:$text, Variadic<AnyType>:$substitutions,
-                       DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
+                       DefaultValuedOptionalAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs FIRRTLBaseType:$result);
   let assemblyFormat = [{
     $text (`(` $substitutions^ `)`)?
