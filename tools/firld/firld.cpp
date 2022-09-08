@@ -58,7 +58,7 @@ using namespace circt;
 /// input.
 enum InputFormatKind { InputUnspecified, InputFIRFile, InputMLIRFile };
 
-static cl::OptionCategory mainCategory("firtool Options");
+static cl::OptionCategory mainCategory("firld Options");
 
 static cl::opt<InputFormatKind> inputFormat(
     "format", cl::desc("Specify input file format:"),
@@ -417,7 +417,7 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 // This class prints logs before and after of pass executions. This
 // insrumentation assumes that passes are not parallelized for firrtl::CircuitOp
 // and mlir::ModuleOp.
-class FirtoolPassInstrumentation : public mlir::PassInstrumentation {
+class FirldPassInstrumentation : public mlir::PassInstrumentation {
   // This stores start time points of passes.
   using TimePoint = llvm::sys::TimePoint<>;
   llvm::SmallVector<TimePoint> timePoints;
@@ -430,7 +430,7 @@ public:
     if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
       timePoints.push_back(TimePoint::clock::now());
       auto &os = llvm::errs();
-      os << "[firtool] ";
+      os << "[firld] ";
       os.indent(2 * level++);
       os << "Running \"";
       pass->printAsTextualPipeline(llvm::errs());
@@ -447,7 +447,7 @@ public:
       auto elapsed = duration<double>(TimePoint::clock::now() -
                                       timePoints.pop_back_val()) /
                      seconds(1);
-      os << "[firtool] ";
+      os << "[firld] ";
       os.indent(2 * --level);
       os << "-- Done in " << llvm::format("%.3f", elapsed) << " sec\n";
     }
@@ -508,7 +508,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   llvm::sys::TimePoint<> parseStartTime;
   if (verbosePassExecutions) {
-    llvm::errs() << "[firtool] Running "
+    llvm::errs() << "[firld] Running "
                  << (inputFormat == InputFIRFile ? "fir" : "mlir")
                  << " parser\n";
     parseStartTime = llvm::sys::TimePoint<>::clock::now();
@@ -532,7 +532,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto elapsed = std::chrono::duration<double>(
                        llvm::sys::TimePoint<>::clock::now() - parseStartTime) /
                    std::chrono::seconds(1);
-    llvm::errs() << "[firtool] -- Done in " << llvm::format("%.3f", elapsed)
+    llvm::errs() << "[firld] -- Done in " << llvm::format("%.3f", elapsed)
                  << " sec\n";
   }
 
@@ -549,7 +549,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
   if (verbosePassExecutions)
-    pm.addInstrumentation(std::make_unique<FirtoolPassInstrumentation>());
+    pm.addInstrumentation(std::make_unique<FirldPassInstrumentation>());
   applyPassManagerCLOptions(pm);
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
@@ -756,7 +756,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     applyPassManagerCLOptions(exportPm);
     if (verbosePassExecutions)
       exportPm.addInstrumentation(
-          std::make_unique<FirtoolPassInstrumentation>());
+          std::make_unique<FirldPassInstrumentation>());
     // Legalize unsupported operations within the modules.
     exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
@@ -882,10 +882,10 @@ processInput(MLIRContext &context, TimingScope &ts,
       llvm::outs());
 }
 
-/// This implements the top-level logic for the firtool command, invoked once
+/// This implements the top-level logic for the firld command, invoked once
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
-static LogicalResult executeFirtool(MLIRContext &context) {
+static LogicalResult executeFirld(MLIRContext &context) {
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
@@ -953,8 +953,8 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   return success();
 }
 
-/// Main driver for firtool command.  This sets up LLVM and MLIR, and parses
-/// command line options before passing off to 'executeFirtool'.  This is set up
+/// Main driver for firld command.  This sets up LLVM and MLIR, and parses
+/// command line options before passing off to 'executeFirld'.  This is set up
 /// so we can `exit(0)` at the end of the program to avoid teardown of the
 /// MLIRContext and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
@@ -993,12 +993,12 @@ int main(int argc, char **argv) {
   cl::AddExtraVersionPrinter(
       [](raw_ostream &os) { os << getCirctVersion() << '\n'; });
   // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
+  cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL linker\n");
 
   MLIRContext context;
 
-  // Do the guts of the firtool process.
-  auto result = executeFirtool(context);
+  // Do the guts of the firld process.
+  auto result = executeFirld(context);
 
   // Use "exit" instead of return'ing to signal completion.  This avoids
   // invoking the MLIRContext destructor, which spends a bunch of time
