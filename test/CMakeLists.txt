@@ -27,6 +27,7 @@ set(CIRCT_TEST_DEPENDS
   circt-reduce
   esi-tester
   handshake-runner
+  firld
   firtool
   hlstool
   )
