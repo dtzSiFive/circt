@@ -195,62 +195,53 @@ static LogicalResult executeFirld(MLIRContext &context) {
 
   //===- Read inputs ------------------------------------------------------===//
   SmallVector<FIRInputFile> inputs;
+  SourceMgr mainMgr;
+  SourceMgrDiagnosticHandler handler(mainMgr, &context);
   {
-    inputs.resize_for_overwrite(inputFilenames.size());
-    //struct mgrs {
-    //  MLIRContext *context;
-    //  SourceMgr mgr;
-    //  SourceMgrDiagnosticHandler handler =
-    //      SourceMgrDiagnosticHandler(mgr, context);
-    //  mgrs(MLIRContext &context) : context(&context) {};
-    //};
-    //SmallVector<mgrs> srcMgrs;
-    //srcMgrs.resize_for_overwrite(inputFilenames.size());
-SmallVector<SourceMgr> mgrs;
-mgrs.resize_for_overwrite(inputFilenames.size());
+    struct SourceMod {
+      StringRef name;
+      OwningOpRef<ModuleOp> mod;
+      SourceMgr mgr;
+    };
+    SmallVector<SourceMod> srcs;
+    auto numFiles = inputFilenames.size();
+    srcs.resize(numFiles);
     auto parserTimer = ts.nest("Parsing inputs");
     auto loadFile = [&](size_t i) -> LogicalResult {
-      auto fileParseTimer = parserTimer.nest(inputFilenames[i]);
-      //auto &mgrs = srcMgrs[i];
-      //new (&mgrs.second) SourceMgrDiagnosticHandler(mgrs.first, &context);
-      // new (&mgrs) struct mgrs(context);
-      // SourceMgrDiagnosticHandler handler(mgrs[i], &context);
-      auto &in = inputs[i];
-      in.name = inputFilenames[i];
-      in.mod = parseSourceFile<ModuleOp>(in.name, mgrs[i], &context);
-      if (!in.mod)
-        return failure();
-
-      // TODO: diagnostics/messages
-      auto go = [&]() -> LogicalResult {
-        auto *body = in.mod->getBody();
-        if (!body || !llvm::hasSingleElement(*body)) {
-          // if (body) body->dump();
-          if (body) {
-            // sv.verbatim outside circuit :(
-            for (auto &x : *body) {
-              if (&x != &body->front())
-                x.dump();
-            }
-          }
-          return in.mod->emitError("must have body with single element");
-        }
-        in.circt = dyn_cast<firrtl::CircuitOp>(body->front());
-        if (!in.circt)
-          return body->front().emitError("expected circuit op");
-
-        return success();
-      };
-      if (failed(go()))
+      auto &s = srcs[i];
+      s.name = inputFilenames[i];
+      auto fileParseTimer = parserTimer.nest(s.name);
+      s.mod = parseSourceFile<ModuleOp>(s.name, s.mgr, &context);
+      if (!s.mod)
         return failure();
       return success();
     };
-
-    if (failed(
-            failableParallelForEachN(&context, 0, inputs.size(), loadFile))) {
+    if (failed(failableParallelForEachN(&context, 0, numFiles, loadFile))) {
       llvm::errs() << "error reading inputs\n";
       return failure();
     }
+
+    for (auto &src: srcs) {
+      mainMgr.takeSourceBuffersFrom(src.mgr);
+
+      auto *body = src.mod->getBody();
+      if (!body || !llvm::hasSingleElement(*body)) {
+        // if (body) body->dump();
+        if (body) {
+          // sv.verbatim outside circuit :(
+          for (auto &x : *body) {
+            if (&x != &body->front())
+              x.dump();
+          }
+        }
+        return src.mod->emitError("must have body with single element");
+      }
+      auto circt = dyn_cast<firrtl::CircuitOp>(body->front());
+      if (!circt)
+        return body->front().emitError("expected circuit op");
+      inputs.push_back({{std::move(src.mod), src.name}, circt});
+    }
+
   }
 
   //===- Lower annotations (optional) -------------------------------------===//
