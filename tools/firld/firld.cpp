@@ -197,19 +197,33 @@ static LogicalResult executeFirld(MLIRContext &context) {
   SmallVector<FIRInputFile> inputs;
   {
     inputs.resize_for_overwrite(inputFilenames.size());
+    //struct mgrs {
+    //  MLIRContext *context;
+    //  SourceMgr mgr;
+    //  SourceMgrDiagnosticHandler handler =
+    //      SourceMgrDiagnosticHandler(mgr, context);
+    //  mgrs(MLIRContext &context) : context(&context) {};
+    //};
+    //SmallVector<mgrs> srcMgrs;
+    //srcMgrs.resize_for_overwrite(inputFilenames.size());
+SmallVector<SourceMgr> mgrs;
+mgrs.resize_for_overwrite(inputFilenames.size());
     auto parserTimer = ts.nest("Parsing inputs");
     auto loadFile = [&](size_t i) -> LogicalResult {
       auto fileParseTimer = parserTimer.nest(inputFilenames[i]);
-      SourceMgr sourceMgr;
-      SourceMgrDiagnosticHandler handler(sourceMgr, &context);
-      StringRef name = inputFilenames[i];
-      auto mod = parseSourceFile<ModuleOp>(name, sourceMgr, &context);
-      if (!mod)
+      //auto &mgrs = srcMgrs[i];
+      //new (&mgrs.second) SourceMgrDiagnosticHandler(mgrs.first, &context);
+      // new (&mgrs) struct mgrs(context);
+      // SourceMgrDiagnosticHandler handler(mgrs[i], &context);
+      auto &in = inputs[i];
+      in.name = inputFilenames[i];
+      in.mod = parseSourceFile<ModuleOp>(in.name, mgrs[i], &context);
+      if (!in.mod)
         return failure();
 
       // TODO: diagnostics/messages
       auto go = [&]() -> LogicalResult {
-        auto *body = mod->getBody();
+        auto *body = in.mod->getBody();
         if (!body || !llvm::hasSingleElement(*body)) {
           // if (body) body->dump();
           if (body) {
@@ -219,13 +233,11 @@ static LogicalResult executeFirld(MLIRContext &context) {
                 x.dump();
             }
           }
-          return mod->emitOpError("must have body with single element");
+          return in.mod->emitError("must have body with single element");
         }
-        auto circt = dyn_cast<firrtl::CircuitOp>(body->front());
-        if (!circt)
+        in.circt = dyn_cast<firrtl::CircuitOp>(body->front());
+        if (!in.circt)
           return body->front().emitError("expected circuit op");
-
-        inputs[i] = {{std::move(mod), name}, circt};
 
         return success();
       };
