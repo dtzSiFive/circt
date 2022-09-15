@@ -267,7 +267,6 @@ static LogicalResult executeFirld(MLIRContext &context) {
   // TODO: String -> sym instead
   SmallVector<Entry> ents;
   for (auto &input : inputs) {
-    // TODO: Grab / check for circuitop during loading
     llvm::errs() << llvm::formatv("Loaded {0}: {1}\n", input.name,
                                   input.circt.getName());
     // FIXME: redundant w/SymbolTable, but that doesn't expose iterators
