@@ -288,6 +288,7 @@ static LogicalResult executeFirld(MLIRContext &context) {
 
   // TODO: String -> sym instead
   SmallVector<Entry> ents;
+  ents.reserve(numFiles);
   for (auto &input : inputs) {
     llvm::errs() << llvm::formatv("Loaded {0}: {1}\n", input.name,
                                   input.circt.getName());
