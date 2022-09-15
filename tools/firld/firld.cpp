@@ -233,11 +233,12 @@ static LogicalResult executeFirld(MLIRContext &context) {
       return failure();
     }
 
-    for (auto &src: srcs) {
+    // Convert temporary ParsedInput to desired FIRFile's.
+    for (auto [src, input]: llvm::zip(srcs, inputs)) {
        // Ensure handler's SourceMgr has buffers for this file.
        mainMgr.takeSourceBuffersFrom(src.mgr);
 
-      // Build FIRFile from ParsedInput
+      // Check loaded module's are valid, create FIRFile from them.
       auto *body = src.mod->getBody();
       if (!body || !llvm::hasSingleElement(*body)) {
         // if (body) body->dump();
@@ -253,7 +254,8 @@ static LogicalResult executeFirld(MLIRContext &context) {
       auto circt = dyn_cast<firrtl::CircuitOp>(body->front());
       if (!circt)
         return body->front().emitError("expected circuit op");
-      inputs.push_back({{std::move(src.mod), src.name}, circt});
+
+      input = {{std::move(src.mod), src.name}, circt};
     }
   }
 
