@@ -208,24 +208,29 @@ static LogicalResult executeFirld(MLIRContext &context) {
         return failure();
 
       // TODO: diagnostics/messages
-      auto *body = mod->getBody();
-      if (!body || !llvm::hasSingleElement(*body)) {
-        // if (body) body->dump();
-        if (body) {
-          // sv.verbatim outside circuit :(
-          for (auto &x : *body) {
-            if (&x != &body->front())
-              x.dump();
+      auto go = [&]() -> LogicalResult {
+        auto *body = mod->getBody();
+        if (!body || !llvm::hasSingleElement(*body)) {
+          // if (body) body->dump();
+          if (body) {
+            // sv.verbatim outside circuit :(
+            for (auto &x : *body) {
+              if (&x != &body->front())
+                x.dump();
+            }
           }
+          return mod->emitOpError("must have body with single element");
         }
-        return mod->emitOpError("must have body with single element");
-      }
-      auto circt = dyn_cast<firrtl::CircuitOp>(body->front());
-      if (!circt)
-        return body->front().emitError("expected circuit op");
+        auto circt = dyn_cast<firrtl::CircuitOp>(body->front());
+        if (!circt)
+          return body->front().emitError("expected circuit op");
 
-      inputs[i] = {{std::move(mod), name}, circt};
+        inputs[i] = {{std::move(mod), name}, circt};
 
+        return success();
+      };
+      if (failed(go()))
+        return failure();
       return success();
     };
 
