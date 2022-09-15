@@ -194,11 +194,22 @@ static LogicalResult executeFirld(MLIRContext &context) {
   // Output: mlir file
 
   //===- Read inputs ------------------------------------------------------===//
-  SmallVector<FIRInputFile> inputs;
+  struct LeakyInputs {
+    SmallVector<FIRInputFile> inputs;
+    LeakyInputs(size_t n) { inputs.resize(n); }
+    ~LeakyInputs() {
+      // Leak
+      for (auto &input : inputs)
+        input.mod.release();
+    };
+  };
+  auto numFiles = inputFilenames.size();
+  LeakyInputs leakyInputs(numFiles);
+  auto &inputs = leakyInputs.inputs;
   SourceMgr mainMgr;
   SourceMgrDiagnosticHandler handler(mainMgr, &context);
-  auto numFiles = inputFilenames.size();
   {
+    // Parse inputs into these structures in parallel, each with own SourceMgr.
     struct ParsedInput {
       StringRef name;
       OwningOpRef<ModuleOp> mod;
@@ -216,14 +227,17 @@ static LogicalResult executeFirld(MLIRContext &context) {
         return failure();
       return success();
     };
+
     if (failed(failableParallelForEachN(&context, 0, numFiles, loadFile))) {
       llvm::errs() << "error reading inputs\n";
       return failure();
     }
 
     for (auto &src: srcs) {
-      mainMgr.takeSourceBuffersFrom(src.mgr);
+       // Ensure handler's SourceMgr has buffers for this file.
+       mainMgr.takeSourceBuffersFrom(src.mgr);
 
+      // Build FIRFile from ParsedInput
       auto *body = src.mod->getBody();
       if (!body || !llvm::hasSingleElement(*body)) {
         // if (body) body->dump();
@@ -263,8 +277,9 @@ static LogicalResult executeFirld(MLIRContext &context) {
         return failure();
       return success();
     };
+    // TODO: maybe put all in one module and let PM handle parallelism.
     if (failed(failableParallelForEach(&context, inputs, lowerAnnos))) {
-      llvm::errs() << "error reading inputs\n";
+      llvm::errs() << "error lowering annotations\n";
       return failure();
     }
   }
@@ -278,8 +293,7 @@ static LogicalResult executeFirld(MLIRContext &context) {
                                   input.circt.getName());
     // FIXME: redundant w/SymbolTable, but that doesn't expose iterators
     for (auto &op : *input.circt.getBodyBlock()) {
-      assert(isa<SymbolOpInterface>(
-          op)); // probably not worth asserting, but for now.
+      assert(isa<SymbolOpInterface>(op));
       ents.emplace_back(&op, &input);
     }
   }
@@ -377,10 +391,6 @@ static LogicalResult executeFirld(MLIRContext &context) {
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.has_value())
     outputFile.value()->keep();
-
-  // Leak modules
-  for (auto &input : inputs)
-    input.mod.release();
 
   return success();
 }
