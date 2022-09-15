@@ -198,19 +198,15 @@ static LogicalResult executeFirld(MLIRContext &context) {
   {
     inputs.resize_for_overwrite(inputFilenames.size());
     auto parserTimer = ts.nest("Parsing inputs");
-    auto loadFile = [&](size_t i) -> LogicalResult {
-      auto fileParseTimer = parserTimer.nest(inputFilenames[i]);
-      SourceMgr sourceMgr;
-      SourceMgrDiagnosticHandler handler(sourceMgr, &context);
+    auto loadFile = [&](auto &sourceMgr, size_t i) -> LogicalResult {
       StringRef name = inputFilenames[i];
+      auto fileParseTimer = parserTimer.nest(name);
       auto mod = parseSourceFile<ModuleOp>(name, sourceMgr, &context);
       if (!mod)
         return failure();
 
-      // TODO: diagnostics/messages
       auto *body = mod->getBody();
       if (!body || !llvm::hasSingleElement(*body)) {
-        // if (body) body->dump();
         if (body) {
           // sv.verbatim outside circuit :(
           for (auto &x : *body) {
@@ -228,9 +224,16 @@ static LogicalResult executeFirld(MLIRContext &context) {
 
       return success();
     };
+    auto handleLoad = [&](size_t i) {
+      SourceMgr sourceMgr;
+      SourceMgrDiagnosticHandler handler(sourceMgr, &context);
+      if (failed(loadFile(sourceMgr, i)))
+        return failure();
+      return success();
+    };
 
     if (failed(
-            failableParallelForEachN(&context, 0, inputs.size(), loadFile))) {
+            failableParallelForEachN(&context, 0, inputs.size(), handleLoad))) {
       llvm::errs() << "error reading inputs\n";
       return failure();
     }
