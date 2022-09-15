@@ -321,6 +321,12 @@ static LogicalResult executeFirld(MLIRContext &context) {
 
   llvm::errs() << "\n"; // help clang-format x.x
 
+  //===- Magic------------------------------------------------------------===//
+
+  for (auto &input: llvm::makeArrayRef(inputs).drop_front()) {
+    
+  }
+
   // (I) Split IR interface, either to be linked back or in a new dialect that
   // "include"s definitions.
 
