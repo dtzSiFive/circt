@@ -197,14 +197,14 @@ static LogicalResult executeFirld(MLIRContext &context) {
   SmallVector<FIRInputFile> inputs;
   SourceMgr mainMgr;
   SourceMgrDiagnosticHandler handler(mainMgr, &context);
+  auto numFiles = inputFilenames.size();
   {
-    struct SourceMod {
+    struct ParsedInput {
       StringRef name;
       OwningOpRef<ModuleOp> mod;
       SourceMgr mgr;
     };
-    SmallVector<SourceMod> srcs;
-    auto numFiles = inputFilenames.size();
+    SmallVector<ParsedInput> srcs;
     srcs.resize(numFiles);
     auto parserTimer = ts.nest("Parsing inputs");
     auto loadFile = [&](size_t i) -> LogicalResult {
@@ -241,7 +241,6 @@ static LogicalResult executeFirld(MLIRContext &context) {
         return body->front().emitError("expected circuit op");
       inputs.push_back({{std::move(src.mod), src.name}, circt});
     }
-
   }
 
   //===- Lower annotations (optional) -------------------------------------===//
