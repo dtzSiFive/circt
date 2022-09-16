@@ -181,13 +181,7 @@ static LogicalResult executeFirld(MLIRContext &context) {
   auto ts = tm.getRootScope();
 
   // Register our dialects.
-  // context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
-  //                    hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-  //                    sv::SVDialect>();
   context.loadDialect<firrtl::FIRRTLDialect, chirrtl::CHIRRTLDialect>();
-  // Needed even for parse-only IR
-  //context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
-  //                    sv::SVDialect>();
 
   // For now:
   // Input fir or MLIR files.
