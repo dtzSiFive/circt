@@ -28,6 +28,7 @@
 // * Indentation tracked from left not relative to margin (linewidth).
 //   (TODO)
 // * Indentation emitted lazily, avoid trailing whitespace.
+// * Group indentation styles: Visual and Block.
 //
 //
 // There are many pretty-printing implementations based on this paper,
@@ -194,7 +195,7 @@ void PrettyPrinter::print(FormattedToken f) {
       .Case([&](BreakToken *b) {
         // If nothing on print stack (no begin context),
         // wrap w/no offset and emit greedily.
-        PrintEntry outer{margin, PrintBreaks::Inconsistent};
+        PrintEntry outer{0, PrintBreaks::Inconsistent};
         auto &frame = printStack.empty() ? outer : printStack.back();
         bool fits =
             frame.breaks == PrintBreaks::Fits ||
@@ -212,8 +213,11 @@ void PrettyPrinter::print(FormattedToken f) {
               os << "┇";
           }
           os << "\n";
-          space = frame.offset - b->offset();
-          pendingIndentation += std::max<ssize_t>(ssize_t(margin) - space, 0);
+          assert(pendingIndentation < kInfinity);
+          assert(indent == frame.offset);
+          pendingIndentation = std::max<ssize_t>(ssize_t{indent} + b->offset(), 0);
+          assert(pendingIndentation < kInfinity);
+          space = std::max<ssize_t>(ssize_t{margin} - pendingIndentation, 0); // MIN_SPACE
         }
       })
       .Case([&](BeginToken *b) {
@@ -221,7 +225,10 @@ void PrettyPrinter::print(FormattedToken f) {
           auto breaks = b->breaks() == Breaks::Consistent
                             ? PrintBreaks::Consistent
                             : PrintBreaks::Inconsistent;
-          printStack.push_back({uint32_t(space - b->offset()), breaks});
+          if (b->style() == IndentStyle::Visual)
+            indent = std::max<ssize_t>(ssize_t{margin} - space, 0);
+          indent += b->offset();
+          printStack.push_back({indent, breaks});
         } else {
           printStack.push_back({0, PrintBreaks::Fits});
         }
@@ -229,8 +236,14 @@ void PrettyPrinter::print(FormattedToken f) {
       .Case([&](EndToken *) {
         assert(!printStack.empty() && "more ends than begins?");
         // Try to tolerate this when assertions are disabled.
-        if (!printStack.empty())
-          printStack.pop_back(); // breaks
+        if (printStack.empty())
+          return;
+        printStack.pop_back();
+        if (printStack.empty())
+          indent = 0; // default
+        else if (printStack.back().breaks != PrintBreaks::Fits) {
+          indent = printStack.back().offset;
+        }
       });
 }
 } // end namespace pretty

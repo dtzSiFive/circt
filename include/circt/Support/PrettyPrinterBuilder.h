@@ -29,7 +29,7 @@ class PPBuilder : protected PrettyPrinter::Listener {
   PrettyPrinter pp;
 
 public:
-  PPBuilder(llvm::raw_ostream &os, uint32_t margin) : pp(os, margin, this){};
+  PPBuilder(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0) : pp(os, margin, indent, this){};
 
   /// Add new token.
   template <typename T, typename... Args>
@@ -91,8 +91,8 @@ class PPBuilderStringSaver : public PPBuilder {
   llvm::StringSaver strings;
 
 public:
-  PPBuilderStringSaver(llvm::raw_ostream &os, uint32_t margin)
-      : PPBuilder(os, margin), strings(alloc){};
+  PPBuilderStringSaver(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0)
+      : PPBuilder(os, margin, indent), strings(alloc){};
 
   /// Add string, save in storage.
   void savedWord(StringRef str) { add<StringToken>(strings.save(str)); }
@@ -135,8 +135,8 @@ struct PPSaveString {
 
 class PPStream : public PPBuilderStringSaver {
 public:
-  PPStream(llvm::raw_ostream &os, uint32_t margin)
-      : PPBuilderStringSaver(os, margin) {}
+  PPStream(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0)
+      : PPBuilderStringSaver(os, margin, indent) {}
 
   /// Add a string literal (external storage).
   PPStream &operator<<(const char *s) {
@@ -199,7 +199,7 @@ public:
   }
 
   /// Stream support for user-created Token's.
-  PPStream &operator<<(Token &t) {
+  PPStream &operator<<(Token &&t) {
     addToken(t);
     return *this;
   }

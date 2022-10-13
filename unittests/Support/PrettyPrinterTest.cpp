@@ -376,6 +376,28 @@ test "quote\"me"
 )"""));
 }
 
+TEST(CIRCTSupportTests, IndentStyle) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  PPStream ps(os, 10);
+  out = "\n";
+  {
+    ps << BeginToken(2, Breaks::Inconsistent, IndentStyle::Block);
+    ps << "test";
+    ps  << PP::space << "test" << PP::space << "test";
+    ps  << PP::space << "test" << PP::space << "test";
+    ps  << PP::end;
+  }
+  ps << PP::newline << PP::eof;
+  EXPECT_EQ(out.str(), StringRef(R"""(
+test test
+  test
+  test
+  test
+)"""));
+}
+
 TEST(CIRCTSupportTests, Expr) {
   SmallString<128> out;
   raw_svector_ostream os(out);
