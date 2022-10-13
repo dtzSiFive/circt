@@ -28,7 +28,9 @@
 // * Indentation tracked from left not relative to margin (linewidth).
 //   (TODO)
 // * Indentation emitted lazily, avoid trailing whitespace.
-// * Group indentation styles: Visual and Block.
+// * Group indentation styles: Visual and Block, set on 'begin' tokens.
+//   "Visual" is the style in the paper, offset relative to current column.
+//   "Block" is relative to current base indentation.
 //
 //
 // There are many pretty-printing implementations based on this paper,
@@ -193,10 +195,7 @@ void PrettyPrinter::print(FormattedToken f) {
         os << s->text();
       })
       .Case([&](BreakToken *b) {
-        // If nothing on print stack (no begin context),
-        // wrap w/no offset and emit greedily.
-        PrintEntry outer{0, PrintBreaks::Inconsistent};
-        auto &frame = printStack.empty() ? outer : printStack.back();
+        auto &frame = getPrintFrame();
         bool fits =
             frame.breaks == PrintBreaks::Fits ||
             (frame.breaks == PrintBreaks::Inconsistent && f.size <= space);
@@ -213,10 +212,7 @@ void PrettyPrinter::print(FormattedToken f) {
               os << "┇";
           }
           os << "\n";
-          assert(pendingIndentation < kInfinity);
-          assert(indent == frame.offset);
           pendingIndentation = std::max<ssize_t>(ssize_t{indent} + b->offset(), 0);
-          assert(pendingIndentation < kInfinity);
           space = std::max<ssize_t>(ssize_t{margin} - pendingIndentation, 0); // MIN_SPACE
         }
       })
@@ -239,11 +235,9 @@ void PrettyPrinter::print(FormattedToken f) {
         if (printStack.empty())
           return;
         printStack.pop_back();
-        if (printStack.empty())
-          indent = 0; // default
-        else if (printStack.back().breaks != PrintBreaks::Fits) {
+        auto &frame = getPrintFrame();
+        if (frame.breaks != PrintBreaks::Fits)
           indent = printStack.back().offset;
-        }
       });
 }
 } // end namespace pretty

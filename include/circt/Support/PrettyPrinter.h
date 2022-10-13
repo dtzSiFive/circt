@@ -148,7 +148,7 @@ public:
 
   PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t indent = 0,
                 Listener *listener = nullptr)
-      : space(margin), indent(indent), margin(margin), os(os),
+      : space(margin), defaultFrame{indent, PrintBreaks::Inconsistent}, indent(indent), margin(margin), os(os),
         listener(listener) {
     assert(margin < kInfinity / 2);
   }
@@ -201,6 +201,11 @@ private:
   /// Clear token buffer, scanStack must be empty.
   void clear();
 
+  /// Get current printing frame.
+  auto &getPrintFrame() {
+    return printStack.empty() ? defaultFrame : printStack.back();
+  }
+
   /// Characters left on this line.
   int32_t space;
 
@@ -219,6 +224,9 @@ private:
   /// Stack of printing contexts (indentation + breaking behavior).
   std::vector<PrintEntry> printStack;
 
+  /// Printing context when stack is empty.
+  const PrintEntry defaultFrame;
+
   /// Current indentation level
   uint32_t indent = 0;
 
@@ -226,7 +234,7 @@ private:
   uint32_t pendingIndentation = 0;
 
   /// Target line width.
-  uint32_t margin;
+  const uint32_t margin;
 
   /// Output stream.
   llvm::raw_ostream &os;
