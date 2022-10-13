@@ -424,6 +424,55 @@ start open test
 )"""));
 }
 
+TEST(CIRCTSupportTests, FuncArgs) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  auto test = [&](auto margin, auto style) {
+    PPStream ps(os, margin);
+    out = "\n";
+    {
+      ps << "foo(";
+      ps << BeginToken(2, Breaks::Consistent, style);
+      if (style == IndentStyle::Block)
+        ps << PP::zerobreak;
+      ps << BeginToken(0);
+      auto args = {"a", "b", "c", "d", "e"};
+      llvm::interleave(args, [&](auto &arg) { ps << arg; },[&](){ ps << "," << PP::space; });
+      ps << PP::end;
+      if (style == IndentStyle::Block)
+        ps << BreakToken(0, -2);
+      ps << ");";
+      ps << PP::end;
+    }
+    ps << PP::newline << PP::eof;
+  };
+  test(10, IndentStyle::Block);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+foo(
+  a, b, c,
+  d, e
+);
+)"""));
+  test(15, IndentStyle::Block);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+foo(
+  a, b, c, d, e
+);
+)"""));
+  test(10, IndentStyle::Visual);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+foo(a, b,
+    c, d,
+    e);
+)"""));
+  test(15, IndentStyle::Visual);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+foo(a, b, c, d,
+    e);
+)"""));
+}
+
 TEST(CIRCTSupportTests, Expr) {
   SmallString<128> out;
   raw_svector_ostream os(out);
