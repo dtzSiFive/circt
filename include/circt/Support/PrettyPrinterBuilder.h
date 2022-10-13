@@ -63,22 +63,22 @@ public:
   void zerobreak() { add<BreakToken>(0); }
 
   /// Start a consistent group with specified offset.
-  void cbox(int32_t offset = 0) { add<BeginToken>(offset, Breaks::Consistent); }
+  void cbox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) { add<BeginToken>(offset, Breaks::Consistent, style); }
 
   /// Start an inconsistent group with specified offset.
-  void ibox(int32_t offset = 0) {
-    add<BeginToken>(offset, Breaks::Inconsistent);
+  void ibox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
+    add<BeginToken>(offset, Breaks::Inconsistent, style);
   }
 
   /// Open a cbox that closes when returned object goes out of scope.
-  [[nodiscard]] auto scopedCBox(int32_t offset = 0) {
-    cbox(offset);
+  [[nodiscard]] auto scopedCBox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
+    cbox(offset, style);
     return llvm::make_scope_exit([&]() { end(); });
   }
 
   /// Open an ibox that closes when returned object goes out of scope.
-  [[nodiscard]] auto scopedIBox(int32_t offset = 0) {
-    ibox(offset);
+  [[nodiscard]] auto scopedIBox(int32_t offset = 0, IndentStyle style = IndentStyle::Visual) {
+    ibox(offset, style);
     return llvm::make_scope_exit([&]() { end(); });
   }
 };
