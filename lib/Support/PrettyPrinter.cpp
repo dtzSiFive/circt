@@ -20,17 +20,16 @@
 //   Since scanStack references buffered tokens by index, we track an offset
 //   that we increase when dropping off the front.
 //   When the scan stack is cleared the buffer is reset, including this offset.
+// * Indentation tracked from left not relative to margin (linewidth).
+// * Indentation emitted lazily, avoid trailing whitespace.
+// * Group indentation styles: Visual and Block, set on 'begin' tokens.
+//   "Visual" is the style in the paper, offset relative to current column.
+//   "Block" is relative to current base indentation.
 // * Optionally, minimum amount of space is granted regardless of indentation.
 //   To avoid forcing expressions against the line limit, never try to print
 //   an expression in, say, 2 columns, as this is unlikely to produce good
 //   output.
 //   (TODO)
-// * Indentation tracked from left not relative to margin (linewidth).
-//   (TODO)
-// * Indentation emitted lazily, avoid trailing whitespace.
-// * Group indentation styles: Visual and Block, set on 'begin' tokens.
-//   "Visual" is the style in the paper, offset relative to current column.
-//   "Block" is relative to current base indentation.
 //
 //
 // There are many pretty-printing implementations based on this paper,
@@ -62,9 +61,6 @@
 
 namespace circt {
 namespace pretty {
-
-// TODO: parameter or not at all
-// auto constexpr MIN_SPACE = 20;
 
 auto constexpr debug = false;
 
@@ -213,7 +209,7 @@ void PrettyPrinter::print(FormattedToken f) {
           }
           os << "\n";
           pendingIndentation = std::max<ssize_t>(ssize_t{indent} + b->offset(), 0);
-          space = std::max<ssize_t>(ssize_t{margin} - pendingIndentation, 0); // MIN_SPACE
+          space = std::max<ssize_t>(ssize_t{margin} - pendingIndentation, 0);
         }
       })
       .Case([&](BeginToken *b) {
