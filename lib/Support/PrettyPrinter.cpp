@@ -28,7 +28,7 @@
 // * Indentation tracked from left not relative to margin (linewidth).
 //   (TODO)
 // * Indentation emitted lazily, avoid trailing whitespace.
-//   (TODO)
+//
 //
 // There are many pretty-printing implementations based on this paper,
 // and research literature is rich with functional formulations based originally
