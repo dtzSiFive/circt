@@ -380,21 +380,47 @@ TEST(CIRCTSupportTests, IndentStyle) {
   SmallString<128> out;
   raw_svector_ostream os(out);
 
-  PPStream ps(os, 10);
-  out = "\n";
-  {
-    ps << BeginToken(2, Breaks::Inconsistent, IndentStyle::Block);
-    ps << "test";
-    ps  << PP::space << "test" << PP::space << "test";
-    ps  << PP::space << "test" << PP::space << "test";
-    ps  << PP::end;
-  }
-  ps << PP::newline << PP::eof;
+  auto test = [&](auto margin, auto style) {
+    PPStream ps(os, margin);
+    out = "\n";
+    {
+      ps << "start" << PP::nbsp;
+      ps << BeginToken(2, Breaks::Inconsistent, style);
+      ps << "open";
+      ps << PP::space << "test" << PP::space << "test";
+      ps << PP::space << "test" << PP::space << "test";
+      ps << PP::end;
+    }
+    ps << PP::newline << PP::eof;
+  };
+  test(10, IndentStyle::Block);
   EXPECT_EQ(out.str(), StringRef(R"""(
-test test
+start open
   test
   test
   test
+  test
+)"""));
+  test(15, IndentStyle::Block);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+start open test
+  test test
+  test
+)"""));
+  test(10, IndentStyle::Visual);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+start open
+        test
+        test
+        test
+        test
+)"""));
+  test(15, IndentStyle::Visual);
+  EXPECT_EQ(out.str(), StringRef(R"""(
+start open test
+        test
+        test
+        test
 )"""));
 }
 
