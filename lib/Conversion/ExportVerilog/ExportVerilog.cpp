@@ -2807,7 +2807,9 @@ public:
         rearrangableStream(outStream), names(names),
         pp(/* os */ outStream, state.options.emittedLineLength,
            state.currentIndent),
-        ps(pp, saver){};
+        ps(pp, saver) {
+    pp.setListener(&saver);
+  };
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
