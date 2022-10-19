@@ -2883,7 +2883,9 @@ public:
         names(names),
         pp(os, state.options.emittedLineLength,
            state.currentIndent),
-        ps(pp, saver){};
+        ps(pp, saver) {
+    pp.setListener(&saver);
+  };
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
