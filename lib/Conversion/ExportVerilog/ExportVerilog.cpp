@@ -29,6 +29,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Path.h"
+#include "circt/Support/PrettyPrinterBuilder.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -52,10 +53,11 @@ using namespace hw;
 using namespace sv;
 using namespace ExportVerilog;
 
+using namespace pretty;
+
 #define DEBUG_TYPE "export-verilog"
 
 constexpr int INDENT_AMOUNT = 2;
-constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
 StringRef circtHeader = "circt_header.svh";
 StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
@@ -693,8 +695,8 @@ static IfOp findNestedElseIf(Block *elseBlock) {
 }
 
 /// Emit SystemVerilog attributes.
-static void emitSVAttributesImpl(llvm::raw_ostream &os,
-                                 sv::SVAttributesAttr svAttrs) {
+template <typename OS>
+static void emitSVAttributesImpl(OS &os, sv::SVAttributesAttr svAttrs) {
   auto body = svAttrs.getAttributes();
   auto emitAsComments = svAttrs.getEmitAsComments().getValue();
   os << (emitAsComments ? "/* " : "(* ");
@@ -897,8 +899,24 @@ public:
       os << "\t// " << locInfo;
     os << '\n';
   }
+  template <typename PPS>
+  void emitLocationInfoAndNewLine(PPS &ps,
+                                  const SmallPtrSet<Operation *, 8> &ops,
+                                  bool eof = true) {
+    auto locInfo =
+        getLocationInfoAsString(ops, state.options.locationInfoStyle);
+    if (eof) // flush before location, don't consider in layout.
+      ps << PP::eof;
+    if (!locInfo.empty())
+      ps << "\t// " << locInfo;
+    ps << PP::newline;
+  }
 
   void emitTextWithSubstitutions(StringRef string, Operation *op,
+                                 std::function<void(Value)> operandEmitter,
+                                 ArrayAttr symAttrs, ModuleNameManager &names);
+  template <typename PPS>
+  void emitTextWithSubstitutions(PPS &ps, StringRef string, Operation *op,
                                  std::function<void(Value)> operandEmitter,
                                  ArrayAttr symAttrs, ModuleNameManager &names);
 
@@ -907,6 +925,8 @@ public:
   /// whitespace after a line break.  Do nothing if the StringAttr is null or
   /// the value is empty.
   void emitComment(StringAttr comment);
+  template <typename PPS>
+  void emitComment(PPS &ps, StringAttr comment);
 
 private:
   void operator=(const EmitterBase &) = delete;
@@ -1017,6 +1037,116 @@ void EmitterBase::emitTextWithSubstitutions(
   os << string;
 }
 
+// TODO: Don't have two copies!
+template <typename PPS>
+void EmitterBase::emitTextWithSubstitutions(
+    PPS &ps, StringRef string, Operation *op,
+    std::function<void(Value)> operandEmitter, ArrayAttr symAttrs,
+    ModuleNameManager &names) {
+
+  // Perform operand substitions as we emit the line string.  We turn {{42}}
+  // into the value of operand 42.
+  auto namify = [&](Attribute sym, HWSymbolCache::Item item) {
+    // CAVEAT: These accesses can reach into other modules through inner name
+    // references, which are currently being processed. Do not add those remote
+    // operations to this module's `names`, which is reserved for things named
+    // *within* this module. Instead, you have to rely on those remote
+    // operations to have been named inside the global names table. If they
+    // haven't, take a look at name legalization first.
+    if (auto itemOp = item.getOp()) {
+      if (item.hasPort()) {
+        return getPortVerilogName(itemOp, item.getPort());
+      }
+      StringRef symOpName = getSymOpName(itemOp);
+      if (!symOpName.empty())
+        return symOpName;
+      emitError(itemOp, "cannot get name for symbol ") << sym;
+    } else {
+      emitError(op, "cannot get name for symbol ") << sym;
+    }
+    return StringRef("<INVALID>");
+  };
+
+  // Scan 'line' for a substitution, emitting any non-substitution prefix,
+  // then the mentioned operand, chopping the relevant text off 'line' and
+  // returning true.  This returns false if no substitution is found.
+  unsigned numSymOps = symAttrs.size();
+  auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
+    size_t start = 0;
+    while (1) {
+      next = string.find("{{", next);
+      if (next == StringRef::npos)
+        return false;
+
+      // Check to make sure we have a number followed by }}.  If not, we
+      // ignore the {{ sequence as something that could happen in Verilog.
+      next += 2;
+      start = next;
+      while (next < string.size() && isdigit(string[next]))
+        ++next;
+      // We need at least one digit.
+      if (start == next) {
+        next--;
+        continue;
+      }
+
+      // We must have a }} right after the digits.
+      if (!string.substr(next).startswith("}}"))
+        continue;
+
+      // We must be able to decode the integer into an unsigned.
+      unsigned operandNo = 0;
+      if (string.drop_front(start)
+              .take_front(next - start)
+              .getAsInteger(10, operandNo)) {
+        emitError(op, "operand substitution too large");
+        continue;
+      }
+      next += 2;
+
+      // Emit any text before the substitution.
+      auto before = string.take_front(start - 2);
+      if (!before.empty())
+        ps << PPExtString(before);
+
+      // operandNo can either refer to Operands or symOps.  symOps are
+      // numbered after the operands.
+      if (operandNo < op->getNumOperands())
+        // Emit the operand.
+        operandEmitter(op->getOperand(operandNo));
+      else if ((operandNo - op->getNumOperands()) < numSymOps) {
+        unsigned symOpNum = operandNo - op->getNumOperands();
+        auto sym = symAttrs[symOpNum];
+        StringRef symVerilogName;
+        if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
+          if (auto *symOp = state.symbolCache.getDefinition(fsym))
+            symVerilogName = namify(sym, symOp);
+        } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+          auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
+                                                            isym.getName());
+          symVerilogName = namify(sym, symOp);
+        }
+        if (!symVerilogName.empty())
+          ps << PPExtString(symVerilogName);
+      } else {
+        emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
+        continue;
+      }
+      // Forget about the part we emitted.
+      string = string.drop_front(next);
+      return true;
+    }
+  };
+
+  // Emit all the substitutions.
+  while (emitUntilSubstitution())
+    ;
+
+  // Emit any text after the last substitution.
+  if (!string.empty())
+    ps << PPExtString(string);
+}
+
 void EmitterBase::emitComment(StringAttr comment) {
   if (!comment)
     return;
@@ -1066,6 +1196,67 @@ void EmitterBase::emitComment(StringAttr comment) {
       // position.  Exit if nothing is left to emit.  Otherwise, update the
       // comment ref and continue;
       os << line.take_front(breakPos) << "\n";
+      breakPos = line.find_first_not_of(' ', breakPos);
+      // Base Case 2: nothing left except whitespace.
+      if (breakPos == StringRef::npos)
+        break;
+
+      line = line.drop_front(breakPos);
+    }
+  }
+}
+
+// TODO: Don't have two copies!
+template <typename PPS>
+void EmitterBase::emitComment(PPS &ps, StringAttr comment) {
+  if (!comment)
+    return;
+
+  // Set a line length for the comment.  Subtract off the leading comment and
+  // space ("// ") as well as the current indent level to simplify later
+  // arithmetic.  Ensure that this line length doesn't go below zero.
+  auto lineLength = state.options.emittedLineLength - state.currentIndent - 3;
+  if (lineLength > state.options.emittedLineLength)
+    lineLength = 0;
+
+  // Process the comment in line chunks extracted from manually specified line
+  // breaks.  This is done to preserve user-specified line breaking if used.
+  auto ref = comment.getValue();
+  StringRef line;
+  while (!ref.empty()) {
+    std::tie(line, ref) = ref.split("\n");
+    // Emit each comment line breaking it if it exceeds the emittedLineLength.
+    for (;;) {
+      indent();
+      ps << "// ";
+
+      // Base case 1: the entire comment fits on one line.
+      if (line.size() <= lineLength) {
+        ps << PPExtString(line) << PP::newline;
+        break;
+      }
+
+      // The comment does NOT fit on one line.  Use a simple algorithm to find
+      // a position to break the line:
+      //   1) Search backwards for whitespace and break there if you find it.
+      //   2) If no whitespace exists in (1), search forward for whitespace
+      //      and break there.
+      // This algorithm violates the emittedLineLength if (2) ever occurrs,
+      // but it's dead simple.
+      auto breakPos = line.rfind(' ', lineLength);
+      // No whitespace exists looking backwards.
+      if (breakPos == StringRef::npos) {
+        breakPos = line.find(' ', lineLength);
+        // No whitespace exists looking forward (you hit the end of the
+        // string).
+        if (breakPos == StringRef::npos)
+          breakPos = line.size();
+      }
+
+      // Emit up to the break position.  Trim any whitespace after the break
+      // position.  Exit if nothing is left to emit.  Otherwise, update the
+      // comment ref and continue;
+      ps << PPExtString(line.take_front(breakPos)) << PP::newline;
       breakPos = line.find_first_not_of(' ', breakPos);
       // Base Case 2: nothing left except whitespace.
       if (breakPos == StringRef::npos)
@@ -1649,12 +1840,26 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+/// Fake raw_ostream useful for catching code paths using streams they
+/// shouldn't.
+struct trapping_ostream : public raw_ostream {
+  trapping_ostream() { SetUnbuffered(); }
+  void write_impl(const char *ptr, size_t size) override {
+    assert(0 && "Incomplete porting, don't use this");
+    abort();
+  }
+  uint64_t current_pos() const override {
+    assert(0 && "Incomplete porting, don't use this");
+    abort();
+  }
+};
+
 /// This builds a recursively nested expression from an SSA use-def graph.  This
 /// uses a post-order walk, but it needs to obey precedence and signedness
-/// constraints that depend on the behavior of the child nodes.  To handle this,
-/// we emit the characters to a SmallVector which allows us to emit a bunch of
-/// stuff, then pre-insert parentheses and other things if we find out that it
-/// was needed later.
+/// constraints that depend on the behavior of the child nodes.
+/// To handle this, we must buffer all output so we can insert parentheses
+/// and other things if we find out that it was needed later.
 class ExprEmitter : public EmitterBase,
                     public TypeOpVisitor<ExprEmitter, SubExprInfo>,
                     public CombinationalVisitor<ExprEmitter, SubExprInfo>,
@@ -1662,11 +1867,12 @@ class ExprEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  ExprEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
+  ExprEmitter(ModuleEmitter &emitter, PrettyPrinter &pp,
+              PPBuilderStringSaver &saver,
               SmallPtrSet<Operation *, 8> &emittedExprs,
               ModuleNameManager &names)
       : EmitterBase(emitter.state, os), emitter(emitter),
-        emittedExprs(emittedExprs), outBuffer(outBuffer), os(outBuffer),
+        emittedExprs(emittedExprs), pp(pp), buffer(tokens), ps(buffer, saver),
         names(names) {}
 
   /// Emit the specified value as an expression.  If this is an inline-emitted
@@ -1674,14 +1880,13 @@ public:
   /// already computed name.
   ///
   void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
-    // Emit the expression.
+    assert(tokens.empty());
+    ps << PP::ibox0; // TODO: revisit
     emitSubExpr(exp, parenthesizeIfLooserThan,
                 /*signRequirement*/ NoRequirement,
                 /*isSelfDeterminedUnsignedValue*/ false);
-
-    // Emitted expression might break the line length constraint so align it
-    // here.
-    formatOutBuffer();
+    ps << PP::end;
+    buffer.flush(pp);
   }
 
 private:
@@ -1700,8 +1905,6 @@ private:
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           SubExprSignRequirement signReq = NoRequirement,
                           bool isSelfDeterminedUnsignedValue = false);
-
-  void formatOutBuffer();
 
   /// Emit SystemVerilog attributes attached to the expression op as dialect
   /// attributes.
@@ -1747,6 +1950,41 @@ private:
 
   SubExprInfo emitUnary(Operation *op, const char *syntax,
                         bool resultAlwaysUnsigned = false);
+
+  /// TODO: rework this!
+  void emitSubExprIBox2(
+      Value v, VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence) {
+    auto ib = ps.scopedIBox(2);
+    emitSubExpr(v, parenthesizeIfLooserThan);
+  }
+  template <typename EachFn>
+  void interleaveComma(ValueRange ops, EachFn eachFn) {
+    llvm::interleave(ops, eachFn, [&]() { ps << "," << PP::space; });
+  }
+  void interleaveComma(ValueRange ops) {
+    return interleaveComma(ops, [&](Value v) { emitSubExprIBox2(v); });
+  }
+  template <typename OpenFunc, typename CloseFunc, typename EachFunc>
+  void emitBracedList(ValueRange ops, OpenFunc openFn, EachFunc eachFn,
+                      CloseFunc closeFn) {
+    ps << PP::cbox2;
+    openFn();
+    ps << PP::zerobreak;
+    // ps << BeginToken(0, Breaks::Inconsistent, IndentStyle::Block);
+    interleaveComma(ops, eachFn);
+    // ps << PP::end;
+    ps << BreakToken(0, -2) << PP::end;
+    closeFn();
+  }
+  template <typename OpenFunc, typename CloseFunc>
+  void emitBracedList(ValueRange ops, OpenFunc openFn, CloseFunc closeFn) {
+    return emitBracedList(
+        ops, openFn, [&](Value v) { emitSubExprIBox2(v); }, closeFn);
+  }
+  void emitBracedList(ValueRange ops) {
+    return emitBracedList(
+        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+  }
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
@@ -1869,8 +2107,18 @@ private:
 
   /// If any subexpressions would result in too large of a line, report it
   /// back to the caller in this vector.
-  SmallVectorImpl<char> &outBuffer;
-  llvm::raw_svector_ostream os;
+  trapping_ostream os;
+
+  /// Printer from parent, not for emission until end.
+  PrettyPrinter &pp;
+
+  /// Tokens buffered for inserting casts/parens after emitting children.
+  SmallVector<Token> tokens;
+  /// Stores tokens until told to flush.  Uses provided buffer (tokens).
+  BufferingPP buffer;
+  /// Stream to emit expressions into, will add to buffer.
+  PPStream<BufferingPP> ps;
+
   // Track legalized names.
   ModuleNameManager &names;
 };
@@ -1882,12 +2130,25 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // It's tempting to wrap expressions in groups, but that can cause bad
+  // wrapping as-is:
+  // add(a, add(b, add(c, add(d, e))))
+  //   ->
+  // group(a + (group(b + group(c + group(d + e)))))
+  // Which will break after 'a +' first.
+  // TODO: Build tree capturing precedence/fixity at same level, group those!
+  // Maybe like: https://www.tweag.io/blog/2022-02-10-ormolu-and-operators/ .
+  // For now, only group expressions within parens + braces.
+  // auto ib = ps.scopedIBox(0);
   if (emitBinaryFlags & EB_ForceResultSigned)
-    os << "$signed(";
+    ps << "$signed(" << PP::ibox0;
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
   auto lhsInfo = emitSubExpr(op->getOperand(0), prec, operandSignReq);
-  os << ' ' << syntax << ' ';
+  // XXX: HACK: for comparisons, don't break on either side.
+  auto lhsSpace = prec == VerilogPrecedence::Comparison ? PP::nbsp : PP::space;
+  // Use non-breaking space between op and RHS so breaking is consistent.
+  ps << lhsSpace << syntax << PP::nbsp; // PP::space;
 
   // Right associative operators are already generally variadic, we need to
   // handle things like: (a<4> == b<4>) == (c<3> == d<3>).  When processing the
@@ -1917,7 +2178,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     signedness = IsSigned;
 
   if (emitBinaryFlags & EB_ForceResultSigned) {
-    os << ')';
+    ps << PP::end << ")";
     signedness = IsSigned;
     prec = Selection;
   }
@@ -1930,7 +2191,7 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << syntax;
+  ps << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
   // For reduction operators "&" and "|", make precedence lowest to avoid
   // emitting an expression like `a & &b`, which is syntactically valid but some
@@ -1947,51 +2208,8 @@ void ExprEmitter::emitSVAttributes(Operation *op) {
   if (!svAttrs)
     return;
 
-  os << ' ';
-  emitSVAttributesImpl(os, svAttrs);
-}
-
-/// This function split the output buffer into multiple lines if the emitted
-/// length is larger than the constraint.
-void ExprEmitter::formatOutBuffer() {
-  // If the output already satisfies the constraint, skip here.
-  if (outBuffer.size() <= state.options.emittedLineLength)
-    return;
-
-  SmallVector<char> tmpOutBuffer;
-  llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
-  auto it = outBuffer.begin();
-  unsigned currentIndex = 0;
-
-  while (it != outBuffer.end()) {
-    // Split by a white space.
-    auto next = std::find(it, outBuffer.end(), ' ');
-    unsigned tokenLength = std::distance(it, next);
-
-    if (!tmpOutBuffer.empty() &&
-        currentIndex + tokenLength > state.options.emittedLineLength) {
-      // It breaks the line constraint, so insert a newline and indent.
-      tmpOs << '\n';
-      tmpOs.indent(state.currentIndent *
-                   SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING);
-      currentIndex = tokenLength;
-      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
-    } else {
-      currentIndex += tokenLength;
-      // If `tmpOutBuffer` is not empty, there exists a token before the
-      // current token so insert a white space.
-      if (!tmpOutBuffer.empty()) {
-        currentIndex += 1;
-        tmpOs << ' ';
-      }
-      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
-    }
-
-    if (next == outBuffer.end())
-      break;
-    it = next + 1;
-  }
-  outBuffer = std::move(tmpOutBuffer);
+  ps << PP::nbsp; // TODO: breakable?
+  emitSVAttributesImpl(ps, svAttrs);
 }
 
 /// If the specified extension is a zero extended version of another value,
@@ -2032,15 +2250,18 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     // All wires are declared as unsigned, so if the client needed it signed,
     // emit a conversion.
     if (signRequirement == RequireSigned) {
-      os << "$signed(" << names.getName(exp) << ')';
+      ps << "$signed(" << PPExtString(names.getName(exp)) << ")";
       return {Symbol, IsSigned};
     }
 
-    os << names.getName(exp);
+    ps << PPExtString(names.getName(exp));
     return {Symbol, IsUnsigned};
   }
 
-  unsigned subExprStartIndex = outBuffer.size();
+  // Also tempting, also not suitable:
+  // auto ib = ps.scopedIBox();
+
+  unsigned subExprStartIndex = tokens.size();
 
   // Inform the visit method about the preferred sign we want from the result.
   // It may choose to ignore this, but some emitters can change behavior based
@@ -2051,7 +2272,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   if (state.options.explicitBitcast && isa<AddOp, MulOp, SubOp>(op))
     if (auto inType =
             (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
-      os << inType.getWidth() << "'(";
+      ps.addAsString(inType.getWidth());
+      ps << "'(" << PP::ibox0;
       bitCastAdded = true;
     }
   // Okay, this is an expression we should emit inline.  Do this through our
@@ -2060,32 +2282,33 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
   // Check cases where we have to insert things before the expression now that
   // we know things about it.
-  auto addPrefix = [&](StringRef prefix) {
-    outBuffer.insert(outBuffer.begin() + subExprStartIndex, prefix.begin(),
-                     prefix.end());
+  auto addPrefix = [&](StringToken &&t) {
+    // insert {Prefix, ibox0}.
+    tokens.insert(tokens.begin() + subExprStartIndex, BeginToken(0));
+    tokens.insert(tokens.begin() + subExprStartIndex, t);
   };
   if (signRequirement == RequireSigned && expInfo.signedness == IsUnsigned) {
-    addPrefix("$signed(");
-    os << ')';
+    addPrefix(StringToken("$signed("));
+    ps << PP::end << ")";
     expInfo.signedness = IsSigned;
     expInfo.precedence = Selection;
   } else if (signRequirement == RequireUnsigned &&
              expInfo.signedness == IsSigned) {
-    addPrefix("$unsigned(");
-    os << ')';
+    addPrefix(StringToken("$unsigned("));
+    ps << PP::end << ")";
     expInfo.signedness = IsUnsigned;
     expInfo.precedence = Selection;
   } else if (expInfo.precedence > parenthesizeIfLooserThan) {
     // If this subexpression would bind looser than the expression it is bound
     // into, then we need to parenthesize it.  Insert the parentheses
     // retroactively.
-    addPrefix("(");
-    os << ')';
+    addPrefix(StringToken("("));
+    ps << PP::end << ")";
     // Reset the precedence to the () level.
     expInfo.precedence = Selection;
   }
   if (bitCastAdded) {
-    os << ')';
+    ps << PP::end << ")";
   }
 
   // Remember that we emitted this.
@@ -2094,30 +2317,27 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 }
 
 SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
-  os << '{' << op.getMultiple() << '{';
+  auto openFn = [&]() {
+    ps << "{";
+    ps.addAsString(op.getMultiple());
+    ps << "{";
+  };
+  auto closeFn = [&]() { ps << "}}"; };
 
   // If the subexpression is an inline concat, we can emit it as part of the
   // replicate.
   if (auto concatOp = op.getOperand().getDefiningOp<ConcatOp>()) {
     if (op.getOperand().hasOneUse()) {
-      llvm::interleaveComma(concatOp.getOperands(), os,
-                            [&](Value v) { emitSubExpr(v, LowestPrecedence); });
-      os << "}}";
+      emitBracedList(concatOp.getOperands(), openFn, closeFn);
       return {Symbol, IsUnsigned};
     }
   }
-
-  emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << "}}";
+  emitBracedList(op.getOperand(), openFn, closeFn);
   return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
-  os << '{';
-  llvm::interleaveComma(op.getOperands(), os,
-                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
-
-  os << '}';
+  emitBracedList(op.getOperands());
   return {Symbol, IsUnsigned};
 }
 
@@ -2127,9 +2347,10 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
   // know what type this value is being casted to.
   Type toType = op.getType();
   if (!haveMatchingDims(toType, op.getInput().getType(), op.getLoc())) {
-    os << "/*cast(bit";
-    emitter.emitTypeDims(toType, op.getLoc(), os);
-    os << ")*/";
+    ps << "/*cast(bit";
+    ps.invokeWithStringOS(
+        [&](auto &os) { emitter.emitTypeDims(toType, op.getLoc(), os); });
+    ps << ")*/";
   }
   return emitSubExpr(op.getInput(), LowestPrecedence);
 }
@@ -2184,10 +2405,13 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
       op.getInput().getType().getIntOrFloatBitWidth() == hiBit + 1)
     return x;
 
-  os << '[' << hiBit;
-  if (hiBit != loBit) // Emit x[4] instead of x[4:4].
-    os << ':' << loBit;
-  os << ']';
+  ps << "[";
+  ps.addAsString(hiBit);
+  if (hiBit != loBit) { // Emit x[4] instead of x[4:4].
+    ps << ":";
+    ps.addAsString(loBit);
+  }
+  ps << "]";
   return {Unary, IsUnsigned};
 }
 
@@ -2196,7 +2420,8 @@ SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto decl = op.getReferencedDecl(state.symbolCache);
-  os << names.getName(op.getIface()) << '.' << getSymOpName(decl);
+  ps << PPExtString(names.getName(op.getIface())) << "."
+     << PPExtString(getSymOpName(decl));
   return {Selection, IsUnsigned};
 }
 
@@ -2206,7 +2431,8 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
 
   auto decl = op.getReferencedDecl(state.symbolCache);
 
-  os << names.getName(op.getIface()) << '.' << getSymOpName(decl);
+  ps << PPExtString(names.getName(op.getIface())) << "."
+     << PPExtString(getSymOpName(decl));
   return {Selection, IsUnsigned};
 }
 
@@ -2215,10 +2441,10 @@ SubExprInfo ExprEmitter::visitSV(XMROp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   if (op.getIsRooted())
-    os << "$root.";
+    ps << "$root.";
   for (auto s : op.getPath())
-    os << s.cast<StringAttr>().getValue() << '.';
-  os << op.getTerminal();
+    ps << PPExtString(s.cast<StringAttr>().getValue()) << ".";
+  ps << PPExtString(op.getTerminal());
   return {Selection, IsUnsigned};
 }
 
@@ -2227,7 +2453,7 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   emitTextWithSubstitutions(
-      op->getAttrOfType<StringAttr>("format_string").getValue(), op,
+      ps, op->getAttrOfType<StringAttr>("format_string").getValue(), op,
       [&](Value operand) { emitSubExpr(operand, LowestPrecedence); }, symbols,
       names);
 
@@ -2238,7 +2464,7 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << "`" << op.getIdent().getName();
+  ps << "`" << PPExtString(op.getIdent().getName());
   return {LowestPrecedence, IsUnsigned};
 }
 
@@ -2246,7 +2472,7 @@ SubExprInfo ExprEmitter::visitSV(MacroRefExprSEOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << "`" << op.getIdent().getName();
+  ps << "`" << PPExtString(op.getIdent().getName());
   return {LowestPrecedence, IsUnsigned};
 }
 
@@ -2254,7 +2480,8 @@ SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << op.getWidth() << "'bx";
+  ps.addAsString(op.getWidth());
+  ps << "'bx";
   return {Unary, IsUnsigned};
 }
 
@@ -2262,7 +2489,8 @@ SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << op.getWidth() << "'bz";
+  ps.addAsString(op.getWidth());
+  ps << "'bz";
   return {Unary, IsUnsigned};
 }
 
@@ -2276,16 +2504,18 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   // it as a negated positive number.
   if (signPreference == RequireSigned && value.isNegative() &&
       !value.isMinSignedValue()) {
-    os << '-';
+    ps << "-";
     isNegated = true;
   }
 
-  os << op.getType().cast<IntegerType>().getWidth() << '\'';
+  ps.addAsString(op.getType().cast<IntegerType>().getWidth());
+  ps << "'";
 
   // Emit this as a signed constant if the caller would prefer that.
   if (signPreference == RequireSigned)
-    os << 's';
-  os << 'h';
+    ps << "sh";
+  else
+    ps << "h";
 
   // Print negated if required.
   SmallString<32> valueStr;
@@ -2294,7 +2524,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   } else {
     value.toStringUnsigned(valueStr, 16);
   }
-  os << valueStr;
+  ps << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
 }
 
@@ -2302,8 +2532,10 @@ SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  return emitter.printParamValue(op.getValue(), os, [&]() {
-    return op->emitOpError("invalid parameter use");
+  return ps.invokeWithStringOS([&](auto &os) {
+    return emitter.printParamValue(op.getValue(), os, [&]() {
+      return op->emitOpError("invalid parameter use");
+    });
   });
 }
 
@@ -2316,27 +2548,29 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.getInput(), Selection);
 
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
-  os << '[';
+  ps << "[";
   emitSubExpr(op.getLowIndex(), LowestPrecedence);
-  os << " +: " << dstWidth << ']';
+  ps << " +: ";
+  ps.addAsString(dstWidth);
+  ps << "]";
   return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.getInput(), Selection);
-  os << '[';
+  ps << "[";
   if (isZeroBitType(op.getIndex().getType())) {
     // Due to the singleton memory, [1'b0] will always be syntactically valid
     // as an indexing into the provided array.
     // Emit the index expression as a comment for tracability (all other i0
     // values referenced within the index expression will similarly be commented
     // out).
-    os << "/*Zero width: ";
+    ps << "/*Zero width: ";
     emitSubExpr(op.getIndex(), LowestPrecedence);
-    os << "*/ 1\'b0";
+    ps << "*/ 1\'b0";
   } else
     emitSubExpr(op.getIndex(), LowestPrecedence);
-  os << ']';
+  ps << "]";
   emitSVAttributes(op);
   return {Selection, IsUnsigned};
 }
@@ -2346,19 +2580,22 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << '{';
   if (op.isUniform()) {
-    os << op.getInputs().size() << "{";
+    ps << "{";
+    ps.addAsString(op.getInputs().size());
+    ps << "{";
     emitSubExpr(op.getUniformElement(), LowestPrecedence);
-    os << "}";
+    ps << "}}";
   } else {
-    llvm::interleaveComma(op.getInputs(), os, [&](Value operand) {
-      os << "{";
-      emitSubExpr(operand, LowestPrecedence);
-      os << "}";
-    });
+    emitBracedList(
+        op.getInputs(), [&]() { ps << "{"; },
+        [&](Value v) {
+          ps << "{" << PP::ibox2;
+          emitSubExpr(v, LowestPrecedence);
+          ps << PP::end << "}";
+        },
+        [&]() { ps << "}"; });
   }
-  os << '}';
   return {Unary, IsUnsigned};
 }
 
@@ -2366,10 +2603,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << '{';
-  llvm::interleaveComma(op.getOperands(), os,
-                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
-  os << '}';
+  emitBracedList(op.getOperands());
   return {Unary, IsUnsigned};
 }
 
@@ -2378,9 +2612,9 @@ SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto arrayPrec = emitSubExpr(op.getInput(), Selection);
-  os << '[';
+  ps << "[";
   emitSubExpr(op.getIndex(), LowestPrecedence);
-  os << ']';
+  ps << "]";
   return {Selection, arrayPrec.signedness};
 }
 
@@ -2389,13 +2623,14 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto prec = emitSubExpr(op.getInput(), Selection);
-  os << '[';
+  ps << "[";
   emitSubExpr(op.getBase(), LowestPrecedence);
   if (op.getDecrement())
-    os << " -: ";
+    ps << " -: ";
   else
-    os << " +: ";
-  os << op.getWidth() << ']';
+    ps << " +: ";
+  ps.addAsString(op.getWidth());
+  ps << "]";
   return {Selection, prec.signedness};
 }
 
@@ -2404,14 +2639,14 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto info = emitSubExpr(op.getInput(), LowestPrecedence);
-  os << '[';
+  ps << "[";
   emitSubExpr(op.getBase(), LowestPrecedence);
   if (op.getDecrement())
-    os << " -: ";
+    ps << " -: ";
   else
-    os << " +: ";
-  os << op.getWidth();
-  os << ']';
+    ps << " +: ";
+  ps.addAsString(op.getWidth());
+  ps << "]";
   return info;
 }
 
@@ -2420,7 +2655,8 @@ SubExprInfo ExprEmitter::visitSV(StructFieldInOutOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   auto prec = emitSubExpr(op.getInput(), Selection);
-  os << '.' << emitter.getVerilogStructFieldName(op.getFieldAttr());
+  ps << "."
+     << PPExtString(emitter.getVerilogStructFieldName(op.getFieldAttr()));
   return {Selection, prec.signedness};
 }
 
@@ -2428,9 +2664,9 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << "$sampled(";
+  ps << "$sampled(";
   auto info = emitSubExpr(op.getExpression(), LowestPrecedence);
-  os << ")";
+  ps << ")";
   return info;
 }
 
@@ -2439,12 +2675,16 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // The ?: operator is right associative.
+  auto box = ps.scopedIBox(2);
   emitSubExpr(op.getCond(), VerilogPrecedence(Conditional - 1));
-  os << " ? ";
+  ps << PP::nbsp << PP::cbox0;
+  ps << "? " << PP::ibox0;
   auto lhsInfo =
       emitSubExpr(op.getTrueValue(), VerilogPrecedence(Conditional - 1));
-  os << " : ";
+  ps << PP::end;
+  ps << PP::space << ": " << PP::ibox0;
   auto rhsInfo = emitSubExpr(op.getFalseValue(), Conditional);
+  ps << PP::end << PP::end;
 
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
@@ -2458,14 +2698,16 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   StructType stype = op.getType();
-  os << "'{";
+  // TODO: emitBracedList or thereabouts-- break inbetween commas at least!
+  ps << "'{";
   size_t i = 0;
   llvm::interleaveComma(
-      stype.getElements(), os, [&](const StructType::FieldInfo &field) {
-        os << emitter.getVerilogStructFieldName(field.name) << ": ";
+      stype.getElements(), ps, [&](const StructType::FieldInfo &field) {
+        ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
+           << ": ";
         emitSubExpr(op.getOperand(i++), Selection);
       });
-  os << '}';
+  ps << "}";
   return {Unary, IsUnsigned};
 }
 
@@ -2474,7 +2716,8 @@ SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   emitSubExpr(op.getInput(), Selection);
-  os << '.' << emitter.getVerilogStructFieldName(op.getFieldAttr());
+  ps << "."
+     << PPExtString(emitter.getVerilogStructFieldName(op.getFieldAttr()));
   return {Selection, IsUnsigned};
 }
 
@@ -2483,29 +2726,32 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   StructType stype = op.getType().cast<StructType>();
-  os << "'{";
+  // TODO: emitBracedList or thereabouts-- break inbetween commas at least!
+  ps << "'{";
   llvm::interleaveComma(
-      stype.getElements(), os, [&](const StructType::FieldInfo &field) {
-        os << emitter.getVerilogStructFieldName(field.name) << ": ";
+      stype.getElements(), ps, [&](const StructType::FieldInfo &field) {
+        ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
+           << ": ";
         if (field.name == op.getField()) {
           emitSubExpr(op.getNewValue(), Selection);
         } else {
           emitSubExpr(op.getInput(), Selection);
-          os << '.' << field.name.getValue();
+          ps << "." << PPExtString(field.name.getValue());
         }
       });
-  os << '}';
+  ps << "}";
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
-  os << emitter.fieldNameResolver.getEnumFieldName(op.getField());
+  ps << PPExtString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   emitOpError(op, "cannot emit this expression to Verilog");
-  os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
+  ps << "<<unsupported expr: " << PPExtString(op->getName().getStringRef())
+     << ">>";
   return {Symbol, IsUnsigned};
 }
 
@@ -2633,13 +2879,19 @@ public:
   /// of any emitted expressions in the specified set.
   StmtEmitter(ModuleEmitter &emitter, llvm::raw_ostream &os,
               ModuleNameManager &names)
-      : EmitterBase(emitter.state, os), emitter(emitter), names(names) {}
+      : EmitterBase(emitter.state, os), emitter(emitter),
+        names(names),
+        pp(os, state.options.emittedLineLength,
+           state.currentIndent),
+        ps(pp, saver){};
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
 
   /// Emit a declaration.
   LogicalResult emitDeclaration(Operation *op);
+
+  ~StmtEmitter() { ps << PP::eof; }
 
 private:
   void collectNamesAndCalculateDeclarationWidths(Block &block);
@@ -2664,6 +2916,9 @@ private:
   LogicalResult visitSV(RegOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LogicOp op) { return emitDeclaration(op); }
   LogicalResult visitSV(LocalParamOp op) { return emitDeclaration(op); }
+  template <typename Op>
+  LogicalResult emitAssignLike(Op op, PPExtString syntax,
+                               Optional<PPExtString> wordBeforeLHS = None);
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
@@ -2692,13 +2947,13 @@ private:
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(VerbatimOp op);
 
-  LogicalResult emitSimulationControlTask(Operation *op, StringRef taskName,
+  LogicalResult emitSimulationControlTask(Operation *op, PPExtString taskName,
                                           Optional<unsigned> verbosity);
   LogicalResult visitSV(StopOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(ExitOp op);
 
-  LogicalResult emitSeverityMessageTask(Operation *op, StringRef taskName,
+  LogicalResult emitSeverityMessageTask(Operation *op, PPExtString taskName,
                                         Optional<unsigned> verbosity,
                                         StringAttr message,
                                         ValueRange operands);
@@ -2739,8 +2994,20 @@ public:
   ModuleEmitter &emitter;
 
 private:
+  // Enable this to catch emission not using PP:
+  // trapping_ostream os;
+
   /// Track the legalized names.
   ModuleNameManager &names;
+
+  /// Pretty printing:
+
+  /// String storage.
+  PPBuilderStringSaver saver;
+  /// Pretty printer.
+  PrettyPrinter pp;
+  /// Stream helper (pp, saver).
+  PPStream<> ps;
 
   /// These keep track of the maximum length of name width and type width in the
   /// current statement scope.
@@ -2757,10 +3024,8 @@ private:
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
-  SmallVector<char, 128> exprBuffer;
-  ExprEmitter(emitter, exprBuffer, emittedExprs, names)
+  ExprEmitter(emitter, pp, saver, emittedExprs, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
-  os.write(exprBuffer.data(), exprBuffer.size());
 }
 
 /// Emit SystemVerilog attributes attached to the statement op as dialect
@@ -2771,9 +3036,30 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
   if (!svAttrs)
     return;
 
-  indent();
-  emitSVAttributesImpl(os, svAttrs);
-  os << '\n';
+  emitSVAttributesImpl(ps, svAttrs);
+  ps << PP::newline;
+}
+
+template <typename Op>
+LogicalResult StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
+                                          Optional<PPExtString> wordBeforeLHS) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  // XXX: EMIT_STATEMENT(...) -- add semicolon, location info.
+  ps << PP::ibox2;
+  if (wordBeforeLHS) {
+    ps << *wordBeforeLHS << PP::space;
+  }
+  emitExpression(op.getDest(), ops);
+  ps << PP::space << syntax << PP::space;
+  ps << PP::ibox0;
+  emitExpression(op.getSrc(), ops);
+  ps << ";" << PP::end << PP::end;
+
+  emitLocationInfoAndNewLine(ps, ops);
+
+  return success();
 }
 
 LogicalResult StmtEmitter::visitSV(AssignOp op) {
@@ -2788,16 +3074,7 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
 
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-
-  indent() << "assign ";
-  emitExpression(op.getDest(), ops);
-  os << " = ";
-  emitExpression(op.getSrc(), ops, LowestPrecedence);
-  os << ';';
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitAssignLike(op, PPExtString("="), PPExtString("assign"));
 }
 
 LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
@@ -2808,61 +3085,35 @@ LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
   // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
 
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-
-  indent();
-  emitExpression(op.getDest(), ops);
-  os << " = ";
-  emitExpression(op.getSrc(), ops);
-  os << ';';
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitAssignLike(op, PPExtString("="));
 }
 
 LogicalResult StmtEmitter::visitSV(PAssignOp op) {
   // Emit SV attributes. See Spec 12.3.
   emitSVAttributes(op);
 
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-
-  indent();
-  emitExpression(op.getDest(), ops);
-  os << " <= ";
-  emitExpression(op.getSrc(), ops);
-  os << ';';
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitAssignLike(op, PPExtString("<="));
 }
 
 LogicalResult StmtEmitter::visitSV(ForceOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-
-  indent() << "force ";
-  emitExpression(op.getDest(), ops);
-  os << " = ";
-  emitExpression(op.getSrc(), ops);
-  os << ';';
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitAssignLike(op, PPExtString("="), PPExtString("force"));
 }
 
 LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // XXX: EMIT_STATEMENT
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "release ";
+  ps << "release" << PP::space;
   emitExpression(op.getDest(), ops);
-  os << ';';
-  emitLocationInfoAndNewLine(ops);
+  ps << ";";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
@@ -2870,14 +3121,16 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // XXX: EMIT_STATEMENT
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "alias ";
+  ps << "alias" << PP::space << PP::cbox0;
   llvm::interleave(
-      op.getOperands(), os, [&](Value v) { emitExpression(v, ops); }, " = ");
-  os << ';';
-  emitLocationInfoAndNewLine(ops);
+      op.getOperands(), [&](Value v) { emitExpression(v, ops); },
+      [&]() { ps << PP::nbsp << "=" << PP::space; });
+  ps << ";" << PP::end;
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
@@ -2885,10 +3138,11 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // XXX: EMIT_STATEMENT
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint")) {
     prefix = "// ";
-    indent() << "// This interface is elsewhere emitted as a bind statement.\n";
+    ps << "// This interface is elsewhere emitted as a bind statement.\n";
   }
 
   SmallPtrSet<Operation *, 8> ops;
@@ -2899,9 +3153,13 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
                         "point to an interface");
 
   auto verilogName = getSymOpName(interfaceOp);
-  indent() << prefix << verilogName << " " << op.getName() << "();";
+  if (!prefix.empty())
+    ps << PPExtString(prefix);
+  ps << PPExtString(verilogName)
+     << PP::nbsp /* don't break, may be comment line */
+     << PPExtString(op.getName()) << "();";
 
-  emitLocationInfoAndNewLine(ops);
+  emitLocationInfoAndNewLine(ps, ops);
 
   return success();
 }
@@ -2926,13 +3184,21 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 
     ops.clear();
     ops.insert(op);
-    indent();
+
+    // XXX: EMIT_STATEMENT
+    ps << PP::ibox2;
+    // TODO: What if RHS expr wraps? :(
     if (isZeroBitType(port.type))
-      os << "// Zero width: ";
-    os << "assign " << getPortVerilogName(parent, port) << " = ";
-    emitExpression(operand, ops, LowestPrecedence);
-    os << ';';
-    emitLocationInfoAndNewLine(ops);
+      ps << "// Zero width: ";
+    // TODO: Can probably use emitAssignLike...
+    ps << "assign" << PP::space;
+    ps << PPExtString(getPortVerilogName(parent, port));
+    ps << PP::space << "=" << PP::space;
+    ps << PP::ibox0;
+    emitExpression(operand, ops);
+    ps << ";" << PP::end << PP::end;
+    emitLocationInfoAndNewLine(ps, ops);
+
     ++operandIndex;
   }
   return success();
@@ -2951,12 +3217,17 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  os << "typedef ";
-  emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
-                          op.getAliasType(), false);
-  os << ' ' << op.getPreferredName();
-  emitter.printUnpackedTypePostfix(op.getType(), os);
-  os << ";\n";
+  // XXX: EMIT_STATEMENT
+  auto ib = ps.scopedIBox(2);
+  ps << "typedef" << PP::space;
+  ps.invokeWithStringOS([&](auto &os) {
+    emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
+                            op.getAliasType(), false);
+  });
+  ps << PP::space << PPExtString(op.getPreferredName());
+  ps.invokeWithStringOS(
+      [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
+  ps << ";" << PP::newline;
   return success();
 }
 
@@ -2964,23 +3235,25 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // XXX: EMIT_STATEMENT
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "$fwrite(";
+  ps << "$fwrite(";
+  ps << PP::ibox0;
 
   emitExpression(op.getFd(), ops);
 
-  os << ", \"";
-  os.write_escaped(op.getFormatString());
-  os << '"';
+  ps << "," << PP::space;
+  ps.writeQuotedEscaped(op.getFormatString());
 
+  // TODO: good comma/wrapping behavior as elsewhere.
   for (auto operand : op.getSubstitutions()) {
-    os << ", ";
+    ps << "," << PP::space;
     emitExpression(operand, ops);
   }
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
+  ps << PP::end << ");";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
@@ -3000,7 +3273,6 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   // indented.  The convention is to not emit the \n so
   // emitLocationInfoAndNewLine can do that for the last line.
   bool isFirst = true;
-  indent();
 
   // Emit each line of the string at a time.
   while (!string.empty()) {
@@ -3008,120 +3280,126 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
     if (isFirst)
       isFirst = false;
     else {
-      os << '\n';
-      indent();
+      ps << PP::newline;
     }
 
     // Emit each chunk of the line.
     emitTextWithSubstitutions(
-        lhsRhs.first, op, [&](Value operand) { emitExpression(operand, ops); },
-        op.getSymbols(), names);
+        ps, lhsRhs.first, op,
+        [&](Value operand) { emitExpression(operand, ops); }, op.getSymbols(),
+        names);
     string = lhsRhs.second;
   }
 
-  emitLocationInfoAndNewLine(ops);
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
 /// Emit one of the simulation control tasks `$stop`, `$finish`, or `$exit`.
 LogicalResult
-StmtEmitter::emitSimulationControlTask(Operation *op, StringRef taskName,
+StmtEmitter::emitSimulationControlTask(Operation *op, PPExtString taskName,
                                        Optional<unsigned> verbosity) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // XXX: EMIT_STATEMENT
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << taskName;
-  if (verbosity && *verbosity != 1)
-    os << "(" << *verbosity << ")";
-  os << ";";
-  emitLocationInfoAndNewLine(ops);
+  ps << taskName;
+  if (verbosity && *verbosity != 1) {
+    ps << "(";
+    ps.addAsString(*verbosity);
+    ps << ")";
+  }
+  ps << ";";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(StopOp op) {
-  return emitSimulationControlTask(op, "$stop", op.getVerbosity());
+  return emitSimulationControlTask(op, PPExtString("$stop"), op.getVerbosity());
 }
 
 LogicalResult StmtEmitter::visitSV(FinishOp op) {
-  return emitSimulationControlTask(op, "$finish", op.getVerbosity());
+  return emitSimulationControlTask(op, PPExtString("$finish"),
+                                   op.getVerbosity());
 }
 
 LogicalResult StmtEmitter::visitSV(ExitOp op) {
-  return emitSimulationControlTask(op, "$exit", {});
+  return emitSimulationControlTask(op, PPExtString("$exit"), {});
 }
 
 /// Emit one of the severity message tasks `$fatal`, `$error`, `$warning`, or
 /// `$info`.
 LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
-                                                   StringRef taskName,
+                                                   PPExtString taskName,
                                                    Optional<unsigned> verbosity,
                                                    StringAttr message,
                                                    ValueRange operands) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // XXX: EMIT_STATEMENT
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << taskName;
+  ps << taskName;
 
   // In case we have a message to print, or the operation has an optional
   // verbosity and that verbosity is present, print the parenthesized parameter
   // list.
   if ((verbosity && *verbosity != 1) || message) {
-    os << "(";
+    ps << "(";
 
     // If the operation takes a verbosity, print it if it is set, or print the
     // default "1".
     if (verbosity)
-      os << *verbosity;
+      ps.addAsString(*verbosity);
 
     // Print the message and interpolation operands if present.
     if (message) {
       if (verbosity)
-        os << ", ";
-      os << "\"";
-      os.write_escaped(message.getValue());
-      os << "\"";
+        ps << "," << PP::space;
+      ps.writeQuotedEscaped(message.getValue());
+      // TODO: good comma/wrapping behavior as elsewhere.
       for (auto operand : operands) {
-        os << ", ";
+        ps << "," << PP::space;
         emitExpression(operand, ops);
       }
     }
 
-    os << ")";
+    ps << ")";
   }
 
-  os << ";";
-  emitLocationInfoAndNewLine(ops);
+  ps << ";";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(FatalOp op) {
-  return emitSeverityMessageTask(op, "$fatal", op.getVerbosity(),
+  return emitSeverityMessageTask(op, PPExtString("$fatal"), op.getVerbosity(),
                                  op.getMessageAttr(), op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(ErrorOp op) {
-  return emitSeverityMessageTask(op, "$error", {}, op.getMessageAttr(),
-                                 op.getSubstitutions());
+  return emitSeverityMessageTask(op, PPExtString("$error"), {},
+                                 op.getMessageAttr(), op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(WarningOp op) {
-  return emitSeverityMessageTask(op, "$warning", {}, op.getMessageAttr(),
-                                 op.getSubstitutions());
+  return emitSeverityMessageTask(op, PPExtString("$warning"), {},
+                                 op.getMessageAttr(), op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
-  return emitSeverityMessageTask(op, "$info", {}, op.getMessageAttr(),
-                                 op.getSubstitutions());
+  return emitSeverityMessageTask(op, PPExtString("$info"), {},
+                                 op.getMessageAttr(), op.getSubstitutions());
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+#if 0
   indent() << "generate\n";
   indent() << "begin: " << names.addName(op, op.getSymName()) << "\n";
   addIndent();
@@ -3129,10 +3407,22 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
   reduceIndent();
   indent() << "end: " << names.getName(op) << "\n";
   indent() << "endgenerate\n";
+#else
+  ps << "generate" << PP::newline;
+  ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+  ps << "begin: " << PPExtString(names.addName(op, op.getSymName()))
+     << PP::newline;
+  emitStatementBlock(op.getBody().getBlocks().front());
+  ps << PP::end;
+  ps << "end: " << PPExtString(names.getName(op)) << PP::newline;
+  ps << "endgenerate" << PP::newline;
+#endif
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
+  // TODO: Implement me!
+  assert(0 && "NYI");
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -3189,9 +3479,9 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
 /// picked and uniquified through `addName`.
 void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
   if (op->getAttrOfType<StringAttr>("label")) {
-    os << names.getName(op) << ": ";
+    ps << PPExtString(names.getName(op)) << ": ";
   } else if (state.options.enforceVerifLabels) {
-    os << names.addName(op, opName) << ": ";
+    ps << PPExtString(names.addName(op, opName)) << ": ";
   }
 }
 
@@ -3202,14 +3492,14 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
                                        bool isConcurrent = false) {
   if (!message)
     return;
-  os << " else $error(\"";
-  os.write_escaped(message.getValue());
-  os << "\"";
+  ps << " else $error(";
+  ps.writeQuotedEscaped(message.getValue());
+  // TODO: box, break/wrap behavior!
   for (auto arg : args) {
-    os << ", ";
+    ps << "," << PP::space;
     emitExpression(arg, ops);
   }
-  os << ")";
+  ps << ")";
 }
 
 template <typename Op>
@@ -3217,27 +3507,27 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // XXX: EMIT_STATEMENT
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent();
   emitAssertionLabel(op, opName);
-  os << opName;
+  ps << opName; // TODO: PPExtString ?
   switch (op.getDefer()) {
   case DeferAssert::Immediate:
     break;
   case DeferAssert::Observed:
-    os << " #0 ";
+    ps << " #0 ";
     break;
   case DeferAssert::Final:
-    os << " final ";
+    ps << " final ";
     break;
   }
-  os << "(";
+  ps << "(" << PP::ibox0;
   emitExpression(op.getExpression(), ops);
-  os << ")";
+  ps << PP::end << ")";
   emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops);
-  os << ";";
-  emitLocationInfoAndNewLine(ops);
+  ps << ";";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
@@ -3260,17 +3550,17 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent();
+  // TODO: revisit for breaking behavior.
   emitAssertionLabel(op, opName);
-  os << opName << " property (@(" << stringifyEventControl(op.getEvent())
-     << " ";
+  ps << opName << " property (@("
+     << PPExtString(stringifyEventControl(op.getEvent())) << PP::nbsp;
   emitExpression(op.getClock(), ops);
-  os << ") ";
+  ps << ") ";
   emitExpression(op.getProperty(), ops);
-  os << ")";
+  ps << ")";
   emitAssertionMessage(op.getMessageAttr(), op.getSubstitutions(), ops, true);
-  os << ";";
-  emitLocationInfoAndNewLine(ops);
+  ps << ";";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
@@ -3290,28 +3580,31 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  StringRef ident = cond.getName();
+  auto ident = PPExtString(cond.getName());
 
   bool hasEmptyThen = op->getRegion(0).front().empty();
   if (hasEmptyThen)
-    indent() << "`ifndef " << ident;
+    ps << "`ifndef " << ident;
   else
-    indent() << "`ifdef " << ident;
+    ps << "`ifdef " << ident;
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  emitLocationInfoAndNewLine(ops);
+  emitLocationInfoAndNewLine(ps, ops);
 
   if (!hasEmptyThen)
     emitStatementBlock(op->getRegion(0).front());
 
   if (!op->getRegion(1).empty()) {
     if (!hasEmptyThen)
-      indent() << "`else  // " << ident << "\n";
+      ps << "`else  // " << ident << PP::newline;
     emitStatementBlock(op->getRegion(1).front());
   }
 
-  indent() << "`endif // " << (hasEmptyThen ? "not def " : "") << ident << "\n";
+  ps << "`endif // ";
+  if (hasEmptyThen)
+    ps << "not def ";
+  ps << ident << PP::newline;
   return success();
 }
 
@@ -3322,23 +3615,23 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 void StmtEmitter::emitBlockAsStatement(Block *block,
                                        SmallPtrSet<Operation *, 8> &locationOps,
                                        StringRef multiLineComment) {
-
   // Determine if we need begin/end by scanning the block.
   auto count = countStatements(*block);
   auto needsBeginEnd = count != BlockStatementCount::One;
+  // auto cbox = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
   if (needsBeginEnd)
-    os << " begin";
-  emitLocationInfoAndNewLine(locationOps);
+    ps << " begin";
+  emitLocationInfoAndNewLine(ps, locationOps);
 
   if (count != BlockStatementCount::Zero)
     emitStatementBlock(*block);
 
   if (needsBeginEnd) {
-    indent() << "end";
+    ps << "end";
     // Emit comment if there's an 'end', regardless of line count.
     if (!multiLineComment.empty())
-      os << " // " << multiLineComment;
-    os << '\n';
+      ps << " // " << multiLineComment;
+    ps << PP::newline;
   }
 }
 
@@ -3355,7 +3648,9 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
 
-  indent() << "if (";
+  auto ifcondBox = PP::ibox2;
+
+  ps << "if (" << ifcondBox;
 
   // In the loop, emit an if statement assuming the keyword introducing
   // it (either "if (" or "else if (") was printed already.
@@ -3366,7 +3661,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
 
     // Emit the condition and the then block.
     emitExpression(ifOp.getCond(), ops);
-    os << ')';
+    ps << PP::end << ")";
     emitBlockAsStatement(ifOp.getThenBlock(), ops);
 
     if (!ifOp.hasElse())
@@ -3378,7 +3673,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
       // The else block does not contain an if-else that can be flattened.
       ops.clear();
       ops.insert(ifOp);
-      indent() << "else";
+      ps << "else";
       emitBlockAsStatement(elseBlock, ops);
       break;
     }
@@ -3386,7 +3681,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     // Introduce the 'else if', and iteratively continue unfolding any if-else
     // statements inside of it.
     ifOp = nestedElseIfOp;
-    indent() << "else if (";
+    ps << "else if (" << ifcondBox;
   }
 
   return success();
@@ -3400,27 +3695,31 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
   ops.insert(op);
 
   auto printEvent = [&](AlwaysOp::Condition cond) {
-    os << stringifyEventControl(cond.event) << ' ';
+    ps << PPExtString(stringifyEventControl(cond.event)) << PP::nbsp;
+    auto cb = ps.scopedCBox();
     emitExpression(cond.value, ops);
   };
 
   switch (op.getNumConditions()) {
   case 0:
-    indent() << "always @*";
+    ps << "always @*";
     break;
   case 1:
-    indent() << "always @(";
+    ps << "always @(";
     printEvent(op.getCondition(0));
-    os << ')';
+    ps << ")";
     break;
   default:
-    indent() << "always @(";
+    ps << "always @(";
+    ps << PP::cbox0; // TODO: check vs ibox
     printEvent(op.getCondition(0));
     for (size_t i = 1, e = op.getNumConditions(); i != e; ++i) {
-      os << " or ";
+      // os << " or ";
+      ps << PP::space << "or" << PP::space;
       printEvent(op.getCondition(i));
     }
-    os << ')';
+    // os << ')';
+    ps << PP::end << ")";
     break;
   }
 
@@ -3440,6 +3739,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
         [&]() { comment += ", "; });
     comment += ')';
   }
+  // ps << PP::newline;
 
   emitBlockAsStatement(op.getBodyBlock(), ops, comment);
   return success();
@@ -3456,7 +3756,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
   if (state.options.noAlwaysComb)
     opString = "always @(*)";
 
-  indent() << opString;
+  ps << PPExtString(opString);
   emitBlockAsStatement(op.getBodyBlock(), ops, opString);
   return success();
 }
@@ -3468,13 +3768,15 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "always_ff @(" << stringifyEventControl(op.getClockEdge()) << " ";
+  ps << "always_ff @(" << PP::cbox0
+     << PPExtString(stringifyEventControl(op.getClockEdge())) << PP::nbsp;
   emitExpression(op.getClock(), ops);
   if (op.getResetStyle() == ResetType::AsyncReset) {
-    os << " or " << stringifyEventControl(*op.getResetEdge()) << " ";
+    ps << PP::nbsp << "or" << PP::space
+       << PPExtString(stringifyEventControl(*op.getResetEdge())) << PP::nbsp;
     emitExpression(op.getReset(), ops);
   }
-  os << ')';
+  ps << PP::end << ")";
 
   // Build the comment string, leave out the signal expressions (since they
   // can be large).
@@ -3490,26 +3792,32 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   if (op.getResetStyle() == ResetType::NoReset)
     emitBlockAsStatement(op.getBodyBlock(), ops, comment);
   else {
-    os << " begin";
-    emitLocationInfoAndNewLine(ops);
-    addIndent();
+    ps << " begin" << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
+    emitLocationInfoAndNewLine(
+        ps, ops, false /* don't flush, location will be considered */);
+    // addIndent();
 
-    indent() << "if (";
+    // indent() << "if (";
+    ps << "if (";
+    // TODO: group
     // Negative edge async resets need to invert the reset condition.  This is
     // noted in the op description.
     if (op.getResetStyle() == ResetType::AsyncReset &&
         *op.getResetEdge() == EventControl::AtNegEdge)
-      os << "!";
+      ps << "!";
     emitExpression(op.getReset(), ops);
-    os << ')';
+    ps << ")";
     emitBlockAsStatement(op.getResetBlock(), ops);
-    indent() << "else";
+    // indent() << "else";
+    ps << "else";
     emitBlockAsStatement(op.getBodyBlock(), ops);
-    reduceIndent();
+    ps << PP::end;
+    // reduceIndent();
 
-    indent() << "end";
-    os << " // " << comment;
-    os << '\n';
+    // indent() << "end";
+    ps << "end";
+    ps << " // " << comment;
+    ps << PP::newline;
   }
   return success();
 }
@@ -3521,7 +3829,8 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "initial";
+  // indent() << "initial";
+  ps << "initial";
   emitBlockAsStatement(op.getBodyBlock(), ops, "initial");
   return success();
 }
@@ -3530,6 +3839,11 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  ps << "<<CASEOP>>" << PP::newline;
+  assert(0 && "NYI");
+  return success();
+
+#if 0
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
   indent();
@@ -3582,13 +3896,18 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   indent() << "endcase";
   emitLocationInfoAndNewLine(ops);
   return success();
+#endif
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   bool doNotPrint = op->hasAttr("doNotPrint");
   if (doNotPrint) {
-    indent() << "/* This instance is elsewhere emitted as a bind statement.\n";
-    addIndent();
+    // indent() << "/* This instance is elsewhere emitted as a bind
+    // statement.\n";
+    ps << PP::ibox2
+       << "/* This instance is elsewhere emitted as a bind statement."
+       << PP::newline;
+    // addIndent();
   }
 
   SmallPtrSet<Operation *, 8> ops;
@@ -3597,7 +3916,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
-  indent() << getVerilogModuleName(moduleOp);
+  ps << PPExtString(getVerilogModuleName(moduleOp));
 
   // If this is a parameterized module, then emit the parameters.
   if (!op.getParameters().empty()) {
@@ -3615,28 +3934,36 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
       // Handle # if this is the first parameter we're printing.
       if (!printed) {
-        os << " #(\n";
+        ps << " #(" << BeginToken(2, Breaks::Consistent, IndentStyle::Block)
+           << PP::newline;
         printed = true;
       } else {
-        os << ",\n";
+        ps << "," << PP::newline;
       }
-      os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
-      os << state.globalNames.getParameterVerilogName(moduleOp,
-                                                      param.getName());
-      os << '(';
-      emitter.printParamValue(param.getValue(), os, [&]() {
-        return op->emitOpError("invalid instance parameter '")
-               << param.getName().getValue() << "' value";
+      // os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
+      // os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
+      ps << ".";
+      ps << PPExtString(
+          state.globalNames.getParameterVerilogName(moduleOp, param.getName()));
+      ps << "("; // << PP::ibox0;
+      ps.invokeWithStringOS([&](auto &os) {
+        emitter.printParamValue(param.getValue(), os, [&]() {
+          return op->emitOpError("invalid instance parameter '")
+                 << param.getName().getValue() << "' value";
+        });
       });
-      os << ')';
+      // os << ')';
+      ps << ")";
     }
     if (printed) {
-      os << '\n';
-      indent() << ')';
+      ps << BreakToken(0, -2) << PP::end << ")";
+      // os << '\n';
+      // indent() << ')';
     }
   }
 
-  os << ' ' << names.getName(op) << " (";
+  // os << ' ' << names.getName(op) << " (";
+  ps << PP::nbsp << PPExtString(names.getName(op)) << " (";
 
   SmallVector<PortInfo> portInfo = getAllModulePortInfos(op);
 
@@ -3683,25 +4010,29 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       }
 
       if (shouldPrintComma)
-        os << ',';
+        ps << ",";
     }
-    emitLocationInfoAndNewLine(ops);
+    emitLocationInfoAndNewLine(ps, ops);
 
     // Emit the port's name.
-    indent();
+    // indent();
     if (!isZeroWidth) {
       // If this is a real port we're printing, then it isn't the first one. Any
       // subsequent ones will need a comma.
       isFirst = false;
-      os << "  ";
+      // os << "  ";
+      ps << "  ";
     } else {
       // We comment out zero width ports, so their presence and initializer
       // expressions are still emitted textually.
-      os << "//";
+      // os << "//";
+      ps << "//";
     }
 
-    os << '.' << getPortVerilogName(moduleOp, elt);
-    os.indent(maxNameLength - elt.getName().size()) << " (";
+    ps << PP::ibox2 << "." << PPExtString(getPortVerilogName(moduleOp, elt));
+    // os.indent(maxNameLength - elt.getName().size()) << " (";
+    ps.spaces(maxNameLength - elt.getName().size() + 1);
+    ps << "(" << PP::ibox0;
 
     // Emit the value as an expression.
     ops.clear();
@@ -3719,24 +4050,25 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       // Keep this synchronized with countStatements() and visitStmt(OutputOp).
       size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
       auto containingModule = emitter.currentModuleOp;
-      os << getPortVerilogName(containingModule,
-                               containingModule.getOutputPort(outputPortNo));
+      ps << PPExtString(getPortVerilogName(
+          containingModule, containingModule.getOutputPort(outputPortNo)));
     } else {
       portVal = getWireForValue(portVal);
       emitExpression(portVal, ops);
     }
-    os << ')';
+    ps << PP::end /* << PP::zerobreak */ << PP::end << ")";
   }
   if (!isFirst || isZeroWidth) {
-    emitLocationInfoAndNewLine(ops);
+    emitLocationInfoAndNewLine(ps, ops);
     ops.clear();
-    indent();
+    // indent();
   }
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
+  ps << ");";
+  emitLocationInfoAndNewLine(ps, ops);
   if (doNotPrint) {
-    reduceIndent();
-    indent() << "*/\n";
+    // reduceIndent();
+    ps << PP::end << "*/" << PP::newline;
+    // indent() << "*/\n";
   }
   return success();
 }
@@ -3761,10 +4093,10 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   emitComment(op.getCommentAttr());
-  os << "interface " << getSymOpName(op) << ";\n";
+  ps << "interface " << PPExtString(getSymOpName(op)) << ";" << PP::newline;
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
-  os << "endinterface\n\n";
+  ps << "endinterface" << PP::newline << PP::newline;
   return success();
 }
 
@@ -3772,38 +4104,44 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  indent();
   if (isZeroBitType(op.getType()))
-    os << "// ";
-  emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op->getLoc(),
-                          Type(), false);
-  os << ' ' << getSymOpName(op);
-  emitter.printUnpackedTypePostfix(op.getType(), os);
-  os << ";\n";
+    ps << "// ";
+  ps.invokeWithStringOS([&](auto &os) {
+    emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op->getLoc(),
+                            Type(), false);
+  });
+  ps << PP::nbsp << PPExtString(getSymOpName(op));
+  ps.invokeWithStringOS(
+      [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
+  ps << ";" << PP::newline;
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
-  indent() << "modport " << getSymOpName(op) << '(';
+  // indent() << "modport " << getSymOpName(op) << '(';
+  ps << "modport " << PPExtString(getSymOpName(op)) << "(";
 
-  llvm::interleaveComma(op.getPorts(), os, [&](const Attribute &portAttr) {
+  // TODO: revisit, better breaks/grouping.
+  llvm::interleaveComma(op.getPorts(), ps, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
-    os << stringifyEnum(port.getDirection().getValue()) << ' ';
+    ps << PPExtString(stringifyEnum(port.getDirection().getValue())) << " ";
     auto signalDecl = state.symbolCache.getDefinition(port.getSignal());
-    os << getSymOpName(signalDecl);
+    ps << PPExtString(getSymOpName(signalDecl));
   });
 
-  os << ");\n";
+  ps << ");" << PP::newline;
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   SmallPtrSet<Operation *, 8> emitted;
-  indent() << "assign ";
+  // indent() << "assign ";
+  // TODO: emit like emitAssignLike does, maybe refactor.
+  ps << "assign ";
   emitExpression(op.getIface(), emitted);
-  os << '.' << op.getSignalName() << " = ";
+  ps << "." << StringRef(op.getSignalName()) << " = ";
   emitExpression(op.getRhs(), emitted);
-  os << ";\n";
+  ps << ";" << PP::newline;
   return success();
 }
 
@@ -3811,6 +4149,10 @@ void StmtEmitter::emitStatement(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op))
     return;
+
+  // TODO: Don't box newline?
+  // auto ibox = ps.scopedIBox(INDENT_AMOUNT); // INDENT_AMOUNT, make
+  // configurable!
 
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
@@ -3821,7 +4163,7 @@ void StmtEmitter::emitStatement(Operation *op) {
     return;
 
   emitOpError(op, "cannot emit this operation to Verilog");
-  indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
+  ps << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
 /// Given an operation corresponding to a VerilogExpression, determine whether
@@ -3958,11 +4300,14 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   auto type = value.getType();
   auto word = getVerilogDeclWord(op, state.options);
   if (!isZeroBitType(type)) {
-    indent() << word;
+    ps << PP::ibox2;
+    if (!word.empty())
+      ps << word;
     auto extraIndent = word.empty() ? 0 : 1;
-    os.indent(maxDeclNameWidth - word.size() + extraIndent);
+    ps.add<BreakToken>(maxDeclNameWidth - word.size() + extraIndent);
   } else {
-    indent() << "// Zero width: " << word << ' ';
+    // TODO: Comment out entire decl if wraps ?!.
+    ps << "// Zero width: " << word << PP::nbsp;
   }
 
   SmallString<8> typeString;
@@ -3973,27 +4318,31 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
                             op->getLoc());
   }
   // Emit the type.
-  os << typeString;
+  if (!typeString.empty())
+    ps << typeString;
   if (typeString.size() < maxTypeWidth)
-    os.indent(maxTypeWidth - typeString.size());
+    ps.spaces(maxTypeWidth - typeString.size());
 
   // Emit the name.
-  os << names.getName(value);
+  ps << PPExtString(names.getName(value));
 
   // Print out any array subscripts or other post-name stuff.
-  emitter.printUnpackedTypePostfix(type, os);
+  ps.invokeWithStringOS(
+      [&](auto &os) { emitter.printUnpackedTypePostfix(type, os); });
 
   // Print debug info.
   if (state.options.printDebugInfo) {
     StringAttr sym = op->getAttr("inner_sym").dyn_cast_or_null<StringAttr>();
     if (sym && !sym.getValue().empty())
-      os << " /* inner_sym: " << sym.getValue() << " */";
+      ps << " /* inner_sym: " << PPExtString(sym.getValue()) << " */";
   }
 
   if (auto localparam = dyn_cast<LocalParamOp>(op)) {
-    os << " = ";
-    emitter.printParamValue(localparam.getValue(), os, [&]() {
-      return op->emitOpError("invalid localparam value");
+    ps << PP::space << "=" << PP::space;
+    ps.invokeWithStringOS([&](auto &os) {
+      emitter.printParamValue(localparam.getValue(), os, [&]() {
+        return op->emitOpError("invalid localparam value");
+      });
     });
   }
 
@@ -4008,8 +4357,9 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       // next to the operation.
       if (!source || isa<ConstantOp>(source) ||
           op->getNextNode() == singleAssign) {
-        os << " = ";
+        ps << PP::space << "=" << PP::space << PP::ibox0;
         emitExpression(singleAssign.getSrc(), opsForLocation);
+        ps << PP::end;
         emitter.assignsInlined.insert(singleAssign);
       }
     }
@@ -4026,8 +4376,9 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
         // validity by `isExpressionEmittedInlineIntoProceduralDeclaration`.
         if (!source || isa<ConstantOp>(source) ||
             isExpressionEmittedInlineIntoProceduralDeclaration(source, *this)) {
-          os << " = ";
+          ps << PP::space << "=" << PP::space << PP::ibox0;
           emitExpression(singleAssign.getSrc(), opsForLocation);
+          ps << PP::end;
           // Remember that the assignment and logic op are emitted into decl.
           emitter.assignsInlined.insert(singleAssign);
           emitter.expressionsEmittedIntoDecl.insert(op);
@@ -4035,9 +4386,11 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       }
     }
   }
+  if (!isZeroBitType(type))
+    ps << PP::end;
 
-  os << ';';
-  emitLocationInfoAndNewLine(opsForLocation);
+  ps << ";";
+  emitLocationInfoAndNewLine(ps, opsForLocation);
   return success();
 }
 
@@ -4056,7 +4409,12 @@ void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
 }
 
 void StmtEmitter::emitStatementBlock(Block &body) {
-  addIndent();
+  // TODO: rework, this is awkward w/PP re:begin/end/indent and newlines.
+
+  // auto cb = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
+  ps.ibox(INDENT_AMOUNT, IndentStyle::Block);
+  // addIndent();
+  ps << PP::newline; // force
 
   // Ensure decl alignment values are preserved after the block is emitted.
   // These values were computed for and from all declarations in the current
@@ -4076,7 +4434,9 @@ void StmtEmitter::emitStatementBlock(Block &body) {
     emitStatement(&op);
   }
 
-  reduceIndent();
+  // force
+  ps << PP::end << PP::newline;
+  // reduceIndent();
 }
 
 void ModuleEmitter::emitStatement(Operation *op) {
