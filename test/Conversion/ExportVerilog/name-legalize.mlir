@@ -174,6 +174,6 @@ sv.interface @output {
 // following types.
 // CHECK-LABEL: module InterfaceAsInstance();
 hw.module @InterfaceAsInstance () {
-  // CHECK: output_2 ();
-  %0 = sv.interface.instance : !sv.interface<@output>
+  // CHECK: output_2 foo();
+  %foo = sv.interface.instance : !sv.interface<@output>
 }
