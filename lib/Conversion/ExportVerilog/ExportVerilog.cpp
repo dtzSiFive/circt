@@ -4335,12 +4335,12 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   if (!isZeroBitType(type)) {
     ps << PP::ibox2;
     if (!word.empty())
-      ps << word;
+      ps << PPExtString(word); // TODO: maybe have it return this to be clear.
     auto extraIndent = word.empty() ? 0 : 1;
     ps.add<BreakToken>(maxDeclNameWidth - word.size() + extraIndent);
   } else {
     // TODO: Comment out entire decl if wraps ?!.
-    ps << "// Zero width: " << word << PP::nbsp;
+    ps << "// Zero width: " << PPExtString(word) << PP::nbsp;
   }
 
   SmallString<8> typeString;
