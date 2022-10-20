@@ -702,9 +702,9 @@ static void emitSVAttributesImpl(OS &os, sv::SVAttributesAttr svAttrs) {
   os << (emitAsComments ? "/* " : "(* ");
   llvm::interleaveComma(body, os, [&](Attribute attr) {
     auto svattr = attr.cast<SVAttributeAttr>();
-    os << svattr.getName().getValue();
+    os << PPExtString(svattr.getName().getValue());
     if (svattr.getExpression())
-      os << " = " << svattr.getExpression().getValue();
+      os << " = " << PPExtString(svattr.getExpression().getValue());
   });
   os << (emitAsComments ? " */" : " *)");
 }
