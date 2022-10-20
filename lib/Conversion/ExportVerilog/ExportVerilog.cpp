@@ -1873,7 +1873,9 @@ public:
               ModuleNameManager &names)
       : EmitterBase(emitter.state, os), emitter(emitter),
         emittedExprs(emittedExprs), pp(pp), buffer(tokens), ps(buffer, saver),
-        names(names) {}
+        names(names) {
+    assert(pp.getListener() == &saver);
+  }
 
   /// Emit the specified value as an expression.  If this is an inline-emitted
   /// expression, we emit that expression, otherwise we emit a reference to the
@@ -1886,7 +1888,12 @@ public:
                 /*signRequirement*/ NoRequirement,
                 /*isSelfDeterminedUnsignedValue*/ false);
     ps << PP::end;
+    // Drop listener until done so doesn't try to clear() prematurely.
+    // XXX: This is a sign that this should be reworked!
+    auto *listener = pp.getListener();
+    pp.setListener(nullptr);
     buffer.flush(pp);
+    pp.setListener(listener);
   }
 
 private:
