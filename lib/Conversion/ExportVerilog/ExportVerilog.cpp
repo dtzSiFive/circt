@@ -3676,7 +3676,9 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
     numStatements +=
         TypeSwitch<Operation *, long>(op)
             .Case<VerbatimOp>([&](auto) { return 2; })
-            .Case<IfOp>([&](auto) { return 1; /* we overcount due to special handling else-if */ })
+            .Case<IfOp>([&](auto) {
+              return 1; /* we overcount due to special handling else-if */
+            })
             .Case<IfDefOp, IfDefProceduralOp>([&](auto) { return 2; })
             .Case<OutputOp>([&](OutputOp oop) {
 #if 0
@@ -3726,14 +3728,16 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
 
   // RearrangableOStream::Cursor beginInsertPoint =
   // rearrangableStream.getCursor();
-  emitLocationInfoAndNewLine(ps, locationOps, false /* TODO: fix this to not work this way */);
+  emitLocationInfoAndNewLine(ps, locationOps,
+                             false /* TODO: fix this to not work this way */);
 
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
   auto numEmittedAfter = getNumStatementsEmitted();
 
   auto diff = numEmittedAfter - numEmittedBefore;
-  // auto numStatementsCountIf = llvm::count_if(*block,[](auto &op){return !isVerilogExpression(&op);});
+  // auto numStatementsCountIf = llvm::count_if(*block,[](auto &op){return
+  // !isVerilogExpression(&op);});
 #if 0
   if ((unsigned)diff != numStatements) {
     llvm::errs() << "\n----------\nCounted diff:  " << diff << "\n";
@@ -3748,7 +3752,7 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
 #endif
   assert((diff == 1) == (numStatements == 1));
 
-  // Close 
+  // Close
   ps << BreakToken(0, -INDENT_AMOUNT) << PP::end;
 
   // If we emitted exactly one statement, then we are done.
