@@ -2900,6 +2900,8 @@ void NameCollector::collectNames(Block &block) {
 // StmtEmitter
 //===----------------------------------------------------------------------===//
 
+// PrettyPrintingStmtEmitter
+
 namespace {
 /// This emits statement-related operations.
 class StmtEmitter : public EmitterBase,
@@ -3645,10 +3647,10 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 /// markers if non-singular.  If the control flow construct is multi-line and
 /// if multiLineComment is non-null, the string is included in a comment after
 /// the 'end' to make it easier to associate.
+/// begin-end is only valid for procedural regions.
 void StmtEmitter::emitBlockAsStatement(Block *block,
                                        SmallPtrSet<Operation *, 8> &locationOps,
                                        StringRef multiLineComment) {
-
 #if 0
   // We don't know if we need to emit the begin until after we emit the body of
   // the block.  We can have multiple ops that fold together into one statement
@@ -4545,6 +4547,7 @@ void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
     maxTypeWidth += 1;
 }
 
+/// Emit statements in "Block" with one-higher indentation.
 void StmtEmitter::emitStatementBlock(Block &body) {
   // TODO: rework, this is awkward w/PP re:begin/end/indent and newlines.
 
@@ -4576,6 +4579,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   // reduceIndent();
 }
 
+/// Top-level statements: Interface, Verbatim, IfDef, TypeScope
 void ModuleEmitter::emitStatement(Operation *op) {
   ModuleNameManager names;
   StmtEmitter(*this, os, names).emitStatement(op);
