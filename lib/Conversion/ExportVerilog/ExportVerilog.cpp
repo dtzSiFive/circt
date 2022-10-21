@@ -3648,16 +3648,110 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 void StmtEmitter::emitBlockAsStatement(Block *block,
                                        SmallPtrSet<Operation *, 8> &locationOps,
                                        StringRef multiLineComment) {
-  // Determine if we need begin/end by scanning the block.
-  auto count = countStatements(*block);
-  auto needsBeginEnd = count != BlockStatementCount::One;
-  // auto cbox = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
-  if (needsBeginEnd)
-    ps << " begin";
-  emitLocationInfoAndNewLine(ps, locationOps);
 
-  if (count != BlockStatementCount::Zero)
+#if 0
+  // We don't know if we need to emit the begin until after we emit the body of
+  // the block.  We can have multiple ops that fold together into one statement
+  // (common in nested expressions feeding into a connect) or one apparently
+  // simple set of operations that gets broken across multiple lines because
+  // they are too long.
+  //
+  // Solve this by emitting the statements, determining if we need to
+  // emit the begin, and if so, emit the begin retroactively.
+#endif
+
+  // TODO: rework how this works, as well as emitStatementBlock!
+  // For now, just always emit begin/end...
+  // TODO: The count doesn't matter once it's > 1--
+  // which is any two non-expression ops or any of the special ops.
+  // (this walks recursively to count inside blocks, which works for now but
+  // assumes some things)
+  unsigned numStatements = 0;
+  block->walk([&](Operation *op) {
+    if (isVerilogExpression(op))
+      return;
+    ++numStatements;
+    numStatements +=
+        TypeSwitch<Operation *, long>(op)
+            .Case<VerbatimOp>([&](auto) { return 2; })
+            .Case<IfOp>([&](auto) { return 1; /* we overcount due to special handling else-if */ })
+            .Case<IfDefOp, IfDefProceduralOp>([&](auto) { return 2; })
+            .Case<OutputOp>([&](OutputOp oop) {
+#if 0
+              return llvm::count_if(
+                         oop->getParentOfType<HWModuleOp>().getPorts().outputs,
+                         [&](auto &port) {
+                           auto operand = op.getOperand(
+                           return !operand.hasOneUse() ||
+                                  !dyn_cast_or_null<InstanceOp>(
+                                      operand.getDefiningOp());
+                         }) -
+                     1;
+#else
+              return (long)llvm::count_if(
+                         oop->getOperands(),
+                         [&](auto operand) {
+                           return !operand.hasOneUse() ||
+                                  !dyn_cast_or_null<InstanceOp>(
+                                      operand.getDefiningOp());
+                         }) -
+                     1;
+#endif
+            })
+            .Default([](auto) { return 0; });
+  });
+  if (numStatements == 0) {
+    block->dump();
+    assert(0 && "empty block");
+  }
+  // empty block
+  if (numStatements == 0) {
+    ps << " begin end";
+    emitLocationInfoAndNewLine(ps, locationOps);
+    // Debug check....
+    auto numEmittedBefore = getNumStatementsEmitted();
     emitStatementBlock(*block);
+    auto numEmittedAfter = getNumStatementsEmitted();
+    assert(numEmittedAfter == numEmittedBefore);
+    return;
+  }
+  if (numStatements > 1) {
+    ps << " begin";
+  }
+
+  // TODO: Handle this better w/location info....
+  ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+
+  // RearrangableOStream::Cursor beginInsertPoint =
+  // rearrangableStream.getCursor();
+  emitLocationInfoAndNewLine(ps, locationOps, false /* TODO: fix this to not work this way */);
+
+  auto numEmittedBefore = getNumStatementsEmitted();
+  emitStatementBlock(*block);
+  auto numEmittedAfter = getNumStatementsEmitted();
+
+  auto diff = numEmittedAfter - numEmittedBefore;
+  // auto numStatementsCountIf = llvm::count_if(*block,[](auto &op){return !isVerilogExpression(&op);});
+#if 0
+  if ((unsigned)diff != numStatements) {
+    llvm::errs() << "\n----------\nCounted diff:  " << diff << "\n";
+    llvm::errs() << "Computed diff: " << numStatements << " (count_if: " << numStatementsCountIf << ")\n";
+    llvm::errs() << "\n--------\nasked to emit this block as a statement:\n";
+    block->dump();
+    llvm::errs() << "--------\n";
+  } else {
+    /// static std::atomic<uint64_t> counter = 0;
+    /// llvm::errs() << "Matched: " << ++counter << "\n";
+  }
+#endif
+  assert((diff == 1) == (numStatements == 1));
+
+  // Close 
+  ps << BreakToken(0, -INDENT_AMOUNT) << PP::end;
+
+  // If we emitted exactly one statement, then we are done.
+  // if (getNumStatementsEmitted() - numEmittedBefore == 1)
+  //  return;
 
   if (needsBeginEnd) {
     ps << "end";
@@ -3666,6 +3760,15 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
       ps << " // " << multiLineComment;
     ps << PP::newline;
   }
+
+  // Otherwise we emit the begin and end logic.
+  // rearrangableStream.insertLiteral(beginInsertPoint, " begin");
+
+  // indent() << "end";
+  ps << "end";
+  if (!multiLineComment.empty())
+    ps << " // " << multiLineComment;
+  ps << PP::newline;
 }
 
 LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
