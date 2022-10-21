@@ -3765,7 +3765,8 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   // rearrangableStream.insertLiteral(beginInsertPoint, " begin");
 
   // indent() << "end";
-  ps << "end";
+  if (numStatements > 1)
+    ps << "end";
   if (!multiLineComment.empty())
     ps << " // " << multiLineComment;
   ps << PP::newline;
