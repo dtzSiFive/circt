@@ -4041,6 +4041,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
   emitComment(ps, op.getCommentAttr());
   ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
+  // TODO: source info!
   ps << "interface " << PPExtString(getSymOpName(op)) << ";" << PP::newline;
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
