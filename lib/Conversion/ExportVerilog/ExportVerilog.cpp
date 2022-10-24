@@ -3240,6 +3240,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
+  assert(0 && "NYI");
   auto typescopeDef = ("_TYPESCOPE_" + op.getSymName()).str();
   indent() << "`ifndef " << typescopeDef << '\n';
   indent() << "`define " << typescopeDef << '\n';
@@ -3448,6 +3449,7 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
   ps << "begin: " << PPExtString(names.addName(op, op.getSymName()))
      << PP::newline;
   emitStatementBlock(op.getBody().getBlocks().front());
+  ps << BreakToken(0, -INDENT_AMOUNT); //  << PP::end;
   ps << PP::end;
   ps << "end: " << PPExtString(names.getName(op)) << PP::newline;
   ps << "endgenerate" << PP::newline;
@@ -3622,24 +3624,31 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
     ps << "`ifndef " << ident;
   else
     ps << "`ifdef " << ident;
+  auto box = BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+  ps.addToken(box);
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  emitLocationInfoAndNewLine(ps, ops);
+  emitLocationInfoAndNewLine(ps, ops, false /* FIXME */);
 
   if (!hasEmptyThen)
     emitStatementBlock(op->getRegion(0).front());
 
   if (!op->getRegion(1).empty()) {
-    if (!hasEmptyThen)
-      ps << "`else  // " << ident << PP::newline;
+    if (!hasEmptyThen) {
+      ps << BreakToken(0, -INDENT_AMOUNT);
+      ps << PP::end << "`else  // " << ident;
+      ps.addToken(box);
+      ps << PP::newline;
+    }
     emitStatementBlock(op->getRegion(1).front());
   }
-
-  ps << "`endif // ";
+  ps << BreakToken(0, -INDENT_AMOUNT);
+  ps << PP::end << "`endif // ";
   if (hasEmptyThen)
     ps << "not def ";
-  ps << ident << PP::newline;
+  ps << ident;
+  ps << PP::newline;
   return success();
 }
 
@@ -3658,6 +3667,7 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
     ps << " begin";
 
   // TODO: Handle this better w/location info....
+  // ASSUME CBOX? :( 
   ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
   emitLocationInfoAndNewLine(ps, locationOps,
                              false /* TODO: fix this to not work this way */);
@@ -4137,10 +4147,12 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   emitComment(op.getCommentAttr());
+  ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
   ps << "interface " << PPExtString(getSymOpName(op)) << ";" << PP::newline;
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
-  ps << "endinterface" << PP::newline << PP::newline;
+  ps << BreakToken(0, -INDENT_AMOUNT);
+  ps << PP::end << "endinterface" << PP::newline << PP::newline;
   return success();
 }
 
@@ -4457,9 +4469,9 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   // TODO: rework, this is awkward w/PP re:begin/end/indent and newlines.
 
   // auto cb = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
-  ps.ibox(INDENT_AMOUNT, IndentStyle::Block);
+  // ps.ibox(INDENT_AMOUNT, IndentStyle::Block);
   // addIndent();
-  ps << PP::newline; // force
+  // ps << PP::newline; // force
 
   // Ensure decl alignment values are preserved after the block is emitted.
   // These values were computed for and from all declarations in the current
@@ -4480,7 +4492,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   }
 
   // force
-  ps << PP::end << PP::newline;
+  // ps << PP::end << PP::newline;
   // reduceIndent();
 }
 
@@ -4881,11 +4893,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     os << ");";
     emitLocationInfoAndNewLine(moduleOpSet);
   }
-  reduceIndent();
 
   // Emit the body of the module.
   StmtEmitter(*this, os, names).emitStatementBlock(*module.getBodyBlock());
   os << "endmodule\n\n";
+  reduceIndent();
 
   currentModuleOp = HWModuleOp();
 }
