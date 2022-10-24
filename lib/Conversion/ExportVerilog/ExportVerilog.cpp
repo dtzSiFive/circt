@@ -899,18 +899,6 @@ public:
       os << "\t// " << locInfo;
     os << '\n';
   }
-  template <typename PPS>
-  void emitLocationInfoAndNewLine(PPS &ps,
-                                  const SmallPtrSet<Operation *, 8> &ops,
-                                  bool eof = true) {
-    auto locInfo =
-        getLocationInfoAsString(ops, state.options.locationInfoStyle);
-    if (eof) // flush before location, don't consider in layout.
-      ps << PP::eof;
-    if (!locInfo.empty())
-      ps << "\t// " << locInfo;
-    ps << PP::newline;
-  }
 
   template <typename PPS>
   void emitTextWithSubstitutions(PPS &ps, StringRef string, Operation *op,
@@ -2834,6 +2822,24 @@ private:
   friend class hw::StmtVisitor<StmtEmitter, LogicalResult>;
   friend class sv::Visitor<StmtEmitter, LogicalResult>;
 
+  template <typename PPS>
+  void emitLocationInfoAndNewLine(PPS &ps,
+                                  const SmallPtrSet<Operation *, 8> &ops,
+                                  bool eof = true, bool pending = true) {
+    auto locInfo =
+        getLocationInfoAsString(ops, state.options.locationInfoStyle);
+    // TODO: This isn't what EOF is for-- consider a 'neverbreak' or so!
+    if (eof) // flush before location, don't consider in layout.
+      ps << PP::eof;
+    if (!locInfo.empty())
+      ps << "\t// " << locInfo;
+   if (pending) {
+     assert(!pendingNewline);
+     pendingNewline = true;
+   } else
+     ps << PP::newline;
+  }
+
   // Visitor methods.
   LogicalResult visitUnhandledStmt(Operation *op) { return failure(); }
   LogicalResult visitInvalidStmt(Operation *op) { return failure(); }
@@ -2936,6 +2942,8 @@ private:
   PrettyPrinter pp;
   /// Stream helper (pp, saver).
   PPStream<> ps;
+
+  bool pendingNewline = false;
 
   /// These keep track of the maximum length of name width and type width in the
   /// current statement scope.
@@ -4104,13 +4112,18 @@ void StmtEmitter::emitStatement(Operation *op) {
   // auto ibox = ps.scopedIBox(INDENT_AMOUNT); // INDENT_AMOUNT, make
   // configurable!
 
-  // Handle HW statements.
-  if (succeeded(dispatchStmtVisitor(op)))
-    return;
+  // If previous emission requires a newline, emit it now.
+  // This gives us opportunity to open/close boxes before linebreak.
+  if (pendingNewline) {
+    pendingNewline = false;
+    ps << PP::newline;
+  }
 
-  // Handle SV Statements.
-  if (succeeded(dispatchSVVisitor(op)))
+  // Handle HW statements, SV statements.
+  if (succeeded(dispatchStmtVisitor(op)) || succeeded(dispatchSVVisitor(op))) {
+    // pendingNewline = true;
     return;
+  }
 
   emitOpError(op, "cannot emit this operation to Verilog");
   ps << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
