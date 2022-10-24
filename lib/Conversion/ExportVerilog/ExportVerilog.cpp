@@ -2834,8 +2834,7 @@ private:
     if (!locInfo.empty())
       ps << "\t// " << locInfo;
    if (pending) {
-     assert(!pendingNewline);
-     pendingNewline = true;
+     setPendingNewline();
    } else
      ps << PP::newline;
   }
@@ -2847,6 +2846,10 @@ private:
       pendingNewline = false;
       ps << PP::newline;
     }
+  }
+  void setPendingNewline() {
+    assert(!pendingNewline);
+    pendingNewline = true;
   }
 
   void startStatement() { emitPendingNewlineIfNeeded(); }
@@ -2983,6 +2986,7 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
   if (!svAttrs)
     return;
 
+  startStatement(); // For attributes.
   emitSVAttributesImpl(ps, svAttrs);
   ps << PP::newline;
 }
@@ -3164,6 +3168,7 @@ LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
   indent() << "`define " << typescopeDef << '\n';
   emitStatementBlock(*op.getBodyBlock());
   indent() << "`endif // " << typescopeDef << '\n';
+  // TODO: pending newline
   return success();
 }
 
@@ -3173,6 +3178,8 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
 
   // XXX: EMIT_STATEMENT
   startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
   auto ib = ps.scopedIBox(2);
   ps << "typedef" << PP::space;
   ps.invokeWithStringOS([&](auto &os) {
@@ -3182,7 +3189,8 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
   ps << PP::space << PPExtString(op.getPreferredName());
   ps.invokeWithStringOS(
       [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
-  ps << ";" << PP::newline;
+  ps << ";";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
 
@@ -3369,14 +3377,14 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
 #else
   startStatement();
   ps << "generate" << PP::newline;
-  ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
-  ps << "begin: " << PPExtString(names.addName(op, op.getSymName()))
-     << PP::newline;
+  // ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+  ps << "begin: " << PPExtString(names.addName(op, op.getSymName()));
   emitStatementBlock(op.getBody().getBlocks().front());
-  ps << BreakToken(0, -INDENT_AMOUNT); //  << PP::end;
-  ps << PP::end;
+  // ps << BreakToken(0, -INDENT_AMOUNT); //  << PP::end;
+  // ps << PP::end;
   ps << "end: " << PPExtString(names.getName(op)) << PP::newline;
-  ps << "endgenerate" << PP::newline;
+  ps << "endgenerate";
+  setPendingNewline();
 #endif
   return success();
 }
@@ -3552,31 +3560,33 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
     ps << "`ifndef " << ident;
   else
     ps << "`ifdef " << ident;
-  auto box = BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
-  ps.addToken(box);
+  // auto box = BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+  // ps.addToken(box);
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  emitLocationInfoAndNewLine(ps, ops, false /* FIXME */);
+  emitLocationInfoAndNewLine(ps, ops);
 
   if (!hasEmptyThen)
     emitStatementBlock(op->getRegion(0).front());
 
   if (!op->getRegion(1).empty()) {
     if (!hasEmptyThen) {
-      ps << BreakToken(0, -INDENT_AMOUNT);
-      ps << PP::end << "`else  // " << ident;
-      ps.addToken(box);
-      ps << PP::newline;
+      startStatement();
+      ps << "`else  // " << ident;
+      // ps.addToken(box);
+      // ps << PP::newline;
     }
     emitStatementBlock(op->getRegion(1).front());
   }
-  ps << BreakToken(0, -INDENT_AMOUNT);
-  ps << PP::end << "`endif // ";
+  // ps << BreakToken(0, -INDENT_AMOUNT);
+  startStatement();
+  ps << "`endif // ";
   if (hasEmptyThen)
     ps << "not def ";
   ps << ident;
-  ps << PP::newline;
+  // ps << PP::newline;
+  setPendingNewline();
   return success();
 }
 
@@ -3596,23 +3606,24 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
 
   // TODO: Handle this better w/location info....
   // ASSUME CBOX? :( 
-  ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
-  emitLocationInfoAndNewLine(ps, locationOps,
-                             false /* TODO: fix this to not work this way */);
+  // ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+  emitLocationInfoAndNewLine(ps, locationOps);
 
   if (count != BlockStatementCount::Zero)
     emitStatementBlock(*block);
 
 
   // Close
-  ps << BreakToken(0, -INDENT_AMOUNT) << PP::end;
+  // ps << BreakToken(0, -INDENT_AMOUNT) << PP::end;
 
   if (needsBeginEnd) {
+    startStatement();
     ps << "end";
     // Emit comment if there's an 'end', regardless of line count.
     if (!multiLineComment.empty())
       ps << " // " << multiLineComment;
-    ps << PP::newline;
+    // ps << PP::newline;
+    setPendingNewline();
   }
 
 }
@@ -3779,11 +3790,11 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   if (op.getResetStyle() == ResetType::NoReset)
     emitBlockAsStatement(op.getBodyBlock(), ops, comment);
   else {
-    ps << " begin" << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
+    ps << " begin";
     emitLocationInfoAndNewLine(
-        ps, ops, false /* don't flush, location will be considered */);
+        ps, ops);
     // addIndent();
-
+    ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
     // indent() << "if (";
     startStatement();
     ps << "if (";
@@ -3804,9 +3815,10 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
     // reduceIndent();
 
     // indent() << "end";
+    startStatement();
     ps << "end";
     ps << " // " << comment;
-    ps << PP::newline;
+    setPendingNewline();
   }
   return success();
 }
@@ -4295,6 +4307,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   auto value = op->getResult(0);
   SmallPtrSet<Operation *, 8> opsForLocation;
   opsForLocation.insert(op);
+  startStatement();
 
   // Emit the leading word, like 'wire', 'reg' or 'logic'.
   auto type = value.getType();
@@ -4412,7 +4425,9 @@ void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
 void StmtEmitter::emitStatementBlock(Block &body) {
   // TODO: rework, this is awkward w/PP re:begin/end/indent and newlines.
 
-  // auto cb = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
+   auto boxed = pendingNewline;
+   if (boxed) ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+     //auto cb = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
   // ps.ibox(INDENT_AMOUNT, IndentStyle::Block);
   // addIndent();
   // ps << PP::newline; // force
@@ -4435,6 +4450,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
     emitStatement(&op);
   }
 
+  if (boxed) ps << PP::end;
   // force
   // ps << PP::end << PP::newline;
   // reduceIndent();
