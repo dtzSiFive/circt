@@ -2807,7 +2807,7 @@ public:
   /// Emit a declaration.
   LogicalResult emitDeclaration(Operation *op);
 
-  ~StmtEmitter() { ps << PP::eof; }
+  ~StmtEmitter() { emitPendingNewlineIfNeeded(); }
 
 private:
   void collectNamesAndCalculateDeclarationWidths(Block &block);
@@ -2839,6 +2839,17 @@ private:
    } else
      ps << PP::newline;
   }
+
+  /// If previous emission requires a newline, emit it now.
+  /// This gives us opportunity to open/close boxes before linebreak.
+  void emitPendingNewlineIfNeeded() {
+    if (pendingNewline) {
+      pendingNewline = false;
+      ps << PP::newline;
+    }
+  }
+
+  void startStatement() { emitPendingNewlineIfNeeded(); }
 
   // Visitor methods.
   LogicalResult visitUnhandledStmt(Operation *op) { return failure(); }
@@ -2983,6 +2994,7 @@ LogicalResult StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
   ops.insert(op);
 
   // XXX: EMIT_STATEMENT(...) -- add semicolon, location info.
+  startStatement();
   ps << PP::ibox2;
   if (wordBeforeLHS) {
     ps << *wordBeforeLHS << PP::space;
@@ -3043,6 +3055,7 @@ LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3058,6 +3071,7 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3075,6 +3089,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint")) {
     prefix = "// ";
@@ -3122,6 +3137,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ops.insert(op);
 
     // XXX: EMIT_STATEMENT
+    startStatement();
     ps << PP::ibox2;
     // TODO: What if RHS expr wraps? :(
     if (isZeroBitType(port.type))
@@ -3142,6 +3158,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 
 LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
   assert(0 && "NYI");
+  startStatement();
   auto typescopeDef = ("_TYPESCOPE_" + op.getSymName()).str();
   indent() << "`ifndef " << typescopeDef << '\n';
   indent() << "`define " << typescopeDef << '\n';
@@ -3155,6 +3172,7 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   auto ib = ps.scopedIBox(2);
   ps << "typedef" << PP::space;
   ps.invokeWithStringOS([&](auto &os) {
@@ -3173,6 +3191,7 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3198,6 +3217,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -3240,6 +3260,7 @@ StmtEmitter::emitSimulationControlTask(Operation *op, PPExtString taskName,
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps << taskName;
@@ -3277,6 +3298,7 @@ LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   ps << taskName;
@@ -3345,6 +3367,7 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
   indent() << "end: " << names.getName(op) << "\n";
   indent() << "endgenerate\n";
 #else
+  startStatement();
   ps << "generate" << PP::newline;
   ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
   ps << "begin: " << PPExtString(names.addName(op, op.getSymName()))
@@ -3364,6 +3387,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  startStatement();
   indent() << "case (";
   emitter.printParamValue(
       op.getCond(), os, VerilogPrecedence::Selection,
@@ -3446,6 +3470,7 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // XXX: EMIT_STATEMENT
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   emitAssertionLabel(op, opName);
@@ -3486,6 +3511,7 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   // TODO: revisit for breaking behavior.
@@ -3520,6 +3546,7 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
 
   auto ident = PPExtString(cond.getName());
 
+  startStatement();
   bool hasEmptyThen = op->getRegion(0).front().empty();
   if (hasEmptyThen)
     ps << "`ifndef " << ident;
@@ -3605,6 +3632,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
 
   auto ifcondBox = PP::ibox2;
 
+  startStatement();
   ps << "if (" << ifcondBox;
 
   // In the loop, emit an if statement assuming the keyword introducing
@@ -3622,6 +3650,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     if (!ifOp.hasElse())
       break;
 
+    startStatement();
     Block *elseBlock = ifOp.getElseBlock();
     auto nestedElseIfOp = findNestedElseIf(elseBlock);
     if (!nestedElseIfOp) {
@@ -3648,6 +3677,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+  startStatement();
 
   auto printEvent = [&](AlwaysOp::Condition cond) {
     ps << PPExtString(stringifyEventControl(cond.event)) << PP::nbsp;
@@ -3706,6 +3736,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+  startStatement();
 
   StringRef opString = "always_comb";
   if (state.options.noAlwaysComb)
@@ -3722,6 +3753,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+  startStatement();
 
   ps << "always_ff @(" << PP::cbox0
      << PPExtString(stringifyEventControl(op.getClockEdge())) << PP::nbsp;
@@ -3753,6 +3785,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
     // addIndent();
 
     // indent() << "if (";
+    startStatement();
     ps << "if (";
     // TODO: group
     // Negative edge async resets need to invert the reset condition.  This is
@@ -3764,6 +3797,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
     ps << ")";
     emitBlockAsStatement(op.getResetBlock(), ops);
     // indent() << "else";
+    startStatement();
     ps << "else";
     emitBlockAsStatement(op.getBodyBlock(), ops);
     ps << PP::end;
@@ -3783,6 +3817,7 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+  startStatement();
 
   // indent() << "initial";
   ps << "initial";
@@ -3855,6 +3890,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
+  startStatement();
   bool doNotPrint = op->hasAttr("doNotPrint");
   if (doNotPrint) {
     // indent() << "/* This instance is elsewhere emitted as a bind
@@ -3967,7 +4003,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       if (shouldPrintComma)
         ps << ",";
     }
-    emitLocationInfoAndNewLine(ps, ops);
+    emitLocationInfoAndNewLine(ps, ops, true, false);
 
     // Emit the port's name.
     // indent();
@@ -4014,7 +4050,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     ps << PP::end /* << PP::zerobreak */ << PP::end << ")";
   }
   if (!isFirst || isZeroWidth) {
-    emitLocationInfoAndNewLine(ps, ops);
+    emitLocationInfoAndNewLine(ps, ops, true, false);
     ops.clear();
     // indent();
   }
@@ -4039,7 +4075,8 @@ LogicalResult StmtEmitter::visitStmt(ProbeOp op) { return success(); }
 // regs, or ports, with legalized names, so we can lookup up the names through
 // the IR.
 LogicalResult StmtEmitter::visitSV(BindOp op) {
-  emitter.emitBind(op);
+  startStatement();
+  emitter.emitBind(op); // TODO: NEWLINE SADFACE
   return success();
 }
 
@@ -4047,6 +4084,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  startStatement();
   emitComment(ps, op.getCommentAttr());
   ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
   // TODO: source info!
@@ -4062,6 +4100,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  startStatement();
   if (isZeroBitType(op.getType()))
     ps << "// ";
   ps.invokeWithStringOS([&](auto &os) {
@@ -4077,6 +4116,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
   // indent() << "modport " << getSymOpName(op) << '(';
+  startStatement();
   ps << "modport " << PPExtString(getSymOpName(op)) << "(";
 
   // TODO: revisit, better breaks/grouping.
@@ -4092,6 +4132,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
+  startStatement();
   SmallPtrSet<Operation *, 8> emitted;
   // indent() << "assign ";
   // TODO: emit like emitAssignLike does, maybe refactor.
@@ -4112,12 +4153,8 @@ void StmtEmitter::emitStatement(Operation *op) {
   // auto ibox = ps.scopedIBox(INDENT_AMOUNT); // INDENT_AMOUNT, make
   // configurable!
 
-  // If previous emission requires a newline, emit it now.
-  // This gives us opportunity to open/close boxes before linebreak.
-  if (pendingNewline) {
-    pendingNewline = false;
-    ps << PP::newline;
-  }
+  // STATEMENT_START
+  emitPendingNewlineIfNeeded();
 
   // Handle HW statements, SV statements.
   if (succeeded(dispatchStmtVisitor(op)) || succeeded(dispatchSVVisitor(op))) {
