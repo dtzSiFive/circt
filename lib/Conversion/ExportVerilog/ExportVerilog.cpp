@@ -3576,6 +3576,7 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
       ps << "`else  // " << ident;
       // ps.addToken(box);
       // ps << PP::newline;
+      setPendingNewline();
     }
     emitStatementBlock(op->getRegion(1).front());
   }
