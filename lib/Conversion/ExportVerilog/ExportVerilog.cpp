@@ -3382,6 +3382,7 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
   emitStatementBlock(op.getBody().getBlocks().front());
   // ps << BreakToken(0, -INDENT_AMOUNT); //  << PP::end;
   // ps << PP::end;
+  startStatement();
   ps << "end: " << PPExtString(names.getName(op)) << PP::newline;
   ps << "endgenerate";
   setPendingNewline();
@@ -4107,6 +4108,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   setPendingNewline();
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
+  startStatement();
   ps << "endinterface" << PP::newline;
   setPendingNewline();
   return success();
