@@ -912,9 +912,6 @@ public:
     ps << PP::newline;
   }
 
-  void emitTextWithSubstitutions(StringRef string, Operation *op,
-                                 std::function<void(Value)> operandEmitter,
-                                 ArrayAttr symAttrs, ModuleNameManager &names);
   template <typename PPS>
   void emitTextWithSubstitutions(PPS &ps, StringRef string, Operation *op,
                                  std::function<void(Value)> operandEmitter,
@@ -934,110 +931,6 @@ private:
 };
 } // end anonymous namespace
 
-void EmitterBase::emitTextWithSubstitutions(
-    StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
-    ArrayAttr symAttrs, ModuleNameManager &names) {
-
-  // Perform operand substitions as we emit the line string.  We turn {{42}}
-  // into the value of operand 42.
-  auto namify = [&](Attribute sym, HWSymbolCache::Item item) {
-    // CAVEAT: These accesses can reach into other modules through inner name
-    // references, which are currently being processed. Do not add those remote
-    // operations to this module's `names`, which is reserved for things named
-    // *within* this module. Instead, you have to rely on those remote
-    // operations to have been named inside the global names table. If they
-    // haven't, take a look at name legalization first.
-    if (auto itemOp = item.getOp()) {
-      if (item.hasPort()) {
-        return getPortVerilogName(itemOp, item.getPort());
-      }
-      StringRef symOpName = getSymOpName(itemOp);
-      if (!symOpName.empty())
-        return symOpName;
-      emitError(itemOp, "cannot get name for symbol ") << sym;
-    } else {
-      emitError(op, "cannot get name for symbol ") << sym;
-    }
-    return StringRef("<INVALID>");
-  };
-
-  // Scan 'line' for a substitution, emitting any non-substitution prefix,
-  // then the mentioned operand, chopping the relevant text off 'line' and
-  // returning true.  This returns false if no substitution is found.
-  unsigned numSymOps = symAttrs.size();
-  auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
-    size_t start = 0;
-    while (1) {
-      next = string.find("{{", next);
-      if (next == StringRef::npos)
-        return false;
-
-      // Check to make sure we have a number followed by }}.  If not, we
-      // ignore the {{ sequence as something that could happen in Verilog.
-      next += 2;
-      start = next;
-      while (next < string.size() && isdigit(string[next]))
-        ++next;
-      // We need at least one digit.
-      if (start == next) {
-        next--;
-        continue;
-      }
-
-      // We must have a }} right after the digits.
-      if (!string.substr(next).startswith("}}"))
-        continue;
-
-      // We must be able to decode the integer into an unsigned.
-      unsigned operandNo = 0;
-      if (string.drop_front(start)
-              .take_front(next - start)
-              .getAsInteger(10, operandNo)) {
-        emitError(op, "operand substitution too large");
-        continue;
-      }
-      next += 2;
-
-      // Emit any text before the substitution.
-      os << string.take_front(start - 2);
-
-      // operandNo can either refer to Operands or symOps.  symOps are
-      // numbered after the operands.
-      if (operandNo < op->getNumOperands())
-        // Emit the operand.
-        operandEmitter(op->getOperand(operandNo));
-      else if ((operandNo - op->getNumOperands()) < numSymOps) {
-        unsigned symOpNum = operandNo - op->getNumOperands();
-        auto sym = symAttrs[symOpNum];
-        StringRef symVerilogName;
-        if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
-          if (auto *symOp = state.symbolCache.getDefinition(fsym))
-            symVerilogName = namify(sym, symOp);
-        } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
-          auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
-                                                            isym.getName());
-          symVerilogName = namify(sym, symOp);
-        }
-        os << symVerilogName;
-      } else {
-        emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
-        continue;
-      }
-      // Forget about the part we emitted.
-      string = string.drop_front(next);
-      return true;
-    }
-  };
-
-  // Emit all the substitutions.
-  while (emitUntilSubstitution())
-    ;
-
-  // Emit any text after the last substitution.
-  os << string;
-}
-
-// TODO: Don't have two copies!
 template <typename PPS>
 void EmitterBase::emitTextWithSubstitutions(
     PPS &ps, StringRef string, Operation *op,
