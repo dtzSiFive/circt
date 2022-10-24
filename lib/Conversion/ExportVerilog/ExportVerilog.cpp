@@ -3704,10 +3704,10 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
             })
             .Default([](auto) { return 0; });
   });
-  if (numStatements == 0) {
-    block->dump();
-    assert(0 && "empty block");
-  }
+  // if (numStatements == 0) {
+  //   block->dump();
+  //   assert(0 && "empty block");
+  // }
   // empty block
   if (numStatements == 0) {
     ps << " begin end";
