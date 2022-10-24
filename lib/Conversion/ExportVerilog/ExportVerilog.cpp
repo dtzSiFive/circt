@@ -4071,7 +4071,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   emitLocationInfoAndNewLine(ps, ops);
   if (doNotPrint) {
     // reduceIndent();
-    ps << PP::end << "*/" << PP::newline;
+    startStatement();
+    ps << PP::end << "*/";// << PP::newline;
+    setPendingNewline();
     // indent() << "*/\n";
   }
   return success();
@@ -4099,13 +4101,14 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
   startStatement();
   emitComment(ps, op.getCommentAttr());
-  ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
+  // ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
   // TODO: source info!
-  ps << "interface " << PPExtString(getSymOpName(op)) << ";" << PP::newline;
+  ps << "interface " << PPExtString(getSymOpName(op)) << ";"; //<< PP::newline;
+  setPendingNewline();
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
-  ps << BreakToken(0, -INDENT_AMOUNT);
-  ps << PP::end << "endinterface" << PP::newline << PP::newline;
+  ps << "endinterface" << PP::newline;
+  setPendingNewline();
   return success();
 }
 
@@ -4123,7 +4126,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   ps << PP::nbsp << PPExtString(getSymOpName(op));
   ps.invokeWithStringOS(
       [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
-  ps << ";" << PP::newline;
+  ps << ";";
+  setPendingNewline();
   return success();
 }
 
@@ -4140,7 +4144,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
     ps << PPExtString(getSymOpName(signalDecl));
   });
 
-  ps << ");" << PP::newline;
+  ps << ");";
+  setPendingNewline();
   return success();
 }
 
@@ -4153,7 +4158,8 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   emitExpression(op.getIface(), emitted);
   ps << "." << StringRef(op.getSignalName()) << " = ";
   emitExpression(op.getRhs(), emitted);
-  ps << ";" << PP::newline;
+  ps << ";";
+  setPendingNewline();
   return success();
 }
 
