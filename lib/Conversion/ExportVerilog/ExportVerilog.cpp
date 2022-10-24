@@ -4146,7 +4146,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  emitComment(op.getCommentAttr());
+  emitComment(ps, op.getCommentAttr());
   ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
   ps << "interface " << PPExtString(getSymOpName(op)) << ";" << PP::newline;
   // FIXME: Don't emit the body of this as general statements, they aren't!
