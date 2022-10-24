@@ -3335,7 +3335,8 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
 
   if (needsBeginEnd) {
     indent() << "end";
-    if (count == BlockStatementCount::TwoOrMore && !multiLineComment.empty())
+    // Emit comment if there's an 'end', regardless of line count.
+    if (!multiLineComment.empty())
       os << " // " << multiLineComment;
     os << '\n';
   }
