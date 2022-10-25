@@ -4076,8 +4076,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   emitLocationInfoAndNewLine(ps, ops);
   if (doNotPrint) {
     // reduceIndent();
+    ps << PP::end;
     startStatement();
-    ps << PP::end << "*/";
+    ps << "*/";
     setPendingNewline();
   }
   return success();
