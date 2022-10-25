@@ -3853,19 +3853,14 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  ps << "<<CASEOP>>" << PP::newline;
-  assert(0 && "NYI");
-  return success();
-
-#if 0
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
-  indent();
+  startStatement();
   if (op.getValidationQualifier() !=
       ValidationQualifierTypeEnum::ValidationQualifierPlain)
-    os << circt::sv::stringifyValidationQualifierTypeEnum(
-              op.getValidationQualifier())
-       << " ";
+    ps << PPExtString(circt::sv::stringifyValidationQualifierTypeEnum(
+              op.getValidationQualifier()))
+       << PP::nbsp;
   const char *opname = nullptr;
   switch (op.getCaseStyle()) {
   case CaseStmtType::CaseStmt:
@@ -3878,39 +3873,42 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
     opname = "casez";
     break;
   }
-  os << opname << " (";
+  ps << opname << " (" << PP::ibox0;
   emitExpression(op.getCond(), ops);
-  os << ')';
-  emitLocationInfoAndNewLine(ops);
+  ps << PP::end << ")";
+  emitLocationInfoAndNewLine(ps, ops);
 
-  addIndent();
+  ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
   for (auto &caseInfo : op.getCases()) {
+    startStatement();
     auto &pattern = caseInfo.pattern;
 
     llvm::TypeSwitch<CasePattern *>(pattern.get())
         .Case<CaseBitPattern>([&](auto bitPattern) {
           // TODO: We could emit in hex if/when the size is a multiple of 4 and
           // there are no x's crossing nibble boundaries.
-          indent() << bitPattern->getWidth() << "'b";
-          for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
-            os << getLetter(bitPattern->getBit(e - bit - 1));
+          ps.invokeWithStringOS([&](auto &os) {
+            os << bitPattern->getWidth() << "'b";
+            for (size_t bit = 0, e = bitPattern->getWidth(); bit != e; ++bit)
+              os << getLetter(bitPattern->getBit(e - bit - 1));
+          });
         })
         .Case<CaseEnumPattern>([&](auto enumPattern) {
-          indent() << emitter.fieldNameResolver.getEnumFieldName(
+          ps << emitter.fieldNameResolver.getEnumFieldName(
               enumPattern->attr().template cast<hw::EnumFieldAttr>());
         })
-        .Case<CaseDefaultPattern>([&](auto) { indent() << "default"; })
+        .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
         .Default([&](auto) { assert(false && "unhandled case pattern"); });
 
-    os << ":";
+    ps << ":";
     emitBlockAsStatement(caseInfo.block, emptyOps);
   }
 
-  reduceIndent();
-  indent() << "endcase";
-  emitLocationInfoAndNewLine(ops);
+  ps << PP::end;
+  startStatement();
+  ps << "endcase";
+  emitLocationInfoAndNewLine(ps, ops);
   return success();
-#endif
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
