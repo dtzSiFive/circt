@@ -4166,7 +4166,7 @@ void StmtEmitter::emitStatement(Operation *op) {
     return;
 
   // TODO: Don't box newline?
-  // auto ibox = ps.scopedIBox(INDENT_AMOUNT); // INDENT_AMOUNT, make
+  auto ibox = ps.scopedIBox(INDENT_AMOUNT); // INDENT_AMOUNT, make
   // configurable!
 
   // STATEMENT_START
