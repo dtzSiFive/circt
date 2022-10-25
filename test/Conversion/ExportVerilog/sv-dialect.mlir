@@ -1244,7 +1244,8 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
     // CHECK: [[THING]] = `THING;
     // CHECK: [[THING3]] = 42'([[THING]] + {{..}}31{really_really_long_port[10]}}
     // CHECK-SAME: really_really_long_port})
-    // CHECK: [[MANYTHING]] = [[THING]] | [[THING]] |
+    // CHECK: [[MANYTHING]] =
+    // CHECK-NEXT: [[THING]] | [[THING]] |
 
     // Check the indentation level of temporaries.  Issue #1625
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
@@ -1542,8 +1543,10 @@ hw.module @ProhibitReuseOfExistingInOut(%a: i1) -> (out1: i1) {
 
 // See https://github.com/verilator/verilator/issues/3405.
 // CHECK-LABEL: Verilator3405
-// CHECK-DAG: wire [[GEN0:.+]] = {{.+}} | {{.+}} | {{.+}}
-// CHECK-DAG: wire [[GEN1:.+]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: wire [[GEN0:.+]] =
+// CHECK-DAG-NEXT: {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: wire [[GEN1:.+]] =
+// CHECK-DAG-NEXT: {{.+}} | {{.+}} | {{.+}}
 
 // CHECK: assign out = {[[GEN0]], [[GEN1]]}
 hw.module @Verilator3405(
