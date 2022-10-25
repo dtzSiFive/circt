@@ -15,20 +15,22 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 
 // CHECK-LABEL: module longvariadic
 
-// SHORT:       assign b = a + a + a + a + a + a + a + a + a + a + a
-// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT-NEXT:             a + a + a + a + a + a + a + a + a + a + a
-// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT-NEXT:             a + a + a + a + a + a + a + a + a + a + a
-// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT-NEXT:             a;
+//               ---------------------------------------v
+// SHORT:          assign b =
+// SHORT-NEXT:       a + a + a + a + a + a + a + a + a
+// SHORT-COUNT-6:    + a + a + a + a + a + a + a + a + a
+// SHORT-NEXT:       + a;
 
-// DEFAULT:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT-NEXT:             a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT-NEXT:             a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+//              -----------------------------------------------------------------------------------------v
+// DEFAULT:       assign b =
+// DEFAULT-NEXT:    a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// DEFAULT-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// DEFAULT-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
-// LONG:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
-// LONG-NEXT:             + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+//           -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------v
+// LONG:       assign b =
+// LONG-NEXT:    a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// LONG-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
 // LIMIT_SHORT:       wire [7:0] _GEN = a + a + a + a + a + a + a + a + a + a + a
 // LIMIT_SHORT-NEXT:                       + a + a + a + a + a + a + a + a + a + a +
