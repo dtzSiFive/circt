@@ -2656,7 +2656,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
-  ps << PPExtString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
+  ps << PPSaveString(emitter.fieldNameResolver.getEnumFieldName(op.getField()));
   return {Selection, IsUnsigned};
 }
 
