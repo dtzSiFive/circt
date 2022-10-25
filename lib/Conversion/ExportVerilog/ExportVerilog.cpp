@@ -3793,8 +3793,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
     emitBlockAsStatement(op.getBodyBlock(), ops, comment);
   else {
     ps << " begin";
-    emitLocationInfoAndNewLine(
-        ps, ops);
+    emitLocationInfoAndNewLine(ps, ops);
     // addIndent();
     ps << BeginToken(2, Breaks::Consistent, IndentStyle::Block);
     // indent() << "if (";
