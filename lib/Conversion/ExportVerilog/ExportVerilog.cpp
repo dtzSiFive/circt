@@ -3159,14 +3159,15 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
-  assert(0 && "NYI");
   startStatement();
   auto typescopeDef = ("_TYPESCOPE_" + op.getSymName()).str();
-  indent() << "`ifndef " << typescopeDef << '\n';
-  indent() << "`define " << typescopeDef << '\n';
+  ps << "`ifndef " << typescopeDef << PP::newline;
+  ps << "`define " << typescopeDef;
+  setPendingNewline();
   emitStatementBlock(*op.getBodyBlock());
-  indent() << "`endif // " << typescopeDef << '\n';
-  // TODO: pending newline
+  startStatement();
+  ps <<"`endif // " << typescopeDef;
+  setPendingNewline();
   return success();
 }
 
