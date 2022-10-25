@@ -3378,6 +3378,7 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
   ps << "generate" << PP::newline;
   // ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
   ps << "begin: " << PPExtString(names.addName(op, op.getSymName()));
+  setPendingNewline();
   emitStatementBlock(op.getBody().getBlocks().front());
   // ps << BreakToken(0, -INDENT_AMOUNT); //  << PP::end;
   // ps << PP::end;
@@ -3432,7 +3433,8 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
 
     StringRef legalName = legalizeName(
         caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
-    os << ": begin: " << legalName << "\n";
+    os << ": begin: " << legalName;
+    setPendingNewline();
     emitStatementBlock(region.getBlocks().front());
     indent() << "end: " << legalName << "\n";
   }
