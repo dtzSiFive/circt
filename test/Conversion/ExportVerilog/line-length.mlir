@@ -48,9 +48,10 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // LIMIT_SHORT-NEXT:  assign b = _GEN + _GEN_0;
 
 //                  -----------------------------------------------------------------------------------------v
-// LIMIT_LONG:        assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+// LIMIT_LONG:        assign b =
+// LIMIT_LONG-NEXT:     a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_LONG-NEXT:     + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_LONG-NEXT:     + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
 hw.module @moduleWithComment()
   attributes {comment = "The quick brown fox jumps over the lazy dog.  The quick brown fox jumps over the lazy dog.\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} {}
