@@ -3060,10 +3060,12 @@ LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-
-  ps << "release" << PP::space;
-  emitExpression(op.getDest(), ops);
-  ps << ";";
+  {
+     auto ib = ps.scopedIBox(2);
+     ps << "release" << PP::space;
+     emitExpression(op.getDest(), ops);
+     ps << ";";
+  }
   emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
@@ -3076,12 +3078,15 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-
-  ps << "alias" << PP::space << PP::cbox0;
-  llvm::interleave(
-      op.getOperands(), [&](Value v) { emitExpression(v, ops); },
-      [&]() { ps << PP::nbsp << "=" << PP::space; });
-  ps << ";" << PP::end;
+  {
+    auto ib = ps.scopedIBox(2);
+    ps << "alias" << PP::space;
+    auto cb = ps.scopedCBox(0);
+    llvm::interleave(
+        op.getOperands(), [&](Value v) { emitExpression(v, ops); },
+        [&]() { ps << PP::nbsp << "=" << PP::space; });
+    ps << ";";
+  }
   emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
