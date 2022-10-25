@@ -3179,16 +3179,18 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  auto ib = ps.scopedIBox(2);
-  ps << "typedef" << PP::space;
-  ps.invokeWithStringOS([&](auto &os) {
-    emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
-                            op.getAliasType(), false);
-  });
-  ps << PP::space << PPExtString(op.getPreferredName());
-  ps.invokeWithStringOS(
-      [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
-  ps << ";";
+  {
+    auto ib = ps.scopedIBox(2);
+    ps << "typedef" << PP::space;
+    ps.invokeWithStringOS([&](auto &os) {
+      emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op.getLoc(),
+                              op.getAliasType(), false);
+    });
+    ps << PP::space << PPExtString(op.getPreferredName());
+    ps.invokeWithStringOS(
+        [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
+    ps << ";";
+  }
   emitLocationInfoAndNewLine(ps, ops);
   return success();
 }
@@ -3392,16 +3394,19 @@ LogicalResult StmtEmitter::visitSV(GenerateOp op) {
 
 LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   // TODO: Implement me!
-  assert(0 && "NYI");
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   startStatement();
-  indent() << "case (";
-  emitter.printParamValue(
-      op.getCond(), os, VerilogPrecedence::Selection,
-      [&]() { return op->emitOpError("invalid case parameter"); });
-  os << ")\n";
+  ps << "case (";
+  ps.invokeWithStringOS([&](auto &os) {
+    emitter.printParamValue(
+        op.getCond(), os, VerilogPrecedence::Selection,
+        [&]() { return op->emitOpError("invalid case parameter"); });
+  });
+  ps << ")";
+  setPendingNewline();
+  ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
 
   // Ensure that all of the per-case arrays are the same length.
   ArrayAttr patterns = op.getCasePatterns();
@@ -3410,7 +3415,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   assert(patterns.size() == regions.size());
   assert(patterns.size() == caseNames.size());
 
-  addIndent();
+  // addIndent();
   // TODO: We'll probably need to store the legalized names somewhere for
   // `verbose` formatting. Set up the infra for storing names recursively. Just
   // store this locally for now.
@@ -3423,24 +3428,30 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
     assert(region.hasOneBlock());
     Attribute patternAttr = patterns[i];
 
-    indent();
+    startStatement();
     if (!patternAttr.isa<mlir::TypedAttr>())
-      os << "default";
+      ps << "default";
     else
-      emitter.printParamValue(
-          patternAttr, os, VerilogPrecedence::LowestPrecedence,
-          [&]() { return op->emitOpError("invalid case value"); });
+      ps.invokeWithStringOS([&](auto &os) {
+        emitter.printParamValue(
+            patternAttr, os, VerilogPrecedence::LowestPrecedence,
+            [&]() { return op->emitOpError("invalid case value"); });
+      });
 
     StringRef legalName = legalizeName(
         caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
-    os << ": begin: " << legalName;
+    ps << ": begin: " << legalName; // PPExtString(legalName);
     setPendingNewline();
     emitStatementBlock(region.getBlocks().front());
-    indent() << "end: " << legalName << "\n";
+    startStatement();
+    ps << "end: " << legalName; // PPExtString(legalName);
+    setPendingNewline();
   }
 
-  reduceIndent();
-  indent() << "endcase\n";
+  ps << PP::end;
+  startStatement();
+  ps << "endcase";
+  setPendingNewline();
   return success();
 }
 
