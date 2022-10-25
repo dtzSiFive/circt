@@ -32,14 +32,22 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // LONG-NEXT:    a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
 // LONG-NEXT:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
-// LIMIT_SHORT:       wire [7:0] _GEN = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                       + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                       a + a + a + a + a + a + a + a + a + a + a;
-// LIMIT_SHORT-NEXT:  wire [7:0] _GEN_0 = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                       + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                       a + a + a + a + a + a + a + a + a + a + a;
+//                  ---------------------------------------v
+// LIMIT_SHORT:       wire [7:0] _GEN =
+// LIMIT_SHORT-NEXT:    a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a;
+
+//                  ---------------------------------------v
+// LIMIT_SHORT-NEXT:  wire [7:0] _GEN_0 =
+// LIMIT_SHORT-NEXT:    a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:    + a + a + a + a + a;
 // LIMIT_SHORT-NEXT:  assign b = _GEN + _GEN_0;
 
+//                  -----------------------------------------------------------------------------------------v
 // LIMIT_LONG:        assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
