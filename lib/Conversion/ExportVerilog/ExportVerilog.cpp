@@ -2986,7 +2986,7 @@ void StmtEmitter::emitSVAttributes(Operation *op) {
 
   startStatement(); // For attributes.
   emitSVAttributesImpl(ps, svAttrs);
-  ps << PP::newline;
+  setPendingNewline();
 }
 
 template <typename Op>
@@ -3920,12 +3920,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   startStatement();
   bool doNotPrint = op->hasAttr("doNotPrint");
   if (doNotPrint) {
-    // indent() << "/* This instance is elsewhere emitted as a bind
-    // statement.\n";
     ps << PP::ibox2
        << "/* This instance is elsewhere emitted as a bind statement."
        << PP::newline;
-    // addIndent();
   }
 
   SmallPtrSet<Operation *, 8> ops;
@@ -3952,35 +3949,29 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
       // Handle # if this is the first parameter we're printing.
       if (!printed) {
-        ps << " #(" << BeginToken(2, Breaks::Consistent, IndentStyle::Block)
+        ps << " #(" << BeginToken(2, Breaks::Inconsistent, IndentStyle::Block)
            << PP::newline;
         printed = true;
       } else {
         ps << "," << PP::newline;
       }
-      // os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
-      // os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
       ps << ".";
       ps << PPExtString(
           state.globalNames.getParameterVerilogName(moduleOp, param.getName()));
-      ps << "("; // << PP::ibox0;
+      ps << "(";
       ps.invokeWithStringOS([&](auto &os) {
         emitter.printParamValue(param.getValue(), os, [&]() {
           return op->emitOpError("invalid instance parameter '")
                  << param.getName().getValue() << "' value";
         });
       });
-      // os << ')';
       ps << ")";
     }
     if (printed) {
-      ps << BreakToken(0, -2) << PP::end << ")";
-      // os << '\n';
-      // indent() << ')';
+      ps << PP::end << PP::newline << ")";
     }
   }
 
-  // os << ' ' << names.getName(op) << " (";
   ps << PP::nbsp << PPExtString(names.getName(op)) << " (";
 
   SmallVector<PortInfo> portInfo = getAllModulePortInfos(op);
@@ -4030,10 +4021,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       if (shouldPrintComma)
         ps << ",";
     }
-    emitLocationInfoAndNewLine(ps, ops, true, false);
+    emitLocationInfoAndNewLine(ps, ops);
 
     // Emit the port's name.
-    // indent();
+    startStatement();
     if (!isZeroWidth) {
       // If this is a real port we're printing, then it isn't the first one. Any
       // subsequent ones will need a comma.
@@ -4077,18 +4068,17 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     ps << PP::end /* << PP::zerobreak */ << PP::end << ")";
   }
   if (!isFirst || isZeroWidth) {
-    emitLocationInfoAndNewLine(ps, ops, true, false);
+    emitLocationInfoAndNewLine(ps, ops);
     ops.clear();
-    // indent();
+    startStatement();
   }
   ps << ");";
   emitLocationInfoAndNewLine(ps, ops);
   if (doNotPrint) {
     // reduceIndent();
     startStatement();
-    ps << PP::end << "*/"; // << PP::newline;
+    ps << PP::end << "*/";
     setPendingNewline();
-    // indent() << "*/\n";
   }
   return success();
 }
