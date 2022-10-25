@@ -2793,10 +2793,8 @@ public:
   /// of any emitted expressions in the specified set.
   StmtEmitter(ModuleEmitter &emitter, llvm::raw_ostream &os,
               ModuleNameManager &names)
-      : EmitterBase(emitter.state, os), emitter(emitter),
-        names(names),
-        pp(os, state.options.emittedLineLength,
-           state.currentIndent),
+      : EmitterBase(emitter.state, os), emitter(emitter), names(names),
+        pp(os, state.options.emittedLineLength, state.currentIndent),
         ps(pp, saver) {
     pp.setListener(&saver);
   };
@@ -2833,10 +2831,10 @@ private:
       ps << PP::eof;
     if (!locInfo.empty())
       ps << "\t// " << locInfo;
-   if (pending) {
-     setPendingNewline();
-   } else
-     ps << PP::newline;
+    if (pending) {
+      setPendingNewline();
+    } else
+      ps << PP::newline;
   }
 
   /// If previous emission requires a newline, emit it now.
@@ -3561,8 +3559,8 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
     ps << "`ifndef " << ident;
   else
     ps << "`ifdef " << ident;
-  // auto box = BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
-  // ps.addToken(box);
+  // auto box = BeginToken(INDENT_AMOUNT, Breaks::Consistent,
+  // IndentStyle::Block); ps.addToken(box);
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -3607,13 +3605,12 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
     ps << " begin";
 
   // TODO: Handle this better w/location info....
-  // ASSUME CBOX? :( 
+  // ASSUME CBOX? :(
   // ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
   emitLocationInfoAndNewLine(ps, locationOps);
 
   if (count != BlockStatementCount::Zero)
     emitStatementBlock(*block);
-
 
   // Close
   // ps << BreakToken(0, -INDENT_AMOUNT) << PP::end;
@@ -3627,7 +3624,6 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
     // ps << PP::newline;
     setPendingNewline();
   }
-
 }
 
 LogicalResult StmtEmitter::visitSV(OrderedOutputOp ooop) {
@@ -4072,7 +4068,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   if (doNotPrint) {
     // reduceIndent();
     startStatement();
-    ps << PP::end << "*/";// << PP::newline;
+    ps << PP::end << "*/"; // << PP::newline;
     setPendingNewline();
     // indent() << "*/\n";
   }
@@ -4433,9 +4429,10 @@ void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
 void StmtEmitter::emitStatementBlock(Block &body) {
   // TODO: rework, this is awkward w/PP re:begin/end/indent and newlines.
 
-   auto boxed = pendingNewline;
-   if (boxed) ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
-     //auto cb = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
+  auto boxed = pendingNewline;
+  if (boxed)
+    ps << BeginToken(INDENT_AMOUNT, Breaks::Consistent, IndentStyle::Block);
+  // auto cb = ps.scopedCBox(INDENT_AMOUNT, IndentStyle::Block);
   // ps.ibox(INDENT_AMOUNT, IndentStyle::Block);
   // addIndent();
   // ps << PP::newline; // force
@@ -4458,7 +4455,8 @@ void StmtEmitter::emitStatementBlock(Block &body) {
     emitStatement(&op);
   }
 
-  if (boxed) ps << PP::end;
+  if (boxed)
+    ps << PP::end;
   // force
   // ps << PP::end << PP::newline;
   // reduceIndent();
