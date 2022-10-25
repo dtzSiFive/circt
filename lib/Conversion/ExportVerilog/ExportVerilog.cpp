@@ -3313,7 +3313,7 @@ LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
   // verbosity and that verbosity is present, print the parenthesized parameter
   // list.
   if ((verbosity && *verbosity != 1) || message) {
-    ps << "(";
+    ps << "(" << PP::ibox0;
 
     // If the operation takes a verbosity, print it if it is set, or print the
     // default "1".
@@ -3332,7 +3332,7 @@ LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
       }
     }
 
-    ps << ")";
+    ps << ")" << PP::end;
   }
 
   ps << ";";
@@ -3462,6 +3462,7 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
   if (!message)
     return;
   ps << " else $error(";
+  auto ib = ps.scopedIBox(0);
   ps.writeQuotedEscaped(message.getValue());
   // TODO: box, break/wrap behavior!
   for (auto arg : args) {
@@ -4165,8 +4166,6 @@ void StmtEmitter::emitStatement(Operation *op) {
   if (isVerilogExpression(op))
     return;
 
-  // TODO: Don't box newline?
-  auto ibox = ps.scopedIBox(INDENT_AMOUNT); // INDENT_AMOUNT, make
   // configurable!
 
   // STATEMENT_START
