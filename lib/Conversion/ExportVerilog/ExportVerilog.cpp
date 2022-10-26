@@ -3165,6 +3165,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   startStatement();
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+  ps << BeginToken(0, Breaks::Never);
 
   // Drop an extraneous \n off the end of the string if present.
   StringRef string = op.getFormatString();
@@ -3182,7 +3183,9 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
     if (isFirst)
       isFirst = false;
     else {
+      ps << PP::end;
       ps << PP::newline;
+      ps << BeginToken(0, Breaks::Never);
     }
 
     // Emit each chunk of the line.
@@ -3192,6 +3195,8 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
         names);
     string = lhsRhs.second;
   }
+
+  ps << PP::end;
 
   emitLocationInfoAndNewLine(ops);
   return success();
