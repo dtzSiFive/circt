@@ -4247,8 +4247,11 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       ps << " /* inner_sym: " << PPExtString(sym.getValue()) << " */";
   }
 
+  // Temporary workaround for wrapping in commented-out lines.
+  auto space = isZeroBitType(type) ? PP::nbsp : PP::space;
+
   if (auto localparam = dyn_cast<LocalParamOp>(op)) {
-    ps << PP::space << "=" << PP::space;
+    ps << space << "=" << space;
     ps.invokeWithStringOS([&](auto &os) {
       emitter.printParamValue(localparam.getValue(), os, [&]() {
         return op->emitOpError("invalid localparam value");
@@ -4267,7 +4270,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       // next to the operation.
       if (!source || isa<ConstantOp>(source) ||
           op->getNextNode() == singleAssign) {
-        ps << PP::space << "=" << PP::space << PP::ibox0;
+        ps << space << "=" << space << PP::ibox0;
         emitExpression(singleAssign.getSrc(), opsForLocation);
         ps << PP::end;
         emitter.assignsInlined.insert(singleAssign);
@@ -4286,7 +4289,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
         // validity by `isExpressionEmittedInlineIntoProceduralDeclaration`.
         if (!source || isa<ConstantOp>(source) ||
             isExpressionEmittedInlineIntoProceduralDeclaration(source, *this)) {
-          ps << PP::space << "=" << PP::space << PP::ibox0;
+          ps << space << "=" << space << PP::ibox0;
           emitExpression(singleAssign.getSrc(), opsForLocation);
           ps << PP::end;
           // Remember that the assignment and logic op are emitted into decl.
