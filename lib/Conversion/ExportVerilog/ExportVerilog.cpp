@@ -2436,9 +2436,11 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
     // Emit the index expression as a comment for tracability (all other i0
     // values referenced within the index expression will similarly be commented
     // out).
+    ps << BeginToken(0, Breaks::Never);
     ps << "/*Zero width: ";
     emitSubExpr(op.getIndex(), LowestPrecedence);
     ps << "*/ 1\'b0";
+    ps << PP::end;
   } else
     emitSubExpr(op.getIndex(), LowestPrecedence);
   ps << "]";
@@ -3075,20 +3077,19 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 
     startStatement();
     ps << PP::ibox2;
-    // TODO: What if RHS expr wraps? ( https://github.com/llvm/circt/issues/4182
-    // ).
-    auto space = PP::space;
     if (isZeroBitType(port.type)) {
+      ps << BeginToken(0, Breaks::Never);
       ps << "// Zero width: ";
-      space = PP::nbsp; // Don't wrap this portion, expr may wrap.
     }
     // TODO: Close emitAssignLike...
-    ps << "assign" << space;
+    ps << "assign" << PP::space;
     ps << PPExtString(getPortVerilogName(parent, port));
-    ps << space << "=" << space;
+    ps << PP::space << "=" << PP::space;
     ps << PP::ibox0;
     emitExpression(operand, ops);
     ps << ";" << PP::end << PP::end;
+    if (isZeroBitType(port.type))
+      ps << PP::end; // Close never-break group.
     emitLocationInfoAndNewLine(ops);
 
     ++operandIndex;
@@ -3930,7 +3931,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     } else {
       // We comment out zero width ports, so their presence and initializer
       // expressions are still emitted textually.
-      // TODO: NO WRAP ALLOWED!
+      ps << BeginToken(0, Breaks::Never);
       ps << "//";
     }
 
@@ -3960,6 +3961,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       portVal = getWireForValue(portVal);
       emitExpression(portVal, ops);
     }
+    if (isZeroWidth)
+      ps << PP::end; // Close never-break group.
     ps << PP::end << PP::end << ")";
   }
   if (!isFirst || isZeroWidth) {
@@ -4017,7 +4020,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
 
   startStatement();
   if (isZeroBitType(op.getType()))
-    ps << "// ";
+    ps << BeginToken(0, Breaks::Never) << "// ";
   ps.invokeWithStringOS([&](auto &os) {
     emitter.printPackedType(stripUnpackedTypes(op.getType()), os, op->getLoc(),
                             Type(), false);
@@ -4026,6 +4029,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   ps.invokeWithStringOS(
       [&](auto &os) { emitter.printUnpackedTypePostfix(op.getType(), os); });
   ps << ";";
+  if (isZeroBitType(op.getType()))
+    ps << PP::end; // Close never-break group.
   setPendingNewline();
   return success();
 }
@@ -4217,8 +4222,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     auto extraIndent = word.empty() ? 0 : 1;
     ps.spaces(maxDeclNameWidth - word.size() + extraIndent);
   } else {
-    // TODO: Comment out entire decl if wraps ?!.
-    ps << "// Zero width: " << PPExtString(word) << PP::nbsp;
+    ps << BeginToken(0, Breaks::Never) << "// Zero width: " << PPExtString(word)
+       << PP::space;
   }
 
   SmallString<8> typeString;
@@ -4252,11 +4257,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       ps << " /* inner_sym: " << PPExtString(sym.getValue()) << " */";
   }
 
-  // Temporary workaround for wrapping in commented-out lines.
-  auto space = isZeroBitType(type) ? PP::nbsp : PP::space;
-
   if (auto localparam = dyn_cast<LocalParamOp>(op)) {
-    ps << space << "=" << space;
+    ps << PP::space << "=" << PP::space;
     ps.invokeWithStringOS([&](auto &os) {
       emitter.printParamValue(localparam.getValue(), os, [&]() {
         return op->emitOpError("invalid localparam value");
@@ -4275,7 +4277,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       // next to the operation.
       if (!source || isa<ConstantOp>(source) ||
           op->getNextNode() == singleAssign) {
-        ps << space << "=" << space << PP::ibox0;
+        ps << PP::space << "=" << PP::space << PP::ibox0;
         emitExpression(singleAssign.getSrc(), opsForLocation);
         ps << PP::end;
         emitter.assignsInlined.insert(singleAssign);
@@ -4294,7 +4296,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
         // validity by `isExpressionEmittedInlineIntoProceduralDeclaration`.
         if (!source || isa<ConstantOp>(source) ||
             isExpressionEmittedInlineIntoProceduralDeclaration(source, *this)) {
-          ps << space << "=" << space << PP::ibox0;
+          ps << PP::space << "=" << PP::space << PP::ibox0;
           emitExpression(singleAssign.getSrc(), opsForLocation);
           ps << PP::end;
           // Remember that the assignment and logic op are emitted into decl.
@@ -4304,8 +4306,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       }
     }
   }
-  if (!isZeroBitType(type))
-    ps << PP::end;
+  ps << PP::end; // Close group: ibox2 normally, never-break for zero-width.
 
   ps << ";";
   emitLocationInfoAndNewLine(opsForLocation);
@@ -4447,7 +4448,7 @@ void ModuleEmitter::emitBind(BindOp op) {
     } else {
       // We comment out zero width ports, so their presence and initializer
       // expressions are still emitted textually.
-      ps << "//";
+      ps << BeginToken(0, Breaks::Never) << "//";
     }
 
     ps << "." << elt.getName();
@@ -4458,6 +4459,9 @@ void ModuleEmitter::emitBind(BindOp op) {
     auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
     assert(!name.empty() && "bind port connection must have a name");
     ps << name << ")";
+
+    if (isZeroWidth)
+      ps << PP::end; // Close never-break group.
   }
   if (!isFirst)
     ps << PP::newline;
@@ -4693,6 +4697,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     bool isZeroWidth = false;
     if (hasZeroWidth) {
       isZeroWidth = isZeroBitType(portType);
+      if (isZeroWidth)
+        ps << BeginToken(0, Breaks::Never);
       ps << (isZeroWidth ? "// " : "   ");
     }
 
@@ -4728,6 +4734,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       ps << " /* inner_sym: " << portInfo[portIdx].sym.getValue() << " */";
 
     ++portIdx;
+
+    if (isZeroWidth)
+      ps << PP::end; // Close never-break group.
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list one per line.
