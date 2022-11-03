@@ -3402,48 +3402,47 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   });
   ps << ")";
   setPendingNewline();
-  ps << BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block);
+  ps.scopedBox(
+      BeginToken(indentAmount, Breaks::Consistent, IndentStyle::Block), [&]() {
+        // Ensure that all of the per-case arrays are the same length.
+        ArrayAttr patterns = op.getCasePatterns();
+        ArrayAttr caseNames = op.getCaseNames();
+        MutableArrayRef<Region> regions = op.getCaseRegions();
+        assert(patterns.size() == regions.size());
+        assert(patterns.size() == caseNames.size());
 
-  // Ensure that all of the per-case arrays are the same length.
-  ArrayAttr patterns = op.getCasePatterns();
-  ArrayAttr caseNames = op.getCaseNames();
-  MutableArrayRef<Region> regions = op.getCaseRegions();
-  assert(patterns.size() == regions.size());
-  assert(patterns.size() == caseNames.size());
+        // TODO: We'll probably need to store the legalized names somewhere for
+        // `verbose` formatting. Set up the infra for storing names recursively.
+        // Just store this locally for now.
+        llvm::StringSet<> usedNames;
+        size_t nextGenID = 0;
 
-  // TODO: We'll probably need to store the legalized names somewhere for
-  // `verbose` formatting. Set up the infra for storing names recursively. Just
-  // store this locally for now.
-  llvm::StringSet<> usedNames;
-  size_t nextGenID = 0;
+        // Emit each case.
+        for (size_t i = 0, e = patterns.size(); i < e; ++i) {
+          auto &region = regions[i];
+          assert(region.hasOneBlock());
+          Attribute patternAttr = patterns[i];
 
-  // Emit each case.
-  for (size_t i = 0, e = patterns.size(); i < e; ++i) {
-    auto &region = regions[i];
-    assert(region.hasOneBlock());
-    Attribute patternAttr = patterns[i];
+          startStatement();
+          if (!patternAttr.isa<mlir::TypedAttr>())
+            ps << "default";
+          else
+            ps.invokeWithStringOS([&](auto &os) {
+              emitter.printParamValue(
+                  patternAttr, os, VerilogPrecedence::LowestPrecedence,
+                  [&]() { return op->emitOpError("invalid case value"); });
+            });
 
-    startStatement();
-    if (!patternAttr.isa<mlir::TypedAttr>())
-      ps << "default";
-    else
-      ps.invokeWithStringOS([&](auto &os) {
-        emitter.printParamValue(
-            patternAttr, os, VerilogPrecedence::LowestPrecedence,
-            [&]() { return op->emitOpError("invalid case value"); });
+          StringRef legalName = legalizeName(
+              caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
+          ps << ": begin: " << PPExtString(legalName);
+          setPendingNewline();
+          emitStatementBlock(region.getBlocks().front());
+          startStatement();
+          ps << "end: " << PPExtString(legalName);
+          setPendingNewline();
+        }
       });
-
-    StringRef legalName = legalizeName(
-        caseNames[i].cast<StringAttr>().getValue(), usedNames, nextGenID);
-    ps << ": begin: " << PPExtString(legalName);
-    setPendingNewline();
-    emitStatementBlock(region.getBlocks().front());
-    startStatement();
-    ps << "end: " << PPExtString(legalName);
-    setPendingNewline();
-  }
-
-  ps << PP::end;
   startStatement();
   ps << "endcase";
   setPendingNewline();
