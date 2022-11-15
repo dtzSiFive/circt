@@ -1505,6 +1505,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitExpr(VectorCreateOp op);
   LogicalResult visitExpr(BundleCreateOp op);
+  LogicalResult visitExpr(AggregateConstantOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -2545,6 +2546,26 @@ LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
     operands.push_back(val);
   }
   return setLoweringTo<hw::StructCreateOp>(op, resultType, operands);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
+  auto resultType = lowerType(op.getResult().getType());
+  auto vec = op.getType().dyn_cast<FVectorType>();
+  // Currently we only support 1d vector types.
+  if (!vec || !vec.getElementType().isa<IntType>()) {
+    op.emitError()
+        << "has an unsupported type; currently we only support 1d vectors";
+    return failure();
+  }
+
+  // TODO: Use hw aggregate constant
+  SmallVector<Value> operands;
+  // Make sure to reverse the operands.
+  for (auto elem : llvm::reverse(op.getFields()))
+    operands.push_back(
+        getOrCreateIntConstant(elem.cast<IntegerAttr>().getValue()));
+
+  return setLoweringTo<hw::ArrayCreateOp>(op, resultType, operands);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3881,6 +3902,8 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     message = opMessageAttr;
     for (auto operand : opOperands) {
       auto loweredValue = getLoweredValue(operand);
+      if (!loweredValue)
+        return failure();
       // Wrap any message ops in $sampled() to guarantee that these will print
       // with the same value as when the assertion triggers.  (See SystemVerilog
       // 2017 spec section 16.9.3 for more information.)  The custom
