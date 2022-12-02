@@ -92,15 +92,15 @@ struct SignalMapping {
 };
 
 /// A helper structure that collects the data necessary to generate the signal
-/// mappings module for an existing `FModuleOp` in the IR.
+/// mappings module for an existing `FModuleLike` in the IR.
 struct ModuleSignalMappings {
-  ModuleSignalMappings(FModuleOp module) : module(module) {}
+  ModuleSignalMappings(FModuleLike module) : module(module) {}
   void run();
   void addTarget(Value value, Annotation anno);
   FModuleOp emitMappingsModule();
   void instantiateMappingsModule(FModuleOp mappingsModule);
 
-  FModuleOp module;
+  FModuleLike module;
   bool allAnalysesPreserved = true;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
@@ -262,15 +262,20 @@ LogicalResult circt::firrtl::applyGCTSignalMappings(const AnnoPathValue &target,
 /// If the module is the "remote" (main) circuit, gather those mappings for use
 /// handling forced ports and creating updated mappings.
 void ModuleSignalMappings::run() {
+  StringRef moduleName =
+      TypeSwitch<FModuleLike, StringRef>(module)
+          .Case<FModuleOp>([](auto mod) { return mod.getName(); })
+          .Case<FExtModuleOp>([](auto mod) { return mod.getName(); });
+
   // Check whether this module has any `SignalDriverAnnotation.module`s. These
   // indicate whether the module contains any operations with such annotations
   // and requires processing.
   if (!AnnotationSet::removeAnnotations(module, signalDriverModuleAnnoClass)) {
-    LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
+    LLVM_DEBUG(llvm::dbgs() << "Skipping `" << moduleName
                             << "` (has no annotations)\n");
     return;
   }
-  LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
+  LLVM_DEBUG(llvm::dbgs() << "Running on module `" << moduleName
                           << "`\n");
 
   // Gather the `SignalDriverAnnotation.target`s on the ports of this module.
@@ -314,7 +319,7 @@ void ModuleSignalMappings::run() {
 
   // If there aren't any local-side (subcircuit-side) mappings, we're done.
   if (localMappings.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
+    LLVM_DEBUG(llvm::dbgs() << "Skipping `" << moduleName
                             << "` (has no non-zero sources or sinks)\n");
     return;
   }
@@ -330,7 +335,7 @@ void ModuleSignalMappings::run() {
   // Pick a name for the module that implements the signal mappings.
   CircuitNamespace circuitNamespace(module->getParentOfType<CircuitOp>());
   mappingsModuleName =
-      circuitNamespace.newName(Twine(module.getName()) + "_signal_mappings");
+      circuitNamespace.newName(Twine(moduleName) + "_signal_mappings");
 
   // Generate the mappings module.
   auto mappingsModule = emitMappingsModule();
