@@ -1,6 +1,10 @@
 ; Main circuit ("remote")
 
 circuit Top :
+  extmodule Ext :
+    input clock : Clock
+    output data : UInt<1>
+
   module Bar :
     input a: UInt
     input b: UInt
@@ -36,3 +40,6 @@ circuit Top :
     foo.reset <= reset
     foo.dataIn <- dataIn
     zu <= and(foo.dataOut.x.y.z, foo.dataOut.u)
+
+    inst ext of Ext
+    ext.clock is invalid

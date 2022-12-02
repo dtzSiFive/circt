@@ -4,14 +4,14 @@ circuit Sub :
   extmodule SubExtern :
     input clockIn : Clock
     output clockOut : Clock
-    input someInput : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
-    output someOutput : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
+    input someInput : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2], x: UInt<1> }
+    output someOutput : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2], x: UInt<1> }
 
   module Sub :
     wire clock_source : Clock
     wire clock_sink : Clock
-    wire data_source : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
-    wire data_sink : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
+    wire data_source : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2], x: UInt<1> }
+    wire data_sink : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2], x: UInt<1> }
     clock_source is invalid
     data_source is invalid
 

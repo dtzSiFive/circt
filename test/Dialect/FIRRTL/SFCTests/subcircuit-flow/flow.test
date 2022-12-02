@@ -19,10 +19,12 @@
 ; JSONDEFAULT{LITERAL}:   "_1": "~Top|Foo>dataIn_a_b_c",
 ; JSONDEFAULT{LITERAL}:   "_1": "~Top|Foo>dataIn_d",
 ; JSONDEFAULT{LITERAL}:   "_1": "~Top|Bar>b",
+; JSONDEFAULT{LITERAL}:   "_1": "~Top|Ext>clock",
 ; JSONDEFAULT-LABEL:    "sourceTargets"
 ; JSONDEFAULT{LITERAL}:   "_1": "~Top|Top>clock",
 ; JSONDEFAULT{LITERAL}:   "_1": "~Top|Foo>dataOut_x_y_z",
 ; JSONDEFAULT{LITERAL}:   "_1": "~Top|Foo>dataOut_w",
+; JSONDEFAULT{LITERAL}:   "_1": "~Top|Ext>data",
 ; JSONDEFAULT:          "circuit"
 ; JSONDEFAULT:          "annotations": []
 ; JSONDEFAULT:          "circuitPackage": "flowtest"
@@ -33,10 +35,12 @@
 ; JSONINLINE{LITERAL}:    "_1": "~Top|Top>foo_dataIn_a_b_c",
 ; JSONINLINE{LITERAL}:    "_1": "~Top|Top>foo_dataIn_d",
 ; JSONINLINE{LITERAL}:    "_1": "~Top|Bar>b",
+; JSONDEFAULT{LITERAL}:   "_1": "~Top|Ext>clock",
 ; JSONINLINE-LABEL:     "sourceTargets"
 ; JSONINLINE{LITERAL}:    "_1": "~Top|Top>clock",
 ; JSONINLINE{LITERAL}:    "_1": "~Top|Top>foo_dataOut_x_y_z",
 ; JSONINLINE{LITERAL}:    "_1": "~Top|Top>foo_dataOut_w",
+; JSONDEFAULT{LITERAL}:   "_1": "~Top|Ext>data",
 ; JSONINLINE:           "circuit"
 ; JSONINLINE:           "annotations": []
 ; JSONINLINE:           "circuitPackage": "flowtest"

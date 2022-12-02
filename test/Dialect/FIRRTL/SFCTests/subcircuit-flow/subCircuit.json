@@ -17,6 +17,10 @@
       {
         "_1": "~Top|Bar>b",
         "_2": "~Sub|Sub>data_sink.w"
+      },
+      {
+        "_1": "~Top|Ext>clock",
+        "_2": "~Sub|Sub>clock_sink"
       }
     ],
     "sourceTargets": [
@@ -31,6 +35,10 @@
       {
         "_1": "~Top|Foo>dataOut.w",
         "_2": "~Sub|Sub>data_source.v"
+      },
+      {
+        "_1": "~Top|Ext>data",
+        "_2": "~Sub|Sub>data_source.x"
       }
     ],
     "circuit": "circuit empty :\n  module empty :\n\n    skip\n",
