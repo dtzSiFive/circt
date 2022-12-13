@@ -302,7 +302,7 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
       addValueName(arguments[i], port.name);
     os << port.name.getValue() << " : ";
     emitType(port.type);
-    os << "\n";
+    emitLocationAndNewLine(port.loc);
   }
 }
 
