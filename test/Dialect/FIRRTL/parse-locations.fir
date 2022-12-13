@@ -2,7 +2,7 @@
 
 circuit MyModule :  @[CIRCUIT.scala 127]
 
-  ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {
+  ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint loc("FooBar.scala":369:27), out %out: !firrtl.uint<8> loc("FooBar.scala":369:27)) {
   module MyModule :   @[FooBar.scala 369:27]
     input in: UInt
     output out: UInt<8>
