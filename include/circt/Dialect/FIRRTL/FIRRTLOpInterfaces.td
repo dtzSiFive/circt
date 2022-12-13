@@ -211,6 +211,37 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     //===------------------------------------------------------------------===//
+    // Port Location Information
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get a port's location information", "Location",
+    "getPortLocation", (ins "size_t":$portIndex)>,
+
+    InterfaceMethod<"Set a port's location information", "void",
+    "setPortLocation", (ins "size_t":$portIndex, "Location":$loc)>,
+
+    InterfaceMethod<"Get locations for all ports", "SmallVector<Location>",
+    "getPortLocations", (ins), [{}], /*defaultImplementation=*/[{
+      // Leverage getPortLocation for simple implementation.
+      // Should be overridden to be more efficient where applicable.
+      SmallVector<Location> locs;
+      locs.reserve($_op.getNumPorts());
+      for (auto i : llvm::seq<size_t>(0, $_op.getNumPorts()))
+       locs[i] = $_op.getPortLocation(i);
+      return locs;
+    }]>,
+
+    InterfaceMethod<"Set locations for all ports", "void",
+    "setPortLocations", (ins "ArrayRef<Location>":$locs), [{}],
+    /*defaultImplementation=*/[{
+     // Leverage setPortLocation for simple implementation.
+     // Should be overridden to be more efficient where applicable.
+     assert(locs.size() == $_op.getNumPorts());
+     for (auto loc : llvm::enumerate(locs))
+       $_op.setPortLocation(loc.index(), loc.value());
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
 

@@ -480,6 +480,32 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
+Location FModuleOp::getPortLocation(size_t portIndex) {
+  return getArgument(portIndex).getLoc();
+}
+
+void FModuleOp::setPortLocation(size_t portIndex, Location loc) {
+  getArgument(portIndex).setLoc(loc);
+}
+
+Location FMemModuleOp::getPortLocation(size_t portIndex) {
+  // No port location information, return op location.
+  return getLoc();
+}
+
+void FMemModuleOp::setPortLocation(size_t portIndex, Location loc) {
+  assert(0 && "NYI!");
+}
+
+Location FExtModuleOp::getPortLocation(size_t portIndex) {
+  // No port location information, return op location.
+  return getLoc();
+}
+
+void FExtModuleOp::setPortLocation(size_t portIndex, Location loc) {
+  assert(0 && "NYI!");
+}
+
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
