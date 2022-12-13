@@ -227,7 +227,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       SmallVector<Location> locs;
       locs.reserve($_op.getNumPorts());
       for (auto i : llvm::seq<size_t>(0, $_op.getNumPorts()))
-       locs[i] = $_op.getPortLocation(i);
+       locs.push_back($_op.getPortLocation(i));
       return locs;
     }]>,
 
