@@ -824,9 +824,13 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
                  SmallVectorImpl<Attribute> &portNames,
                  SmallVectorImpl<Attribute> &portTypes,
                  SmallVectorImpl<Attribute> &portAnnotations,
-                 SmallVectorImpl<Attribute> &portSyms) {
+                 SmallVectorImpl<Attribute> &portSyms,
+                 SmallVectorImpl<Location> &portLocs) {
   auto *context = parser.getContext();
 
+  mlir::SMLoc loc = parser.getCurrentLocation();
+  Location curLoc = parser.getEncodedSourceLoc(loc);
+  
   auto parseArgument = [&]() -> ParseResult {
     // Parse port direction.
     if (succeeded(parser.parseOptionalKeyword("out")))
@@ -888,7 +892,13 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       return failure();
     portAnnotations.push_back(annos);
 
-    return success();
+   // Parse optional location information.
+   Optional<Location> portLoc;
+   if (parser.parseOptionalLocationSpecifier(portLoc))
+     return failure();
+   portLocs.push_back(portLoc.value_or(curLoc));
+
+   return success();
   };
 
   // Parse all ports.
@@ -1039,8 +1049,9 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
+  SmallVector<Location, 4> portLocs;
   if (parseModulePorts(parser, hasSSAIdentifiers, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms))
+                       portNames, portTypes, portAnnotations, portSyms, portLocs))
     return failure();
 
   // If module attributes are present, parse them.
@@ -1511,6 +1522,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
+  SmallVector<Location, 4> portLocs;
   NameKindEnumAttr nameKind;
 
   if (parser.parseKeywordOrString(&name))
@@ -1528,7 +1540,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false, entryArgs,
                        portDirections, portNames, portTypes, portAnnotations,
-                       portSyms))
+                       portSyms, portLocs))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
