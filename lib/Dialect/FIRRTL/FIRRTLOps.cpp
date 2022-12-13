@@ -436,7 +436,7 @@ LogicalResult CircuitOp::verifyRegions() {
 Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 
 //===----------------------------------------------------------------------===//
-// FExtModuleOp and FModuleOp
+// FExtModuleOp and FModuleOp (TODO: fix this comment)
 //===----------------------------------------------------------------------===//
 
 /// Gather port information for any FModuleLike.
