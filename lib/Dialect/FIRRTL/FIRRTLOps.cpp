@@ -950,7 +950,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
-  SmallVector<StringRef, 4> omittedAttrs = {
+  SmallVector<StringRef, 10> omittedAttrs = {
       "sym_name", "portDirections", "portTypes",       "portAnnotations",
       "portSyms", "parameters",     visibilityAttrName};
 
