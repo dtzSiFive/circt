@@ -792,7 +792,8 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
     }
 
     // Print port location information.
-    p.printOptionalLocationSpecifier(portLocs[i]);
+    if (!portLocs.empty())
+      p.printOptionalLocationSpecifier(portLocs[i]);
   }
 
   p << ')';
