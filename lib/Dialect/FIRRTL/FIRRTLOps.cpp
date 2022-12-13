@@ -439,31 +439,21 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 // FExtModuleOp and FModuleOp
 //===----------------------------------------------------------------------===//
 
-/// This function can extract information about ports from a module and an
-/// extmodule.
-SmallVector<PortInfo> FModuleOp::getPorts() {
+/// Gather port information for any FModuleLike.
+static SmallVector<PortInfo> getPorts(FModuleLike module) {
   SmallVector<PortInfo> results;
-  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
-    results.push_back({getPortNameAttr(i), getPortType(i), getPortDirection(i),
-                       getPortSymbolAttr(i), getArgument(i).getLoc(),
-                       AnnotationSet::forPort(*this, i)});
-  }
+  results.reserve(getNumPorts(module));
+  for (unsigned i = 0, e = getNumPorts(module); i < e; ++i)
+    results.emplace_back(module.getPortNameAttr(i), module.getPortType(i),
+                         module.getPortDirection(i),
+                         cast<hw::HWModuleLike>(*module).getPortSymbolAttr(i),
+                         module.getPortLocation(i),
+                         AnnotationSet::forPort(module, i));
   return results;
 }
 
-/// This function can extract information about ports from a module and an
-/// extmodule or genmodule.
-static SmallVector<PortInfo> getPorts(FModuleLike module) {
-  // FExtModuleOp's don't have block arguments or locations for their ports.
-  auto loc = module->getLoc();
-  SmallVector<PortInfo> results;
-  for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
-    results.push_back({module.getPortNameAttr(i), module.getPortType(i),
-                       module.getPortDirection(i),
-                       cast<hw::HWModuleLike>(*module).getPortSymbolAttr(i),
-                       loc, AnnotationSet::forPort(module, i)});
-  }
-  return results;
+SmallVector<PortInfo> FModuleOp::getPorts() {
+  return ::getPorts(cast<FModuleLike>((Operation *)*this));
 }
 
 SmallVector<PortInfo> FExtModuleOp::getPorts() {
