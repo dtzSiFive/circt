@@ -447,6 +447,7 @@ SmallVector<PortInfo> FModuleOp::getPorts() {
     results.push_back({getPortNameAttr(i), getPortType(i), getPortDirection(i),
                        getPortSymbolAttr(i), getArgument(i).getLoc(),
                        AnnotationSet::forPort(*this, i)});
+    llvm::errs() << "arg: " << getArgument(i).getLoc();
   }
   return results;
 }
@@ -735,7 +736,8 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
                              ArrayRef<Attribute> portNames,
                              ArrayRef<Attribute> portTypes,
                              ArrayRef<Attribute> portAnnotations,
-                             ArrayRef<Attribute> portSyms) {
+                             ArrayRef<Attribute> portSyms,
+                             ArrayRef<Location> portLocs) {
   // When printing port names as SSA values, we can fail to print them
   // identically.
   bool printedNamesDontMatch = false;
@@ -788,6 +790,9 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
       p << " ";
       p.printAttribute(portAnnotations[i]);
     }
+
+    // Print port location information.
+    p.printOptionalLocationSpecifier(portLocs[i]);
   }
 
   p << ')';
@@ -916,7 +921,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
 
   auto needPortNamesAttr = printModulePorts(
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
-      op.getPortAnnotations(), op.getPortSymbols());
+      op.getPortAnnotations(), op.getPortSymbols(), {} /* op.getPortLocations() */);
 
   SmallVector<StringRef, 4> omittedAttrs = {
       "sym_name", "portDirections", "portTypes",       "portAnnotations",
@@ -1474,7 +1479,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
   printModulePorts(p, /*block=*/nullptr, portDirections,
                    getPortNames().getValue(), portTypes,
-                   getPortAnnotations().getValue(), {});
+                   getPortAnnotations().getValue(), /*syms=*/{}, /*locs=*/{});
 }
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
