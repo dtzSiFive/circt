@@ -447,7 +447,6 @@ SmallVector<PortInfo> FModuleOp::getPorts() {
     results.push_back({getPortNameAttr(i), getPortType(i), getPortDirection(i),
                        getPortSymbolAttr(i), getArgument(i).getLoc(),
                        AnnotationSet::forPort(*this, i)});
-    llvm::errs() << "arg: " << getArgument(i).getLoc();
   }
   return results;
 }
