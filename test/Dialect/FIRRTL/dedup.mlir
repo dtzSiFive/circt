@@ -162,7 +162,7 @@ firrtl.module @DontTouch() {
 // CHECK:      firrtl.module private @Bar(
 // CHECK-SAME:   out %auto: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @auto
 // CHECK-SAME:   [{circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
-// CHECK-SAME:    {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]) {
+// CHECK-SAME:    {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]
 firrtl.module private @Bar(out %auto: !firrtl.bundle<a: uint<1>, b: uint<1>> sym @auto
   [{circt.nonlocal = @nla0, circt.fieldID = 1 : i32, class = "firrtl.transforms.DontTouchAnnotation"},
   {circt.fieldID = 2 : i32, class = "firrtl.transforms.DontTouchAnnotation"}]) { }
@@ -180,7 +180,7 @@ firrtl.circuit "PortAnnotations" {
   // CHECK: hw.hierpath private [[NLA0:@nla.*]] [@PortAnnotations::@portannos0, @PortAnnotations0]
   // CHECK: firrtl.module @PortAnnotations0(in %a: !firrtl.uint<1> [
   // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "port0"},
-  // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "port1"}]) {
+  // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "port1"}]
   firrtl.module @PortAnnotations0(in %a : !firrtl.uint<1> [{class = "port0"}]) {
     // CHECK: %bar_r = firrtl.mem
     // CHECK-SAME: portAnnotations =
@@ -408,7 +408,7 @@ firrtl.circuit "ExtModuleTest" {
 firrtl.circuit "Foo"  {
   // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@a]
   hw.hierpath private @nla_1 [@Foo::@b, @B::@b]
-  // CHECK: firrtl.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
+  // CHECK: hw.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}]
   firrtl.extmodule @A(out a: !firrtl.clock)
   firrtl.extmodule @B(out b: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}])
   firrtl.module @Foo() {
