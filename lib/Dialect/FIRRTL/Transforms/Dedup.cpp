@@ -461,7 +461,8 @@ struct Equivalence {
       auto aModule = instanceGraph.getReferencedModule(a);
       auto bModule = instanceGraph.getReferencedModule(b);
       // Create a new error for the submodule.
-      diag.attachNote(std::nullopt)
+      diag.attachNote(FusedLoc::get(aModule.getContext(),
+                                    {aModule.getLoc(), bModule.getLoc()}))
           << "in instance " << a.getNameAttr() << " of " << aName
           << ", and instance " << b.getNameAttr() << " of " << bName;
       check(diag, aModule, bModule);
