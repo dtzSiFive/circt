@@ -2,6 +2,16 @@
 
 circuit Top : %[[
   {
+    "class": "firrtl.passes.wiring.SinkAnnotation",
+    "target": "Top.BlackBox.sink",
+    "pin": "test_pin"
+  },
+  {
+    "class": "firrtl.passes.wiring.SourceAnnotation",
+    "target": "Top.Top.legacy_tap",
+    "pin": "test_pin"
+  },
+  {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
     "keys": [
       {
@@ -55,6 +65,7 @@ circuit Top : %[[
     skip
 
   extmodule BlackBox :
+    input sink : UInt<1>
 
     defname = BlackBox
 
@@ -91,6 +102,9 @@ circuit Top : %[[
 
     wire tap3 : UInt<1>
     tap3 is invalid
+
+    wire legacy_tap : UInt<1>
+    legacy_tap is invalid
 
     inst unsigned of ChildWrapper
 
