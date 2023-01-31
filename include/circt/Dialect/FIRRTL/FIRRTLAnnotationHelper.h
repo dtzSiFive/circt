@@ -245,6 +245,17 @@ struct ModuleModifications {
   SmallVector<uturnPair> uturns;
 };
 
+/// Wiring Problem state.
+struct WiringProblems {
+  /// "Legacy" wiring problems, map from pin to source/sink information.
+  DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
+  SmallVector<WiringProblem> wiringProblems;
+
+  DenseSet<Value> usedValues;
+
+  LogicalResult addLegacyWiringProblem(StringAttr pin, LegacyWiringProblem problem
+}
+
 /// State threaded through functions for resolving and applying annotations.
 struct ApplyState {
   using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
@@ -261,9 +272,6 @@ struct ApplyState {
   InstancePathCache &instancePathCache;
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
-
-  DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
-  SmallVector<WiringProblem> wiringProblems;
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
