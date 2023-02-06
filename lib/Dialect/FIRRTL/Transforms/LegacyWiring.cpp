@@ -89,20 +89,10 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   }
 
   // Handle difference between sinks and sources
-  if (clazz == wiringSourceAnnoClass) {
-    if (state.legacyWiringProblems.find(pin) !=
-        state.legacyWiringProblems.end()) {
-      // Check if existing problem can be updated
-      if (state.legacyWiringProblems[pin].source) {
-        return mlir::emitError(state.circuit.getLoc())
-               << "More than one " << wiringSourceAnnoClass
-               << " defined for pin " << pin;
-      }
-    }
-    state.legacyWiringProblems[pin].source = targetValue;
-  } else if (clazz == wiringSinkAnnoClass) {
-    state.legacyWiringProblems[pin].sinks.push_back(targetValue);
-  }
-
-  return success();
+  assert(clazz == wiringSourceAnnoClass || clazz == wiringSinkAnnoClass);
+  auto sourceOrSinkKind = clazz == wiringSourceAnnoClass
+                              ? WiringProblems::SourceOrSink::Source
+                              : WiringProblems::SourceOrSink::Sink;
+  return state.wiringProblems.addLegacyWiringEndpoint(pin, targetValue,
+                                                      sourceOrSinkKind);
 }

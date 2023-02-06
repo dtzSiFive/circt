@@ -481,7 +481,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
 /// Convert consumed SourceAnnotation and SinkAnnotation into WiringProblems,
 /// using the pin attribute as newNameHint
 LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
-  for (const auto &[name, problem] : state.legacyWiringProblems) {
+  for (const auto &[name, problem] : state.wiringProblems.legacyWiringProblems) {
     if (!problem.source)
       return mlir::emitError(state.circuit.getLoc())
              << "Unable to resolve source for pin: " << name;
@@ -491,8 +491,10 @@ LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
              << "Unable to resolve sink(s) for pin: " << name;
 
     for (const auto &sink : problem.sinks)
-      state.wiringProblems.push_back({problem.source, sink, name.str(),
-                                      WiringProblem::RefTypeUsage::Never});
+      if (failed(state.wiringProblems.addWiringProblem(
+              problem.source, sink, name.str(),
+              WiringProblem::RefTypeUsage::Never)))
+        return failure();
   }
   return success();
 }
@@ -609,7 +611,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
   LLVM_DEBUG({ llvm::dbgs() << "Analyzing wiring problems:\n"; });
   DenseMap<FModuleLike, ModuleModifications> moduleModifications;
   DenseSet<Value> visitedSinks;
-  for (auto &e : llvm::enumerate(state.wiringProblems)) {
+  for (auto &e : llvm::enumerate(state.wiringProblems.wiringProblems)) {
     auto index = e.index();
     auto problem = e.value();
     // This is a unique index that is assigned to this specific wiring problem

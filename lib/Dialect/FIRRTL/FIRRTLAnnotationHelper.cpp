@@ -353,76 +353,6 @@ InstanceOp firrtl::addPortsToModule(
   return clonedInstOnPath;
 }
 
-Value firrtl::borePortsOnPath(
-    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
-    StringRef newNameHint, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCachesInstancePathCache) {
-  // Create connections of the `fromVal` by adding ports through all the
-  // instances of `instancePath`. `instancePath` specifies a path from a source
-  // module through the lcaModule till a target module. source module is the
-  // parent module of `fromval` and target module is the referenced target
-  // module of the last instance in the instancePath.
-
-  // If instancePath empty then just return the `fromVal`.
-  if (instancePath.empty())
-    return fromVal;
-
-  FModuleOp srcModule;
-  if (auto block = fromVal.dyn_cast<BlockArgument>())
-    srcModule = cast<FModuleOp>(block.getOwner()->getParentOp());
-  else
-    srcModule = fromVal.getDefiningOp()->getParentOfType<FModuleOp>();
-
-  // If the `srcModule` is the `lcaModule`, then we only need to drill input
-  // ports starting from the `lcaModule` till the end of `instancePath`. For all
-  // other cases, we start to drill output ports from the `srcModule` till the
-  // `lcaModule`, and then input ports from `lcaModule` till the end of
-  // `instancePath`.
-  Direction dir = Direction::Out;
-  if (srcModule == lcaModule)
-    dir = Direction::In;
-
-  auto valType = fromVal.getType().cast<FIRRTLType>();
-  auto forwardVal = fromVal;
-  for (auto instOnPath : instancePath) {
-    auto referencedModule = cast<FModuleOp>(
-        instancePathcache.instanceGraph.getReferencedModule(instOnPath));
-    unsigned portNo = referencedModule.getNumPorts();
-    // Add a new port to referencedModule, and all its uses/instances.
-    InstanceOp clonedInst = addPortsToModule(
-        referencedModule, instOnPath, valType, dir, newNameHint,
-        instancePathcache, getNamespace, targetCachesInstancePathCache);
-    //  `instOnPath` will be erased and replaced with `clonedInst`. So, there
-    //  should be no more use of `instOnPath`.
-    auto clonedInstRes = clonedInst.getResult(portNo);
-    auto referencedModNewPort = referencedModule.getArgument(portNo);
-    // If out direction, then connect `forwardVal` to the `referencedModNewPort`
-    // (the new port of referenced module) else set the new input port of the
-    // cloned instance with `forwardVal`. If out direction, then set the
-    // `forwardVal` to the result of the cloned instance, else set the
-    // `forwardVal` to the new port of the referenced module.
-    if (dir == Direction::Out) {
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(
-          forwardVal.getLoc(), forwardVal.isa<BlockArgument>()
-                                   ? referencedModule.getBodyBlock()
-                                   : forwardVal.getDefiningOp()->getBlock());
-      builder.create<ConnectOp>(referencedModNewPort, forwardVal);
-      forwardVal = clonedInstRes;
-    } else {
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(clonedInst.getLoc(),
-                                                      clonedInst->getBlock());
-      builder.create<ConnectOp>(clonedInstRes, forwardVal);
-      forwardVal = referencedModNewPort;
-    }
-
-    // Switch direction of reached the `lcaModule`.
-    if (clonedInst->getParentOfType<FModuleOp>() == lcaModule)
-      dir = Direction::In;
-  }
-  return forwardVal;
-}
-
 //===----------------------------------------------------------------------===//
 // AnnoTargetCache
 //===----------------------------------------------------------------------===//
@@ -548,11 +478,15 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // module. This also updates all the instances of the external module.
   // This removes and replaces the instance, and returns the updated
   // instance.
+  // First, check if doing this will break any already-added WiringProblem's.
   modInstance = addPortsToModule(
       mod, modInstance, portRefType, Direction::Out, refName,
       state.instancePathCache,
       [&](FModuleLike mod) -> ModuleNamespace & {
         return state.getNamespace(mod);
+      },
+      [&](const IRMapping &mapping) {
+        return state.wiringProblems.update(mapping);
       },
       &state.targetCaches);
   // Since the instance op generates the RefType output, no need of another
@@ -786,8 +720,9 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
             [&](auto v) { return sinkBuilder.create<AsAsyncResetPrimOp>(v); });
     }
 
-    state.wiringProblems.push_back(
-        {sendVal, sink, "", WiringProblem::RefTypeUsage::Prefer});
+    if (failed(state.wiringProblems.addWiringProblem(sendVal, sink, "",
+                                          WiringProblem::RefTypeUsage::Prefer)))
+      return failure();
   }
 
   return success();
@@ -875,7 +810,40 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
         "cannot generate the MemTap, wiretap Type does not match the memory "
         "type");
   auto sink = wireTarget->ref.getOp()->getResult(0);
-  state.wiringProblems.push_back(
-      {sendVal, sink, "memTap", WiringProblem::RefTypeUsage::Prefer});
+  return state.wiringProblems.addWiringProblem(
+      sendVal, sink, "memTap", WiringProblem::RefTypeUsage::Prefer);
+}
+
+//===----------------------------------------------------------------------===//
+// WiringProblems
+//===----------------------------------------------------------------------===//
+
+LogicalResult WiringProblems::addLegacyWiringEndpoint(StringAttr pin, Value endpoint, SourceOrSink kind) {
+  auto [it, didNotExist] =
+      legacyWiringProblems.try_emplace(pin, LegacyWiringProblem{});
+  // Check if problem exists arleady and can be updated (no source)
+  if (kind == SourceOrSink::Source) {
+    if (!didNotExist && it->second.source)
+      return mlir::emitError(loc) << "More than one " << wiringSourceAnnoClass
+                                  << " defined for pin " << pin;
+    it->second.source = endpoint;
+  } else
+    legacyWiringProblems[pin].sinks.push_back(endpoint);
+
+  usedValues.insert(endpoint);
+  return success();
+}
+
+LogicalResult WiringProblems::update(Va) {
+  for (auto &it : mapping.getValueMap()) {
+  }
+  // auto it = usedValues.find(oldVal);
+  // if (it == usedValues.end() || oldVal == newVal)
+  //   return success();
+
+  // auto
+
+  // usedValues.erase(it);
+  // usedValues.insert(newVal);
   return success();
 }

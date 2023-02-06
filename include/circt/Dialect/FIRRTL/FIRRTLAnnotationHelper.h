@@ -247,14 +247,31 @@ struct ModuleModifications {
 
 /// Wiring Problem state.
 struct WiringProblems {
-  /// "Legacy" wiring problems, map from pin to source/sink information.
+  enum class SourceOrSink { Source, Sink };
+
+  WiringProblems(Location loc) : loc(loc) {};
+
+  /// Location of circuit, for use in emitting errors.
+  Location loc;
+
+  /// "Legacy" wiring problems, map from pin name to source/sink information.
   DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
+  /// Set of Value's in existing problems, for checking before invalidating.
   DenseSet<Value> usedValues;
 
-  LogicalResult addLegacyWiringProblem(StringAttr pin, LegacyWiringProblem problem
-}
+  LogicalResult addLegacyWiringEndpoint(StringAttr pin, Value endpoint, SourceOrSink kind);
+  template <typename... Args>
+  LogicalResult addWiringProblem(Args &&...args) {
+    wiringProblems.push_back({std::forward<Args>(args)...});
+    usedValues.insert(wiringProblems.back().source);
+    usedValues.insert(wiringProblems.back().sink);
+    return success();
+  }
+
+  LogicalResult update(const IRMapping &mapping);
+};
 
 /// State threaded through functions for resolving and applying annotations.
 struct ApplyState {
@@ -272,6 +289,8 @@ struct ApplyState {
   InstancePathCache &instancePathCache;
   DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
   size_t numReusedHierPaths = 0;
+
+   WiringProblems wiringProblems = WiringProblems(circuit.getLoc());
 
   ModuleNamespace &getNamespace(FModuleLike module) {
     auto &ptr = namespaces[module];
@@ -357,17 +376,9 @@ InstanceOp addPortsToModule(
     FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
     StringRef newName, InstancePathCache &instancePathcache,
     llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
+    llvm::function_ref<LogicalResult(Value, Value)> mapValueFn =
+        [](Value, Value) { return success(); },
     CircuitTargetCache *targetCaches = nullptr);
-
-/// Add a port to each instance on the path `instancePath` and forward the
-/// `fromVal` through them. It returns the port added to the last module on the
-/// given path. The module referenced by the first instance on the path must
-/// contain `fromVal`.
-Value borePortsOnPath(
-    SmallVector<InstanceOp> &instancePath, FModuleOp lcaModule, Value fromVal,
-    StringRef newNameHint, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCachesInstancePathCache);
 
 /// Find the lowest-common-ancestor `lcaModule`, between `srcTarget` and
 /// `dstTarget`, and set `pathFromSrcToWire` with the path between them through

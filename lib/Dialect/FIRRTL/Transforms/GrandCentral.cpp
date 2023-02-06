@@ -1075,8 +1075,10 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
 
     // Append this new Wiring Problem to the ApplyState.  The Wiring Problem
     // will be resolved to bore RefType ports before LowerAnnotations finishes.
-    state.wiringProblems.push_back({*source, sink, (path + "__bore").str(),
-                                    WiringProblem::RefTypeUsage::Prefer});
+    if (failed(state.wiringProblems.addWiringProblem(
+            *source, sink, (path + "__bore").str(),
+            WiringProblem::RefTypeUsage::Prefer)))
+      return std::nullopt;
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }
