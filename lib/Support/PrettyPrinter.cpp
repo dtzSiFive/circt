@@ -78,6 +78,7 @@ PrettyPrinter::Listener::~Listener() = default;
 /// Add token for printing.  In Oppen, this is "scan".
 void PrettyPrinter::add(Token t) {
   // Add token to tokens, and add its index to scanStack.
+  llvm::errs() << "add(" << unsigned(t.getKind()) << "): tokenOffset=" << tokenOffset << ", tokens.size(): " << tokens.size() << ", scanStack.size(): " << scanStack.size() << "\n";
   auto addScanToken = [&](auto offset) {
     auto right = tokenOffset + tokens.size();
     scanStack.push_back(right);
@@ -198,6 +199,8 @@ void PrettyPrinter::checkStack() {
 void PrettyPrinter::checkStream() {
   // While buffer needs more than 1 line to print, print and consume.
   assert(!tokens.empty());
+  // llvm::errs() << "checkStream(LT=" << leftTotal << ", RT=" << rightTotal << ", (diff=" << rightTotal - leftTotal << "), space=" << space << ", tokenOffset=" << tokenOffset << ", indent=" << indent << ", pendingIndent=" << pendingIndentation << ")\n";
+  // assert(space >= 0);
   assert(leftTotal >= 0);
   assert(rightTotal >= 0);
   while (rightTotal - leftTotal > space && !tokens.empty()) {
@@ -241,12 +244,14 @@ static uint32_t computeNewIndent(ssize_t newIndent, int32_t offset,
 void PrettyPrinter::print(const FormattedToken &f) {
   llvm::TypeSwitch<const Token *>(&f.token)
       .Case([&](const StringToken *s) {
+        llvm::errs() << "S(" << s->text() << ")\n";
         space -= f.size;
         os.indent(pendingIndentation);
         pendingIndentation = 0;
         os << s->text();
       })
       .Case([&](const BreakToken *b) {
+        llvm::errs() << "B(" << b->offset() << ", " << b->spaces() << ")\n";
         auto &frame = getPrintFrame();
         assert((b->spaces() != kInfinity || alwaysFits == 0) &&
                "newline inside never group");
@@ -254,17 +259,21 @@ void PrettyPrinter::print(const FormattedToken &f) {
             (alwaysFits > 0) || b->neverbreak() ||
             frame.breaks == PrintBreaks::Fits ||
             (frame.breaks == PrintBreaks::Inconsistent && f.size <= space);
+          llvm::errs() << "PRE-BE: indent: " << indent << ", pending: " << pendingIndentation << ", space: " << space << " (fits? " << fits << ", f.size: " << f.size << ", breaks: " << unsigned(frame.breaks) << ")\n";
         if (fits) {
           space -= b->spaces();
           pendingIndentation += b->spaces();
         } else {
           os << "\n";
+          llvm::errs() << "BEFORE: indent: " << indent << ", pending: " << pendingIndentation << ", space: " << space << " (fits? " << fits << ", f.size: " << f.size << ", breaks: " << unsigned(frame.breaks) << ")\n";
           pendingIndentation =
               computeNewIndent(indent, b->offset(), maxStartingIndent);
           space = margin - pendingIndentation;
+          llvm::errs() << "AFTER:  indent: " << indent << ", pending: " << pendingIndentation << ", space: " << space << " (fits? " << fits << ", f.size: " << f.size << ", breaks: " << unsigned(frame.breaks) << ")\n";
         }
       })
       .Case([&](const BeginToken *b) {
+         llvm::errs() << "BEGIN(" << b->offset()  << ", breaks=" << unsigned(b->breaks()) << ", style=" << unsigned(b->style()) << ")\n";
         if (b->breaks() == Breaks::Never) {
           printStack.push_back({0, PrintBreaks::AlwaysFits});
           ++alwaysFits;
@@ -282,6 +291,7 @@ void PrettyPrinter::print(const FormattedToken &f) {
         }
       })
       .Case([&](const EndToken *) {
+        llvm::errs() << "END() (printStack: " << printStack.size() << ")\n";
         assert(!printStack.empty() && "more ends than begins?");
         // Try to tolerate this when assertions are disabled.
         if (printStack.empty())
