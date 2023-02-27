@@ -2270,6 +2270,7 @@ ParseResult FIRStmtParser::parseRefExport() {
   auto startTok = consumeToken(FIRToken::kw_export);
 
   Value probe, target;
+  // TODO: parse "reference" expression helper + target
   if (parseExp(probe, "expected reference expression in 'export'") ||
       parseToken(FIRToken::kw_as,
                  "expected 'as' after export reference expression") ||
@@ -2281,6 +2282,7 @@ ParseResult FIRStmtParser::parseRefExport() {
 
   // TODO: 'probe' should be probe or rwprobe
   auto send = builder.create<RefSendOp>(probe);
+
   // TODO: not normal connect!
   emitConnect(builder, target, send);
 
@@ -2291,6 +2293,7 @@ ParseResult FIRStmtParser::parseRefForward() {
   auto startTok = consumeToken(FIRToken::kw_forward);
 
   Value ref, target;
+  // TODO: parse "reference" expression helper + target
   if (parseExp(ref, "expected reference expression in 'forward'") ||
       parseToken(FIRToken::kw_as,
                  "expected 'as' after forward reference expression") ||
