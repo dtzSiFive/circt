@@ -1186,6 +1186,7 @@ private:
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseRefExport();
   ParseResult parseRefForward();
+  ParseResult parseRefRead(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
 
   // Declarations
@@ -1363,6 +1364,10 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (parsePrimExp(result))
       return failure();
     break;
+
+  case FIRToken::lp_read:
+    // TODO: reject if leading?
+    return parseRefRead(result/*, message*/);
 
   case FIRToken::kw_UInt:
   case FIRToken::kw_SInt:
@@ -2297,6 +2302,22 @@ ParseResult FIRStmtParser::parseRefForward() {
 
   // TODO: not 'connect'
   emitConnect(builder, target, ref);
+
+  return success();
+}
+
+ParseResult FIRStmtParser::parseRefRead(Value &result) {
+  auto startTok = consumeToken(FIRToken::lp_read);
+
+  Value ref;
+  if (parseExp(ref, "expected reference expression in 'read'") ||
+      parseToken(FIRToken::r_paren, "expected ')' in 'read'") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  result = builder.create<RefResolveOp>(ref);
 
   return success();
 }
