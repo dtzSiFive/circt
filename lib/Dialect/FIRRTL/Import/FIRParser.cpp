@@ -641,6 +641,8 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 ///      ::= 'Analog' optional-width
 ///      ::= {' field* '}'
 ///      ::= type '[' intLit ']'
+///      ::= 'Probe' '<' type '>'
+///      ::= 'RWProbe' '<' type '>'
 ///
 /// field: 'flip'? fieldId ':' type
 ///
@@ -683,6 +685,27 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       assert(kind == FIRToken::kw_Analog);
       result = AnalogType::get(getContext(), width);
     }
+    break;
+  }
+
+  case FIRToken::kw_Probe:
+  case FIRToken::kw_RWProbe: {
+    auto kind = getToken().getKind();
+    consumeToken();
+    FIRRTLType type;
+
+    if (parseToken(FIRToken::less, "expected '<' in reference type") ||
+        parseType(type, "expected probe data type") ||
+        parseToken(FIRToken::greater, "expected '>' in reference type"))
+      return failure();
+
+    // TODO: Check if 'type' has reference types, reject if so.
+    // "Base" type is going away.
+    if (kind == FIRToken::kw_Probe)
+      result = RefType::get(cast<FIRRTLBaseType>(type));
+    else
+      return emitError("RWProbe not yet supported");
+
     break;
   }
 
