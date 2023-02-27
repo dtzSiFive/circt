@@ -1184,6 +1184,8 @@ private:
   ParseResult parseAssume();
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
+  ParseResult parseRefExport();
+  ParseResult parseRefForward();
   ParseResult parseLeadingExpStmt(Value lhs);
 
   // Declarations
@@ -1866,6 +1868,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= stop
 ///      ::= when
 ///      ::= leading-exp-stmt
+///      ::= export
+///      ::= forward
 ///
 /// stmt ::= instance
 ///      ::= cmem | smem | mem
@@ -1899,6 +1903,11 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseCover();
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
+  case FIRToken::kw_export:
+    return parseRefExport();
+  case FIRToken::kw_forward:
+    return parseRefForward();
+    
   default: {
     // Statement productions that start with an expression.
     Value lhs;
@@ -2247,6 +2256,48 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
   // info.  It doesn't appear to be generated either.
+  return success();
+}
+
+
+/// export ::= export exp as exp info?
+ParseResult FIRStmtParser::parseRefExport() {
+  auto startTok = consumeToken(FIRToken::kw_export);
+
+  Value probe, target;
+  if (parseExp(probe, "expected reference expression in 'export'") ||
+      parseToken(FIRToken::kw_as,
+                 "expected 'as' after export reference expression") ||
+      parseExp(target, "expected target expression in 'export'") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // TODO: 'probe' should be probe or rwprobe
+  auto send = builder.create<RefSendOp>(probe);
+  // TODO: not normal connect!
+  emitConnect(builder, target, send);
+
+  return success();
+}
+
+ParseResult FIRStmtParser::parseRefForward() {
+  auto startTok = consumeToken(FIRToken::kw_forward);
+
+  Value ref, target;
+  if (parseExp(ref, "expected reference expression in 'forward'") ||
+      parseToken(FIRToken::kw_as,
+                 "expected 'as' after forward reference expression") ||
+      parseExp(target, "expected target expression in 'forward'") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // TODO: not 'connect'
+  emitConnect(builder, target, ref);
+
   return success();
 }
 
