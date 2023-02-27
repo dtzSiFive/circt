@@ -1356,7 +1356,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     // redundant definition of TOK_LPKEYWORD_PRIM which is needed to get
     // around a bug in the MSVC preprocessor to properly paste together the
     // tokens lp_##SPELLING.
-#define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
+#define TOK_LPKEYWORD(SPELLING)
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
   case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
