@@ -2317,6 +2317,14 @@ ParseResult FIRStmtParser::parseRefRead(Value &result) {
 
   locationProcessor.setLoc(startTok.getLoc());
 
+  // Checks:
+  // 1) Ref type argument
+  // 2) statically-indexed ref type argument (verifier?)
+  if (!isa<RefType>(ref.getType()))
+    return emitError(startTok.getLoc(),
+                     "expected reference expression in 'read', got ")
+           << ref.getType();
+
   result = builder.create<RefResolveOp>(ref);
 
   return success();
