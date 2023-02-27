@@ -75,12 +75,11 @@ def AggregateType : FIRRTLDialectType<
 
 def ConnectableType : FIRRTLDialectType<
   Or<[
-    CPred<"$_self.isa<FIRRTLBaseType>()">,
-    CPred<"$_self.isa<RefType>()">,
+    CPred<"$_self.isa<FIRRTLBaseType>()">
     ]>,
-    "a connectable type (base or ref type)", "::circt::firrtl::FIRRTLType", [{
+    "a connectable type (base type)", "::circt::firrtl::FIRRTLType", [{
     Any type that is valid for use in connect statements.
-    Currently this is any base type or ref type.
+    Currently this is any base type.
   }]>;
 
 def SizedBaseOrRefType : FIRRTLDialectType<
