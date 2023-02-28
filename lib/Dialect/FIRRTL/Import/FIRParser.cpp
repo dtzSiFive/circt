@@ -1371,7 +1371,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   case FIRToken::lp_read:
     // TODO: reject if leading?
-    return parseRefRead(result/*, message*/);
+    return parseRefRead(result /*, message*/);
 
   case FIRToken::kw_UInt:
   case FIRToken::kw_SInt:
@@ -1466,10 +1466,10 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
   }
 }
 
-
 template <typename subop>
-FailureOr<Value> FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
-                      unsigned indexNo, SMLoc loc) {
+FailureOr<Value>
+FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
+                                   unsigned indexNo, SMLoc loc) {
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   auto resultType = subop::inferReturnType({base}, attrs, {});
@@ -1506,7 +1506,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     return failure();
   auto bundle =
       dyn_cast<BundleType>(getBaseType(cast<FIRRTLType>(result.getType())));
-  
+
   if (!bundle)
     return emitError(loc, "subfield requires bundle operand ");
   auto indexV = bundle.getElementIndex(fieldName);
@@ -1552,7 +1552,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // builder (https://llvm.discourse.group/t/3504).
   NamedAttribute attrs = {getConstants().indexIdentifier,
                           builder.getI32IntegerAttr(indexNo)};
-  
+
   FailureOr<Value> subResult;
   if (isa<RefType>(result.getType()))
     subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
@@ -1917,7 +1917,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseRefExport();
   case FIRToken::kw_forward:
     return parseRefForward();
-    
+
   default: {
     // Statement productions that start with an expression.
     Value lhs;
@@ -2268,7 +2268,6 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // info.  It doesn't appear to be generated either.
   return success();
 }
-
 
 /// export ::= export exp as exp info?
 ParseResult FIRStmtParser::parseRefExport() {
