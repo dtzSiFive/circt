@@ -1165,6 +1165,10 @@ private:
     return parseExpImpl(result, message, /*isLeadingStmt:*/ true);
   }
 
+  template <typename subop>
+  FailureOr<Value> emitCachedSubAccess(Value base,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       unsigned indexNo, SMLoc loc);
   ParseResult parseOptionalExpPostscript(Value &result);
   ParseResult parsePostFixFieldId(Value &result);
   ParseResult parsePostFixIntSubscript(Value &result);
@@ -1462,6 +1466,35 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result) {
   }
 }
 
+
+template <typename subop>
+FailureOr<Value> FIRStmtParser::emitCachedSubAccess(Value base, ArrayRef<NamedAttribute> attrs,
+                      unsigned indexNo, SMLoc loc) {
+  // Make sure the field name matches up with the input value's type and
+  // compute the result type for the expression.
+  auto resultType = subop::inferReturnType({base}, attrs, {});
+  if (!resultType) {
+    // Emit the error at the right location.  translateLocation is expensive.
+    (void)subop::inferReturnType({base}, attrs, translateLocation(loc));
+    return failure();
+  }
+
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getCachedSubaccess(base, indexNo);
+  if (value)
+    return value;
+
+  // Create the result operation, inserting at the location of the declaration.
+  // This will cache the subfield operation for further uses.
+  locationProcessor.setLoc(loc);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(base);
+  auto op = builder.create<subop>(resultType, base, attrs);
+
+  // Insert the newly created operation into the cache.
+  return value = op.getResult();
+}
+
 /// exp ::= exp '.' fieldId
 ///
 /// The "exp '.'" part of the production has already been parsed.
@@ -1482,53 +1515,20 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
            << result.getType();
   auto indexNo = *indexV;
 
+  FailureOr<Value> subResult;
   if (isa<RefType>(result.getType())) {
     NamedAttribute attrs = {getConstants().indexIdentifier,
                             builder.getI32IntegerAttr(indexNo)};
-    auto resultType = RefSubOp::inferReturnType({result}, attrs, {});
-    if (!resultType) {
-      // Emit the error at the right location.  translateLocation is expensive.
-      (void)RefSubOp::inferReturnType({result}, attrs, translateLocation(loc));
-      return failure();
-    }
-
-    locationProcessor.setLoc(loc);
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointAfterValue(result);
-    auto op = builder.create<RefSubOp>(resultType, result, attrs);
-    result = op.getResult();
-    return success();
+    subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+  } else {
+    NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
+                            builder.getI32IntegerAttr(indexNo)};
+    subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
   }
 
-  // Make sure the field name matches up with the input value's type and
-  // compute the result type for the expression.
-  NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
-                          builder.getI32IntegerAttr(indexNo)};
-  auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
-  if (!resultType) {
-    // Emit the error at the right location.  translateLocation is expensive.
-    (void)SubfieldOp::inferReturnType({result}, attrs, translateLocation(loc));
+  if (failed(subResult))
     return failure();
-  }
-
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
-  if (value) {
-    result = value;
-    return success();
-  }
-
-  // Create the result operation, inserting at the location of the declaration.
-  // This will cache the subfield operation for further uses.
-  locationProcessor.setLoc(loc);
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointAfterValue(result);
-  auto op = builder.create<SubfieldOp>(resultType, result, attrs);
-
-  // Insert the newly creatd operation into the cache.
-  value = op.getResult();
-
-  result = value;
+  result = *subResult;
   return success();
 }
 
@@ -1552,31 +1552,16 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // builder (https://llvm.discourse.group/t/3504).
   NamedAttribute attrs = {getConstants().indexIdentifier,
                           builder.getI32IntegerAttr(indexNo)};
-  auto resultType = SubindexOp::inferReturnType({result}, attrs, {});
-  if (!resultType) {
-    // Emit the error at the right location.  translateLocation is expensive.
-    (void)SubindexOp::inferReturnType({result}, attrs, translateLocation(loc));
+  
+  FailureOr<Value> subResult;
+  if (isa<RefType>(result.getType()))
+    subResult = emitCachedSubAccess<RefSubOp>(result, attrs, indexNo, loc);
+  else
+    subResult = emitCachedSubAccess<SubindexOp>(result, attrs, indexNo, loc);
+
+  if (failed(subResult))
     return failure();
-  }
-
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
-  if (value) {
-    result = value;
-    return success();
-  }
-
-  // Create the result operation, inserting at the location of the declaration.
-  // This will cache the subindex operation for further uses.
-  locationProcessor.setLoc(loc);
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPointAfterValue(result);
-  auto op = builder.create<SubindexOp>(resultType, result, attrs);
-
-  // Insert the newly creatd operation into the cache.
-  value = op.getResult();
-
-  result = value;
+  result = *subResult;
   return success();
 }
 
