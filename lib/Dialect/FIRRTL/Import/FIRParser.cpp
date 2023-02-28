@@ -1471,7 +1471,9 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-  auto bundle = result.getType().dyn_cast<BundleType>();
+  auto bundle =
+      dyn_cast<BundleType>(getBaseType(cast<FIRRTLType>(result.getType())));
+  
   if (!bundle)
     return emitError(loc, "subfield requires bundle operand ");
   auto indexV = bundle.getElementIndex(fieldName);
@@ -1479,6 +1481,24 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
            << result.getType();
   auto indexNo = *indexV;
+
+  if (isa<RefType>(result.getType())) {
+    NamedAttribute attrs = {getConstants().indexIdentifier,
+                            builder.getI32IntegerAttr(indexNo)};
+    auto resultType = RefSubOp::inferReturnType({result}, attrs, {});
+    if (!resultType) {
+      // Emit the error at the right location.  translateLocation is expensive.
+      (void)RefSubOp::inferReturnType({result}, attrs, translateLocation(loc));
+      return failure();
+    }
+
+    locationProcessor.setLoc(loc);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointAfterValue(result);
+    auto op = builder.create<RefSubOp>(resultType, result, attrs);
+    result = op.getResult();
+    return success();
+  }
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
