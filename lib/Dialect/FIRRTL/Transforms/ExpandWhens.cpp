@@ -305,6 +305,11 @@ public:
     setLastConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
+  // TODO: NOT last-connect!
+  void visitStmt(RefAssignOp op) {
+    setLastConnect(getFieldRefFromValue(op.getDest()), op);
+  }
+
   void processWhenOp(WhenOp whenOp, Value outerCondition);
 
   /// Combine the connect statements from each side of the block. There are 5
