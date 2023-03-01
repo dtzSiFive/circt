@@ -871,9 +871,9 @@ bool TypeLoweringVisitor::visitStmt(RefAssignOp op) {
   for (const auto &field : llvm::enumerate(fields)) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
-    if (field.value().isOutput && !op.getDest().getType().isa<RefType>())
-      std::swap(src, dest);
-    builder->create<StrictConnectOp>(dest, src);
+    assert(!field.value().isOutput);
+    
+    builder->create<RefAssignOp>(dest, src);
   }
   return true;
 }
