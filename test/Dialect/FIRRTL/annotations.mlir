@@ -1453,7 +1453,7 @@ firrtl.circuit "Top"  attributes {rawAnnotations = [
   // CHECK:  firrtl.module private @Bar(out %[[_gen_ref2:.+]]: !firrtl.ref<uint<1>>)
   // CHECK:  %[[random:.+]] = firrtl.verbatim.expr "random.something" : () -> !firrtl.uint<1>
   // CHECK:  %0 = firrtl.ref.send %[[random]] : !firrtl.uint<1>
-  // CHECK:  firrtl.strictconnect %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>
+  // CHECK:  firrtl.ref.assign %[[_gen_ref2]], %0 : !firrtl.ref<uint<1>>
   firrtl.module private @Bar() {
   }
 
