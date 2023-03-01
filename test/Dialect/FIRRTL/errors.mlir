@@ -1054,14 +1054,14 @@ firrtl.circuit "Top" {
 }
 
 // -----
-// Cannot connect different ref types
+// Cannot connect ref types
 
 firrtl.circuit "Top" {
   firrtl.module @Foo (in %in: !firrtl.ref<uint<2>>) {}
-  firrtl.module @Top (in %in: !firrtl.ref<uint<1>>) {
+  firrtl.module @Top (in %in: !firrtl.ref<uint<2>>) {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint<2>>)
     // expected-error @+1 {{may not connect different non-base types}}
-    firrtl.connect %foo_in, %in : !firrtl.ref<uint<2>>, !firrtl.ref<uint<1>>
+    firrtl.strictconnect %foo_in, %in : !firrtl.ref<uint<2>>
   }
 }
 

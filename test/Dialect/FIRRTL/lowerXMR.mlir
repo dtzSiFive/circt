@@ -446,7 +446,7 @@ firrtl.circuit "Top"  {
     firrtl.strictconnect %6, %clock : !firrtl.clock
     firrtl.strictconnect %8, %c1_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %7, %io_dataIn : !firrtl.uint<8>
-    firrtl.connect %_gen_memTap, %rf_memTap : !firrtl.ref<vector<uint<8>, 8>>, !firrtl.ref<vector<uint<8>, 8>>
+    firrtl.ref.assign %_gen_memTap, %rf_memTap : !firrtl.ref<vector<uint<8>, 8>>
   }
   // CHECK: firrtl.module @Top
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<3>, in %io_dataIn: !firrtl.uint<8>, in %io_wen: !firrtl.uint<1>, out %io_dataOut: !firrtl.uint<8>) {
