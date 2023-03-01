@@ -219,6 +219,8 @@ public:
                                           Value dest, Value cond,
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
+    assert(cast<FConnectLike>(whenTrueConn).hasLastConnectSemantics() &&
+           cast<FConnectLike>(whenFalseConn).hasLastConnectSemantics());
     auto fusedLoc =
         b.getFusedLoc({loc, whenTrueConn->getLoc(), whenFalseConn->getLoc()});
     auto whenTrue = getConnectedValue(whenTrueConn);
@@ -312,12 +314,11 @@ public:
     setLastConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
-  // TODO: NOT last-connect!
   void visitStmt(RefAssignOp op) {
-    //auto dest = getFieldRefFromValue(op.getDest());
-    //auto itAndInserted = driverMap.getLastScope().insert({dest, op});
-    //assert(!itAndInserted.second);
-    // setLastConnect(, op);
+    auto dest = getFieldRefFromValue(op.getDest());
+    auto itAndInserted = driverMap.getLastScope().insert({dest, op});
+    // Verifier should ensure this doesn't happen.
+    assert(itAndInserted.second && "multiple ref.assigns to same dest");
   }
 
   // TODO: initialization coverage of force argument ?
@@ -380,9 +381,12 @@ public:
 
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
-        // `dest` is null in the outer scope. This indicate an initialization
-        // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
-        thenConnect->erase();
+        if (cast<FConnectLike>(thenConnect).hasLastConnectSemantics()) {
+          // `dest` is null in the outer scope. This indicate an initialization
+          // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
+          thenConnect->erase();
+        } else
+          driverMap[dest] = thenConnect;
         continue;
       }
 
@@ -413,9 +417,12 @@ public:
 
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
-        // `dest` is null in the outer scope. This indicate an initialization
-        // problem: `mux(p, null, else)`. Just delete the broken connect.
-        elseConnect->erase();
+        if (cast<FConnectLike>(elseConnect).hasLastConnectSemantics()) {
+          // `dest` is null in the outer scope. This indicate an initialization
+          // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
+          elseConnect->erase();
+        } else
+          driverMap[dest] = elseConnect;
         continue;
       }
 
