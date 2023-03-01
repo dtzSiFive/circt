@@ -69,6 +69,10 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
 }
 
+// TODO: Existing connects indicating they no longer have last-connect semantics,
+// set as appropriate (after ExpandWhen's).  Easier to analyze if we know
+// that the destination only has one writer, so on.
+// If attribute on existing connects, move interface method to non-static.
 def RefAssignOp : FIRRTLOp<"ref.assign", [SameTypeOperands, FConnectLike]> {
   let summary = "FIRRTL Assign References";
   let description = [{
