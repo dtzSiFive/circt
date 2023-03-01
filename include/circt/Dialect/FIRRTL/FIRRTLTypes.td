@@ -75,6 +75,7 @@ def AggregateType : FIRRTLDialectType<
 
 // TODO: make references not "connectable".
 // Keep for now for compatibility but remove and emit assigns instead.
+// When Refs can appear within Base, need to disallow that too.
 def ConnectableType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FIRRTLBaseType>()">,
