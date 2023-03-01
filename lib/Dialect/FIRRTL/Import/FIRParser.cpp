@@ -2287,8 +2287,7 @@ ParseResult FIRStmtParser::parseRefExport() {
   // TODO: 'probe' should be probe or rwprobe
   auto send = builder.create<RefSendOp>(probe);
 
-  // TODO: not normal connect!
-  emitConnect(builder, target, send);
+  builder.create<RefAssignOp>(target, send);
 
   return success();
 }
@@ -2307,8 +2306,7 @@ ParseResult FIRStmtParser::parseRefForward() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  // TODO: not 'connect'
-  emitConnect(builder, target, ref);
+  builder.create<RefAssignOp>(target, ref);
 
   return success();
 }
