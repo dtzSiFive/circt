@@ -198,6 +198,13 @@ public:
       if (auto analogType = type.dyn_cast<AnalogType>())
         return;
 
+      // If this is a reference type, it needs to be initialized once.
+      if (isa<RefType>(type) && flow != Flow::Source) {
+        // TODO: Work out how to handle this properly.
+        assert(driverMap.find({value, id}) == driverMap.end());
+        driverMap[{value, id}] = nullptr;
+      }
+
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
       // initialized.
       if (flow != Flow::Source)
@@ -307,7 +314,10 @@ public:
 
   // TODO: NOT last-connect!
   void visitStmt(RefAssignOp op) {
-    setLastConnect(getFieldRefFromValue(op.getDest()), op);
+    //auto dest = getFieldRefFromValue(op.getDest());
+    //auto itAndInserted = driverMap.getLastScope().insert({dest, op});
+    //assert(!itAndInserted.second);
+    // setLastConnect(, op);
   }
 
   void processWhenOp(WhenOp whenOp, Value outerCondition);
@@ -567,6 +577,7 @@ public:
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
   void visitStmt(StrictConnectOp connectOp);
+  void visitStmt(RefAssignOp connectOp);
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
@@ -604,6 +615,9 @@ void ModuleVisitor::visitStmt(ConnectOp op) {
 }
 
 void ModuleVisitor::visitStmt(StrictConnectOp op) {
+  anythingChanged |= setLastConnect(getFieldRefFromValue(op.getDest()), op);
+}
+void ModuleVisitor::visitStmt(RefAssignOp op) {
   anythingChanged |= setLastConnect(getFieldRefFromValue(op.getDest()), op);
 }
 
