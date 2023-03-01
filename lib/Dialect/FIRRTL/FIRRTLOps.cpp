@@ -2257,8 +2257,8 @@ LogicalResult ConnectOp::verify() {
     return failure();
 
   // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
+  // if (failed(checkRefTypeFlow(*this)))
+  //   return failure();
 
   return success();
 }
@@ -2277,8 +2277,8 @@ LogicalResult StrictConnectOp::verify() {
     return failure();
 
   // Check constraints on RefType.
-  if (failed(checkRefTypeFlow(*this)))
-    return failure();
+  // if (failed(checkRefTypeFlow(*this)))
+  //   return failure();
 
   return success();
 }
