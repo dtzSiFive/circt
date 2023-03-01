@@ -316,7 +316,7 @@ public:
 
   void visitStmt(RefAssignOp op) {
     auto dest = getFieldRefFromValue(op.getDest());
-#if 0
+#if 1
     auto itAndInserted = driverMap.getLastScope().insert({dest, op});
     // There should be no non-null driver already, Verifier checks this.
     assert(itAndInserted.second || !itAndInserted.first->second);
