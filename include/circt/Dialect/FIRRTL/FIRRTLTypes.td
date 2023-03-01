@@ -73,6 +73,8 @@ def AggregateType : FIRRTLDialectType<
   ]>,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
+// TODO: make references not "connectable".
+// Keep for now for compatibility but remove and emit assigns instead.
 def ConnectableType : FIRRTLDialectType<
   Or<[
     CPred<"$_self.isa<FIRRTLBaseType>()">,
