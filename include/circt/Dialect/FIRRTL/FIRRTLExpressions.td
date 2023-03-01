@@ -842,4 +842,17 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 }
 
+def RefAssignOp : FIRRTLExprOp<"ref.assign", [SameTypeOperands]> {
+  let summary = "FIRRTL Assign References";
+  let description = [{
+    Endpoint of a remote reference. Send a value through a reference
+    to be read from the firrtl.ref.resolve op.
+    It takes a BaseType input and returns the corresponding RefType value.
+  }];
+  let arguments = (ins FIRRTLBaseType:$base);
+  let results = (outs RefType:$result);
+
+  let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
