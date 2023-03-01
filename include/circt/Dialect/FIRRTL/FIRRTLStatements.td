@@ -69,6 +69,29 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
 }
 
+def RefAssignOp : FIRRTLOp<"ref.assign", [SameTypeOperands, FConnectLike]> {
+  let summary = "FIRRTL Assign References";
+  let description = [{
+    Statically route reference from source to destination.
+    Similar to "connect" but cannot have multiple assigns to same
+    destination and the assignment is never conditional even when
+    assigning out from under a "when" block (no "last-connect" semantics).
+  }];
+  let arguments = (ins RefType:$dest, RefType:$src);
+
+  // let hasCanonicalizeMethod = true;
+
+  // let hasVerifier = 1;
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+
+  let extraClassDeclaration = [{
+    static bool hasLastConnectSemantics() { return false; }
+  }];
+}
+
+
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
