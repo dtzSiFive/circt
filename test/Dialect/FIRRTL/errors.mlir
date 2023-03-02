@@ -840,7 +840,7 @@ firrtl.circuit "Top"   {
 firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
-    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
+    // expected-error @+1 {{op operand #0 must be a sized type}}
     firrtl.strictconnect %a, %in : !firrtl.uint
   }
 }
@@ -1042,25 +1042,13 @@ firrtl.circuit "BitcastRef" {
 }
 
 // -----
-// Cannot strictconnect unsized types, even when ref's.
-
-firrtl.circuit "Top" {
-  firrtl.module @Foo (in %in: !firrtl.ref<uint>) {}
-  firrtl.module @Top (in %in : !firrtl.ref<uint>) {
-    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint>)
-    // expected-error @+1 {{op operand #0 must be a sized base or ref type}}
-    firrtl.ref.assign %foo_in, %in : !firrtl.ref<uint>
-  }
-}
-
-// -----
 // Cannot connect ref types
 
 firrtl.circuit "Top" {
   firrtl.module @Foo (in %in: !firrtl.ref<uint<2>>) {}
   firrtl.module @Top (in %in: !firrtl.ref<uint<2>>) {
     %foo_in = firrtl.instance foo @Foo(in in: !firrtl.ref<uint<2>>)
-    // expected-error @+1 {{may not connect different non-base types}}
+    // expected-error @below {{must be a sized type (contains no uninferred widths) or foreign type}}
     firrtl.strictconnect %foo_in, %in : !firrtl.ref<uint<2>>
   }
 }
