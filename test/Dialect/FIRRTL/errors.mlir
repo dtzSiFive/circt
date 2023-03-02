@@ -1070,10 +1070,11 @@ firrtl.circuit "Foo" {
 // Output reference port cannot be reused
 
 firrtl.circuit "Bar" {
+  firrtl.extmodule @Bar2(out _a: !firrtl.ref<uint<1>>)
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.ref<uint<1>>)
-    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
     firrtl.ref.assign %_a, %x : !firrtl.ref<uint<1>>
     firrtl.ref.assign %_a, %y : !firrtl.ref<uint<1>>
   }
@@ -1083,10 +1084,11 @@ firrtl.circuit "Bar" {
 // Output reference port cannot be reused
 
 firrtl.circuit "Bar" {
+  firrtl.extmodule @Bar2(out _a: !firrtl.ref<uint<1>>)
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.ref<uint<1>>)
     %y = firrtl.wire : !firrtl.uint<1>
-    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
     firrtl.ref.assign %_a, %x : !firrtl.ref<uint<1>>
     %1 = firrtl.ref.send %y : !firrtl.uint<1>
     firrtl.ref.assign %_a, %1 : !firrtl.ref<uint<1>>
@@ -1102,7 +1104,7 @@ firrtl.circuit "Bar" {
     %y = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %x : !firrtl.uint<1>
     %2 = firrtl.ref.send %y : !firrtl.uint<1>
-    // expected-error @+1 {{output reference port cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
     firrtl.ref.assign %_a, %1 : !firrtl.ref<uint<1>>
     firrtl.ref.assign %_a, %2 : !firrtl.ref<uint<1>>
   }
