@@ -2261,13 +2261,13 @@ LogicalResult RefAssignOp::verify() {
   // Check dest has one writer
 
   // TODO: other checks.
-  // Quick check that dest has no other uses, this is incomplete and maybe imprecise.
-  // Check for other ref.assign's, walk back to "fieldSource" to find others.
+  // Quick check that dest has no other uses, this is incomplete and maybe
+  // imprecise. Check for other ref.assign's, walk back to "fieldSource" to find
+  // others.
 
   if (!getDest().hasOneUse())
     return emitError("destination reference cannot be reused by multiple "
                      "operations, it can only capture a unique dataflow");
-
 
   // Check "static" source/dest
   if (auto *op = getDest().getDefiningOp()) {
