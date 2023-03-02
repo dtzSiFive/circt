@@ -872,7 +872,7 @@ bool TypeLoweringVisitor::visitStmt(RefAssignOp op) {
     Value src = getSubWhatever(op.getSrc(), field.index());
     Value dest = getSubWhatever(op.getDest(), field.index());
     assert(!field.value().isOutput);
-    
+
     builder->create<RefAssignOp>(dest, src);
   }
   return true;
