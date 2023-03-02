@@ -198,13 +198,6 @@ public:
       if (auto analogType = type.dyn_cast<AnalogType>())
         return;
 
-      // If this is a reference type, it needs to be initialized once.
-      // if (isa<RefType>(type) && flow != Flow::Source) {
-      //   // TODO: Work out how to handle this properly.
-      //   assert(driverMap.find({value, id}) == driverMap.end());
-      //   driverMap[{value, id}] = nullptr;
-      // }
-
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
       // initialized.
       if (flow != Flow::Source)
