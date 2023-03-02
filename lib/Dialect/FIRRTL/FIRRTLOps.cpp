@@ -2268,6 +2268,15 @@ LogicalResult RefAssignOp::verify() {
     return emitError("destination reference cannot be reused by multiple "
                      "operations, it can only capture a unique dataflow");
 
+
+  // Check "static" source/dest
+  if (auto *op = getDest().getDefiningOp()) {
+    // TODO: Make ref.sub only source flow?
+    if (isa<RefSubOp>(op))
+      return emitError(
+          "destination reference cannot be a sub-element of a reference");
+  }
+
   return success();
 }
 
