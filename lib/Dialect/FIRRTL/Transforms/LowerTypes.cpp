@@ -666,7 +666,6 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
       ImplicitLocOpBuilder b(user->getLoc(), user);
       // Cat all the field elements.
       Value accumulate;
-      llvm::errs() << "User: " << user << "for val: " << val << "\n";
       for (auto v : mapping) {
         if (!v.getType().cast<FIRRTLBaseType>().isGround()) {
           user->emitError("cannot handle an opaque user of aggregate types "
