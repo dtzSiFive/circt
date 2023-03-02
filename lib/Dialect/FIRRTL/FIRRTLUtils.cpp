@@ -33,7 +33,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   auto dstType = dstFType.dyn_cast<FIRRTLBaseType>();
   auto srcType = srcFType.dyn_cast<FIRRTLBaseType>();
 
-  //TODO: Is this used w/ref types?
+  // TODO: Is this used w/ref types?
 
   // If the types are the exact same we can just connect them.
   if (dstFType == srcFType) {
