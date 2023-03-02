@@ -37,8 +37,11 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // If the types are the exact same we can just connect them.
   if (dstFType == srcFType) {
+    // References use ref.assign.
+    if (isa<RefType>(dstFType))
+      builder.create<RefAssignOp>(dst, src);
     // Strict connect does not allow uninferred widths.
-    if (dstType && dstType.hasUninferredWidth())
+    else if (dstType && dstType.hasUninferredWidth())
       builder.create<ConnectOp>(dst, src);
     else
       builder.create<StrictConnectOp>(dst, src);
