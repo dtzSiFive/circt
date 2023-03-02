@@ -318,7 +318,8 @@ public:
     auto dest = getFieldRefFromValue(op.getDest());
     // This is no different than setLastConnect other than assert's that
     // there is no existing (non-null) driver vs using last connect.
-    // TODO: s/setLastConnect/setConnect/, have it check hasLastConnectSemantics ?
+    // TODO: s/setLastConnect/setConnect/, have it check hasLastConnectSemantics
+    // ?
 #if 1
     auto itAndInserted = driverMap.getLastScope().insert({dest, op});
     // There should be no non-null driver already, Verifier checks this.
