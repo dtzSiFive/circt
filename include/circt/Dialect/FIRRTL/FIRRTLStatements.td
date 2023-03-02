@@ -83,9 +83,7 @@ def RefAssignOp : FIRRTLOp<"ref.assign", [SameTypeOperands, FConnectLike]> {
   }];
   let arguments = (ins RefType:$dest, RefType:$src);
 
-  // let hasCanonicalizeMethod = true;
-
-  // let hasVerifier = 1;
+  let hasVerifier = 1;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
