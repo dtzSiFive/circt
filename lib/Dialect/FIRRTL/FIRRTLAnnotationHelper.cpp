@@ -452,7 +452,7 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
         portRefType.getType(), internalPathAttr.getValue(), ValueRange{});
     auto sendPath = builder.create<RefSendOp>(pathStr);
     builder.create<RefAssignOp>(intMod.getArguments().back(),
-                                    sendPath.getResult());
+                                sendPath.getResult());
   }
 
   if (!moduleTarget.instances.empty())
