@@ -2170,28 +2170,6 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-/// If the connect is for RefType, implement the constraint for downward only
-/// references. We cannot connect :
-///   1. an input reference port to the output reference port.
-///   2. instance reference results to each other.
-/// This means, the connect can only be used for forwarding RefType module
-/// ports to Instance ports.
-static LogicalResult checkRefTypeFlow(Operation *connect) {
-  Value dst = connect->getOperand(0);
-
-  if (dst.getType().isa<RefType>()) {
-    // RefType supports multiple readers. That is, there can be multiple
-    // RefResolveOps remotely connected to a single RefSendOp.
-    // But multiple RefSendOps should not be remotely connected to a single
-    // RefResolveOp.
-    if (!dst.hasOneUse())
-      return emitError(connect->getLoc())
-             << "output reference port cannot be reused by multiple operations"
-             << ", it can only capture a unique dataflow";
-  }
-  return success();
-}
-
 /// Check if the source and sink are of appropriate flow.
 static LogicalResult checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
@@ -2256,10 +2234,6 @@ LogicalResult ConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  // if (failed(checkRefTypeFlow(*this)))
-  //   return failure();
-
   return success();
 }
 
@@ -2276,9 +2250,23 @@ LogicalResult StrictConnectOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check constraints on RefType.
-  // if (failed(checkRefTypeFlow(*this)))
-  //   return failure();
+  return success();
+}
+
+LogicalResult RefAssignOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  // Check dest has one writer
+
+  // TODO: other checks.
+  // Quick check that dest has no other uses, this is incomplete and maybe imprecise.
+  // Check for other ref.assign's, walk back to "fieldSource" to find others.
+
+  if (!getDest().hasOneUse())
+    return emitError("destination reference cannot be reused by multiple "
+                     "operations, it can only capture a unique dataflow");
 
   return success();
 }
