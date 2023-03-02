@@ -73,17 +73,12 @@ def AggregateType : FIRRTLDialectType<
   ]>,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
-// TODO: make references not "connectable".
-// Keep for now for compatibility but remove and emit assigns instead.
-// When Refs can appear within Base, need to disallow that too.
+// TODO: When Refs can appear within Base, need to disallow that too.
 def ConnectableType : FIRRTLDialectType<
-  Or<[
     CPred<"$_self.isa<FIRRTLBaseType>()">,
-    CPred<"$_self.isa<RefType>()">,
-    ]>,
-    "a connectable type (base or ref type)", "::circt::firrtl::FIRRTLType", [{
+    "a connectable type (base type)", "::circt::firrtl::FIRRTLType", [{
     Any type that is valid for use in connect statements.
-    Currently this is any base type or ref type.
+    Currently this is any base type.
   }]>;
 
 def SizedType : FIRRTLDialectType<CPred<"$_self.isa<FIRRTLBaseType>() && "
