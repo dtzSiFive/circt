@@ -2833,13 +2833,44 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
 // References.
 //===----------------------------------------------------------------------===//
 
+/// Rewrite uses of ref.assign dest to prefer the source.
+static LogicalResult
+canonicalizeUseOfRefAssignDest(mlir::TypedValue<RefType> use,
+                               PatternRewriter &rewriter) {
+  auto getRefAssign = [](Value result) -> RefAssignOp {
+    for (auto *user : result.getUsers()) {
+      if (auto ra = dyn_cast<RefAssignOp>(user); ra && ra.getDest() == result)
+        return ra;
+    }
+    return {};
+  };
+  auto ra = getRefAssign(use);
+  if (!ra)
+    return failure();
+
+  rewriter.replaceAllUsesExcept(use, ra.getSrc(), ra);
+  return success();
+}
+
+static LogicalResult canonicalizeResolveOfAssignDest(RefResolveOp op, PatternRewriter &rewriter) {
+  // (resolve(x); ref.assign x, y) -> resolve(y)
+  return canonicalizeUseOfRefAssignDest(op.getRef(), rewriter);
+}
+
+static LogicalResult canonicalizeRefSubOfAssignDest(RefSubOp op, PatternRewriter &rewriter) {
+  // (ref.sub(x, idx); ref.assign x, y) -> ref.sub(y, idx)
+  return canonicalizeUseOfRefAssignDest(op.getInput(), rewriter);
+}
+
 void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                               MLIRContext *context) {
+                                          MLIRContext *context) {
+  results.add(canonicalizeResolveOfAssignDest);
   results.insert<patterns::RefResolveOfSend>(context);
 }
 
 void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                           MLIRContext *context) {
+                                          MLIRContext *context) {
+   results.add(canonicalizeRefSubOfAssignDest);
   results.insert<patterns::RefSubOfSendVector, patterns::RefSubOfSendBundle>(
       context);
 }
