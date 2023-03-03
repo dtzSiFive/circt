@@ -2846,7 +2846,7 @@ void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 LogicalResult RefAssignOp::canonicalize(RefAssignOp op,
                                         PatternRewriter &rewriter) {
-   bool replacedAny = false;
+  bool replacedAny = false;
   std::function<bool(OpOperand &)> isRADest = [&](auto &oper) {
     auto ra = dyn_cast<RefAssignOp>(oper.getOwner());
     // Replace if user is not an ref.assign, or if not the dest of the assign.
