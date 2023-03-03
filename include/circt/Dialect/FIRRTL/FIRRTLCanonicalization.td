@@ -350,4 +350,9 @@ def RegResetWithOneReset : Pat<
   (DropWrite $reg, (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym)),
   [(OneConstantOp $reset)]>;
 
+// refresolve(refsend(x)) -> x
+def RefResolveOfSend : Pat<
+  (RefResolveOp (RefSendOp $orig)),
+  (replaceWithValue $orig) >;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
