@@ -88,6 +88,8 @@ def RefAssignOp : FIRRTLOp<"ref.assign", [SameTypeOperands, FConnectLike]> {
   let extraClassDeclaration = [{
     static bool hasLastConnectSemantics() { return false; }
   }];
+
+  let hasCanonicalizeMethod = 1;
 }
 
 

@@ -2833,42 +2833,23 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
 // References.
 //===----------------------------------------------------------------------===//
 
-/// Rewrite uses of ref.assign dest to prefer the source.
-static LogicalResult
-canonicalizeUseOfRefAssignDest(mlir::TypedValue<RefType> use,
-                               PatternRewriter &rewriter) {
-  auto getRefAssign = [](Value result) -> RefAssignOp {
-    for (auto *user : result.getUsers()) {
-      if (auto ra = dyn_cast<RefAssignOp>(user); ra && ra.getDest() == result)
-        return ra;
-    }
-    return {};
-  };
-  auto ra = getRefAssign(use);
-  if (!ra)
-    return failure();
-
-  rewriter.replaceAllUsesExcept(use, ra.getSrc(), ra);
-  return success();
-}
-
-static LogicalResult canonicalizeResolveOfAssignDest(RefResolveOp op, PatternRewriter &rewriter) {
-  // (resolve(x); ref.assign x, y) -> resolve(y)
-  return canonicalizeUseOfRefAssignDest(op.getRef(), rewriter);
-}
-
-static LogicalResult canonicalizeRefSubOfAssignDest(RefSubOp op, PatternRewriter &rewriter) {
-  // (ref.sub(x, idx); ref.assign x, y) -> ref.sub(y, idx)
-  return canonicalizeUseOfRefAssignDest(op.getInput(), rewriter);
-}
-
 void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                          MLIRContext *context) {
-  results.add(canonicalizeResolveOfAssignDest);
+                                               MLIRContext *context) {
   results.insert<patterns::RefResolveOfSend>(context);
 }
 
-void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                          MLIRContext *context) {
-   results.add(canonicalizeRefSubOfAssignDest);
+LogicalResult RefAssignOp::canonicalize(RefAssignOp op,
+                                        PatternRewriter &rewriter) {
+   bool replacedAny = false;
+  std::function<bool(OpOperand &)> isRADest = [&](auto &oper) {
+    auto ra = dyn_cast<RefAssignOp>(oper.getOwner());
+    // Replace if user is not an ref.assign, or if not the dest of the assign.
+    // (the user might be the source here, but regardless skip if dest)
+    bool shouldRemove = !ra || !oper.is(ra.getDest());
+    replacedAny |= shouldRemove;
+    return shouldRemove;
+  };
+  rewriter.replaceUsesWithIf(op.getDest(), op.getSrc(), isRADest);
+
+  return success(replacedAny);
 }
