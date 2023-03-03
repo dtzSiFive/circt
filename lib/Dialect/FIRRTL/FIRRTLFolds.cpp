@@ -55,6 +55,17 @@ static Value moveNameHint(OpResult old, Value passthrough) {
   return passthrough;
 }
 
+template <typename BaseTy>
+static Value subfieldOrIndex(PatternRewriter &rewriter, Location loc,
+                             BaseTy base, IntegerAttr index) {
+  return TypeSwitch<Type, Value>(base.getType())
+      .template Case<FVectorType>(
+          [&](auto _) { return rewriter.create<SubindexOp>(loc, base, index); })
+      .template Case<BundleType>([&](auto _) {
+        return rewriter.create<SubfieldOp>(loc, base, index);
+      });
+}
+
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {
@@ -2835,7 +2846,13 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                MLIRContext *context) {
-  results.insert<patterns::RefResolveOfSend>(context);
+  results.insert<patterns::RefResolveOfSend, patterns::RefResolveOfSub>(
+      context);
+}
+
+void RefSubOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::RefSubOfSend>(context);
 }
 
 LogicalResult RefAssignOp::canonicalize(RefAssignOp op,
