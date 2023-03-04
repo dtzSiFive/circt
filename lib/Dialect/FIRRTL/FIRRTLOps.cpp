@@ -19,6 +19,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/PrettyPrinter.h"
+#include "circt/Support/PrettyPrinterHelpers.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -771,13 +773,20 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
   // If we are printing the ports as block arguments the op must have a first
   // block.
   SmallString<32> resultNameStr;
-  p << '(';
+  auto &os = p.getStream();
+  pretty::TokenStringSaver saver;
+  pretty::PrettyPrinter S(os, 120, 8, 8);
+  pretty::TokenStream<> ps(S, saver);
+  ps << "(" << pretty::PP::cbox0 << pretty::PP::zerobreak;
+  ps.scopedBox(pretty::PP::cbox0, [&]() {
   for (unsigned i = 0, e = portTypes.size(); i < e; ++i) {
     if (i > 0)
-      p << ", ";
+      ps << "," << pretty::PP::space;
 
+    ps << pretty::PP::ibox2;
     // Print the port direction.
-    p << portDirections[i] << " ";
+    ps.addAsString(portDirections[i]);
+    ps << pretty::PP::space;
 
     // Print the port name.  If there is a valid block, we print it as a block
     // argument.
@@ -791,21 +800,23 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
       auto portName = portNames[i].cast<StringAttr>().getValue();
       if (!portName.empty() && tmpStream.str().drop_front() != portName)
         printedNamesDontMatch = true;
-      p << tmpStream.str();
+      ps << tmpStream.str();
     } else {
-      p.printKeywordOrString(portNames[i].cast<StringAttr>().getValue());
+     ps << portNames[i].cast<StringAttr>();
+      // p.printKeywordOrString(portNames[i].cast<StringAttr>().getValue());
     }
 
     // Print the port type.
-    p << ": ";
+    ps << ":" << pretty::PP::space;
     auto portType = portTypes[i].cast<TypeAttr>().getValue();
-    p.printType(portType);
+    // p.printType(portType);
+    ps.addAsString(portType);
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
       if (!portSyms[i].cast<hw::InnerSymAttr>().empty()) {
-        p << " sym ";
-        portSyms[i].cast<hw::InnerSymAttr>().print(p);
+        ps << pretty::PP::space << "sym" << pretty::PP::nbsp;
+        ps.addAsString(portSyms[i].cast<hw::InnerSymAttr>());
       }
     }
 
@@ -813,8 +824,9 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
     // empty if there are none.
     if (!portAnnotations.empty() &&
         !portAnnotations[i].cast<ArrayAttr>().empty()) {
-      p << " ";
-      p.printAttribute(portAnnotations[i]);
+      ps << pretty::PP::space;
+      // p.printAttribute(portAnnotations[i]);
+      ps.addAsString(portAnnotations[i]);
     }
 
     // Print the port location.
@@ -823,9 +835,12 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
     // now, use what was specified on the command line.
     if (flags.shouldPrintDebugInfo() && !portLocs.empty())
       p.printOptionalLocationSpecifier(portLocs[i].cast<LocationAttr>());
+
+    ps << pretty::PP::end;
   }
 
-  p << ')';
+});
+  ps << pretty::BreakToken(0, -2) << ")" << pretty::PP::end;
   return printedNamesDontMatch;
 }
 
