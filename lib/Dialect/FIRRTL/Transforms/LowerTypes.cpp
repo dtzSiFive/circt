@@ -850,7 +850,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
   return true;
 }
 
-// Expand connects of aggregates
+// Expand connects of references-of-aggregates
 bool TypeLoweringVisitor::visitStmt(RefAssignOp op) {
   // TODO: Review this!
 
