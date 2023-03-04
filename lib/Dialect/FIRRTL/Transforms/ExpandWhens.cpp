@@ -321,8 +321,6 @@ public:
     driverMap.getLastScope()[dest] = op;
   }
 
-  // TODO: initialization coverage of force argument ?
-
   void processWhenOp(WhenOp whenOp, Value outerCondition);
 
   /// Combine the connect statements from each side of the block. There are 5
