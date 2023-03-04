@@ -2258,21 +2258,14 @@ LogicalResult RefAssignOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Check dest has one writer
-
-  // TODO: other checks.
-  // Quick check that dest has no other uses, this is incomplete and maybe
-  // imprecise. Check for other ref.assign's, walk back to "fieldSource" to find
-  // others.
-
   // For now, refs can't be in bundles so this is sufficient.
+  // In the future need to ensure no other assigns to same "fieldSource".
   for (auto *user : getDest().getUsers()) {
     if (auto conn = dyn_cast<FConnectLike>(user);
         conn && conn.getDest() == getDest() && conn != *this)
       return emitError("destination reference cannot be reused by multiple "
                        "operations, it can only capture a unique dataflow");
   }
-  // if (!getDest().hasOneUse())
 
   // Check "static" source/dest
   if (auto *op = getDest().getDefiningOp()) {
