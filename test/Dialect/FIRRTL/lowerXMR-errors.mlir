@@ -84,6 +84,6 @@ firrtl.circuit "RefSubNotFromOp" {
   firrtl.module @RefSubNotFromOp(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>) {
     %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
     %child_ref = firrtl.instance child @Child(in ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>)
-    firrtl.strictconnect %child_ref, %ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
+    firrtl.ref.assign %child_ref, %ref : !firrtl.ref<bundle<a: uint<1>, b: uint<2>>>
   }
 }
