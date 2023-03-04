@@ -456,30 +456,25 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
               oldPorts[index].direction == Direction::In) &&
              "If a dead module port is alive in instance results, the "
              "corresponding port must be input");
-      // If RefType, don't want to leave wire around.
-      if (isa<RefType>(result.getType())) {
-        // Won't be deleted.
-        if (isKnownAlive(result)) {
-          auto getRefAssign = [](Value result) -> RefAssignOp {
-            for (auto *user : result.getUsers()) {
-              if (auto ra = dyn_cast<RefAssignOp>(user);
-                  ra && ra.getDest() == result)
-                return ra;
-            }
-            return {};
-          };
-          if (auto ra = getRefAssign(result)) {
-            assert(isKnownAlive(ra.getSrc()));
-            result.replaceAllUsesWith(ra.getSrc());
-            ++numErasedOps;
-            ra.erase();
-            continue;
+      // If RefType and live, don't want to leave wire around.
+      if (isa<RefType>(result.getType()) && isKnownAlive(result)) {
+        auto getRefAssign = [](Value result) -> RefAssignOp {
+          for (auto *user : result.getUsers()) {
+            if (auto ra = dyn_cast<RefAssignOp>(user);
+                ra && ra.getDest() == result)
+              return ra;
           }
-          assert(0 && "input ref port alive, but no driver");
-        }
-        // Allow the temporary wire, it will be deleted.
-        // More-valid IR until that happens.
+          return {};
+        };
+        auto ra = getRefAssign(result);
+        assert(ra && "input ref port to instance is alive, but not driver?");
+        assert(isKnownAlive(ra.getSrc()));
+        result.replaceAllUsesWith(ra.getSrc());
+        ++numErasedOps;
+        ra.erase();
+        continue;
       }
+
       WireOp wire = builder.create<WireOp>(result.getType());
       result.replaceAllUsesWith(wire);
       // If a module port is dead but its instance result is alive, the port is
