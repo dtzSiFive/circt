@@ -7,14 +7,11 @@
 //===----------------------------------------------------------------------===//
 //
 // This file implements InnerSymbolTable and verification for InnerRef's.
-// This only partially works for HWModuleLike's, as they don't use
-// most of the InnerSymbol infrastructure (not compatible presently).
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
 
