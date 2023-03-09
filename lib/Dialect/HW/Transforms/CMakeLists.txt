@@ -1,9 +1,8 @@
 add_circt_dialect_library(CIRCTHWTransforms
-  FlattenIO.cpp
   HWPrintInstanceGraph.cpp
   HWSpecialize.cpp
-  InnerSymbolDCE.cpp
   PrintHWModuleGraph.cpp
+  FlattenIO.cpp
 
   DEPENDS
   CIRCTHWTransformsIncGen

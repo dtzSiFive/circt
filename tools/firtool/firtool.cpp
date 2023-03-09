@@ -766,7 +766,7 @@ static LogicalResult processBuffer(
   pm.addNestedPass<firrtl::CircuitOp>(mlir::createSymbolDCEPass());
 
   // Run InnerSymbolDCE as late as possible, but before IMDCE.
-  pm.addPass(hw::createInnerSymbolDCEPass());
+  pm.addPass(firrtl::createInnerSymbolDCEPass());
 
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
