@@ -7,11 +7,14 @@
 //===----------------------------------------------------------------------===//
 //
 // This file implements InnerSymbolTable and verification for InnerRef's.
+// This only partially works for HWModuleLike's, as they don't use
+// most of the InnerSymbol infrastructure (not compatible presently).
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
 
@@ -166,10 +169,11 @@ void InnerSymbolTable::dropSymbol(const InnerSymTarget &target) {
   assert(getInnerSymbol(target));
 
   if (target.isPort()) {
-    auto mod = cast<FModuleLike>(target.getOp());
+    auto mod = cast<HWModuleLike>(target.getOp());
     assert(target.getPort() < mod.getNumPorts());
     auto base = mod.getPortSymbolAttr(target.getPort());
-    mod.setPortSymbolsAttr(target.getPort(), base.erase(target.getField()));
+    cast<firrtl::FModuleLike>(*mod).setPortSymbolsAttr(
+        target.getPort(), base.erase(target.getField()));
     return;
   }
 
