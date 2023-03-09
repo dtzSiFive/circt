@@ -21,7 +21,6 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -1095,7 +1094,6 @@ int main(int argc, char **argv) {
 
     // Dialect passes:
     firrtl::registerPasses();
-    hw::registerPasses();
     sv::registerPasses();
 
     // Export passes:
