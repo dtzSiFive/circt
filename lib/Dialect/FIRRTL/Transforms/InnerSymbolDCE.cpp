@@ -24,6 +24,26 @@ using namespace circt;
 using namespace firrtl;
 using namespace hw;
 
+/// Drop the specified symbol.
+/// Belongs in InnerSymbolTable, once/if HW supports IST/IRN/etc.
+static void dropSymbol(const InnerSymTarget &target) {
+  assert(target);
+  assert(InnerSymbolTable::getInnerSymbol(target));
+
+  if (target.isPort()) {
+    auto mod = cast<HWModuleLike>(target.getOp());
+    assert(target.getPort() < mod.getNumPorts());
+    auto base = mod.getPortSymbolAttr(target.getPort());
+    cast<firrtl::FModuleLike>(*mod).setPortSymbolsAttr(
+        target.getPort(), base.erase(target.getField()));
+    return;
+  }
+
+  auto symOp = cast<InnerSymbolOpInterface>(target.getOp());
+  auto base = symOp.getInnerSymAttr();
+  symOp.setInnerSymbolAttr(base.erase(target.getField()));
+}
+
 struct InnerSymbolDCEPass : public InnerSymbolDCEBase<InnerSymbolDCEPass> {
   void runOnOperation() override;
 
@@ -73,7 +93,7 @@ void InnerSymbolDCEPass::removeInnerSyms(FModuleLike mod) {
         if (innerRefs.contains({moduleName, name}))
           return;
 
-        InnerSymbolTable::dropSymbol(target);
+        dropSymbol(target);
         ++numInnerSymbolsRemoved;
 
         LLVM_DEBUG(llvm::dbgs() << DEBUG_TYPE << ": removed " << moduleName

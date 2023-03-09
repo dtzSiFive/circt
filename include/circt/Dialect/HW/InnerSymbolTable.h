@@ -179,13 +179,6 @@ public:
   /// A successful walk with no failures returns success.
   static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
 
-  /// Remove the specified inner symbol.
-  /// Invalidates existing InnerSymbolTable's including the target.
-  static void dropSymbol(const InnerSymTarget &target);
-
-  /// Remove the specified inner symbol, and update this table.
-  void erase(const InnerSymTarget &target);
-
 private:
   using TableTy = DenseMap<StringAttr, InnerSymTarget>;
   /// Construct an inner symbol table for the given operation,
