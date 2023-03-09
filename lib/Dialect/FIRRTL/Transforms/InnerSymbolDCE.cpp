@@ -29,7 +29,7 @@ struct InnerSymbolDCEPass : public InnerSymbolDCEBase<InnerSymbolDCEPass> {
 private:
   void findInnerRefs(Attribute attr);
   void insertInnerRef(InnerRefAttr innerRef);
-  void removeInnerSyms(HWModuleLike mod);
+  void removeInnerSyms(FModuleLike mod);
 
   DenseSet<std::pair<StringAttr, StringAttr>> innerRefs;
 };
@@ -60,7 +60,7 @@ void InnerSymbolDCEPass::insertInnerRef(InnerRefAttr innerRef) {
 }
 
 /// Remove all dead inner symbols from the specified module.
-void InnerSymbolDCEPass::removeInnerSyms(HWModuleLike mod) {
+void InnerSymbolDCEPass::removeInnerSyms(FModuleLike mod) {
   auto moduleName = mod.moduleNameAttr();
 
   // Walk inner symbols, removing any not referenced.
@@ -86,21 +86,21 @@ void InnerSymbolDCEPass::runOnOperation() {
   ModuleOp topModule = getOperation();
 
   // Traverse the entire IR once.
-  SmallVector<HWModuleLike> modules;
+  SmallVector<FModuleLike> modules;
   topModule.walk([&](Operation *op) {
     // Find all InnerRefAttrs.
     for (NamedAttribute namedAttr : op->getAttrs())
       findInnerRefs(namedAttr.getValue());
 
-    // Collect all HWModuleLike operations.
-    if (auto mod = dyn_cast<HWModuleLike>(op))
+    // Collect all FModuleLike operations.
+    if (auto mod = dyn_cast<FModuleLike>(op))
       modules.push_back(mod);
   });
 
   // Traverse all FModuleOps in parallel, removing any InnerSymAttrs that are
   // dead code.
   parallelForEach(&getContext(), modules,
-                  [&](HWModuleLike mod) { removeInnerSyms(mod); });
+                  [&](FModuleLike mod) { removeInnerSyms(mod); });
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createInnerSymbolDCEPass() {
