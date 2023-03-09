@@ -68,4 +68,5 @@ def InnerSymbolDCE : Pass<"hw-inner-symbol-dce", "mlir::ModuleOp"> {
   ];
 }
 
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
