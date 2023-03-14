@@ -2933,3 +2933,14 @@ LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
   }
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// Reference Ops.
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RefCastOp::fold(FoldAdaptor adaptor) {
+  // RefCast is unnecessary if types match.
+  if (getInput().getType() == getType())
+    return getInput();
+  return {};
+}
