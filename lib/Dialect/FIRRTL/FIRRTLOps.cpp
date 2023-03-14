@@ -2243,12 +2243,7 @@ LogicalResult ConnectOp::verify() {
   auto dstBaseType = dstType.dyn_cast<FIRRTLBaseType>();
   auto srcBaseType = srcType.dyn_cast<FIRRTLBaseType>();
   if (!dstBaseType || !srcBaseType) {
-    if (auto dstRef = dyn_cast<RefType>(dstType),
-        srcRef = dyn_cast<RefType>(srcType);
-        dstRef && srcRef) {
-      if (!isTypeSameOrUninferred(dstRef.getType(), srcRef.getType()))
-        return emitError("may not connect references of different widths");
-    } else if (dstType != srcType)
+    if (dstType != srcType)
       return emitError("may not connect different non-base types");
   } else {
     // Analog types cannot be connected and must be attached.
