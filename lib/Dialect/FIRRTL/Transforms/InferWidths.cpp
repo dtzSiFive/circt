@@ -1599,6 +1599,11 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         declareVars(op.getResult(), op.getLoc());
         constrainTypes(op.getResult(), op.getRef());
       })
+      .Case<RefCastOp>([&](auto op) {
+        declareVars(op.getResult(), op.getLoc());
+        constrainTypes(op.getResult(), op.getInput());
+      })
+
       .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
         for (Value result : op.getResults()) {
           auto ty = result.getType();
