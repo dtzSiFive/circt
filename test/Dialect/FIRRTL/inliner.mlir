@@ -1114,7 +1114,6 @@ firrtl.circuit "Top" {
   }
 }
 
-
 // -----
 
 // PR #4882 fixes a bug, which was producing invalid NLAs.
@@ -1137,5 +1136,26 @@ firrtl.circuit "Bug4882Rename"  {
     // CHECK-NEXT: firrtl.instance no_bar3 sym @w_0 @Bar3()
     firrtl.instance bar2 sym @w  @Bar2()
     // CHECK-NEXT: %bar2_x = firrtl.wire sym @x {annotations = [{class = "test0"}]}
+  }
+}
+
+// -----
+
+// CHECK-LABEL: RefCastForInlinedPort
+firrtl.circuit "RefCastForInlinedPort" {
+   // CHECK-NOT: @Child
+  firrtl.module private @Child(in %in: !firrtl.ref<uint>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} { }
+  // CHECK: @RefCastForInlinedPort
+  firrtl.module @RefCastForInlinedPort(in %in: !firrtl.uint<1>, out %out: !firrtl.uint) {
+    // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %in
+    // CHECK-NEXT: %[[CAST:.+]] = firrtl.ref.cast %[[REF]]
+    // CHECK-NEXT: %[[RES:.+]] = firrtl.ref.resolve %[[CAST]]
+    // CHECK-NEXT: firrtl.connect %out, %[[RES]]
+    // CHECK-NEXT: }
+    %child_ref = firrtl.instance child @Child(in in: !firrtl.ref<uint>)
+    %ref = firrtl.ref.send %in : !firrtl.uint<1>
+    firrtl.ref.define %child_ref, %ref : !firrtl.ref<uint>, !firrtl.ref<uint<1>>
+    %res = firrtl.ref.resolve %child_ref : !firrtl.ref<uint>
+    firrtl.connect %out, %res : !firrtl.uint, !firrtl.uint
   }
 }
