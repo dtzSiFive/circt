@@ -333,9 +333,9 @@ firrtl.circuit "NoWireForLiveRefInputPort" {
     // CHECK-NEXT: firrtl.connect %out, %[[RES]]
     // CHECK-NEXT: }
     %child_ref = firrtl.instance child @Child(in in: !firrtl.ref<uint>)
+    %res = firrtl.ref.resolve %child_ref : !firrtl.ref<uint>
     %ref = firrtl.ref.send %in : !firrtl.uint<1>
     firrtl.ref.define %child_ref, %ref : !firrtl.ref<uint>, !firrtl.ref<uint<1>>
-    %res = firrtl.ref.resolve %child_ref : !firrtl.ref<uint>
     firrtl.connect %out, %res : !firrtl.uint, !firrtl.uint
   }
 }
