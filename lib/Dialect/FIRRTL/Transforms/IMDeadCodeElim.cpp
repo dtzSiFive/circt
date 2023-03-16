@@ -23,7 +23,7 @@ using namespace firrtl;
 
 /// Return true if this is a wire or a register or a node.
 static bool isDeclaration(Operation *op) {
-  return isa<WireOp, RegResetOp, RegOp, NodeOp, MemOp>(op);
+  return isa<WireOp, RegResetOp, RegOp, NodeOp, MemOp, PipeOp>(op);
 }
 
 /// Return true if this is a wire or register we're allowed to delete.
@@ -71,6 +71,7 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void visitValue(Value value);
   void visitConnect(FConnectLike connect);
   void visitSubelement(Operation *op);
+  void visitPipe(PipeOp pipe);
   void markBlockExecutable(Block *block);
   void markDeclaration(Operation *op);
   void markInstanceOp(InstanceOp instanceOp);
@@ -113,8 +114,10 @@ void IMDeadCodeElimPass::visitUser(Operation *op) {
   LLVM_DEBUG(llvm::dbgs() << "Visit: " << *op << "\n");
   if (auto connectOp = dyn_cast<FConnectLike>(op))
     return visitConnect(connectOp);
-  if (isa<SubfieldOp, SubindexOp, SubaccessOp>(op))
+  if (isa<SubfieldOp, SubindexOp, SubaccessOp, RefSubOp>(op))
     return visitSubelement(op);
+  if (auto pipeOp = dyn_cast<PipeOp>(op))
+    return visitPipe(pipeOp);
 }
 
 void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
@@ -311,6 +314,11 @@ void IMDeadCodeElimPass::visitValue(Value value) {
     return;
   }
 
+  // If out port of a pipe, mark in port alive.
+  if (auto pipe = value.getDefiningOp<PipeOp>();
+      pipe && pipe.getOut() == value)
+    return markAlive(pipe.getIn());
+
   // If op is defined by an operation, mark its operands as alive.
   if (auto op = value.getDefiningOp())
     for (auto operand : op->getOperands())
@@ -326,6 +334,11 @@ void IMDeadCodeElimPass::visitConnect(FConnectLike connect) {
 void IMDeadCodeElimPass::visitSubelement(Operation *op) {
   if (isKnownAlive(op->getOperand(0)))
     markAlive(op->getResult(0));
+}
+
+void IMDeadCodeElimPass::visitPipe(PipeOp pipe) {
+  if (isKnownAlive(pipe.getOut()))
+    markAlive(pipe.getIn());
 }
 
 void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
@@ -406,6 +419,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         continue;
 
       // RefType can't be a wire, especially if it won't be erased.  Skip.
+      // TODO: Could be PipeOp ?
       if (argument.getType().isa<RefType>())
         continue;
 
@@ -469,13 +483,12 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         auto rd = getRefDefine(result);
         assert(rd && "input ref port to instance is alive, but no driver?");
         assert(isKnownAlive(rd.getSrc()));
-        auto source = rd.getSrc();
-        if (result.getType() != source.getType()) { // cast if needed
-          ImplicitLocOpBuilder::InsertionGuard g(builder);
-          builder.setInsertionPointAfterValue(source);
-          source = builder.create<RefCastOp>(result.getType(), source);
-        }
-        result.replaceAllUsesWith(source);
+        // use PipeOp ...
+        auto pipe = builder.create<PipeOp>(result.getType());
+        rd.setOperand(0, pipe.getIn()); // target pipe's in.
+        result.replaceAllUsesWith(pipe.getOut());
+        liveSet.insert(pipe.getOut());
+        liveSet.insert(pipe.getIn());
         ++numErasedOps;
         rd.erase();
         continue;
