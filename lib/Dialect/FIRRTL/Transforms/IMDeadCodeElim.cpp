@@ -489,8 +489,6 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         result.replaceAllUsesWith(pipe.getOut());
         liveSet.insert(pipe.getOut());
         liveSet.insert(pipe.getIn());
-        ++numErasedOps;
-        rd.erase();
         continue;
       }
 
