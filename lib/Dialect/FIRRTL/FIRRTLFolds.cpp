@@ -1707,14 +1707,12 @@ LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,
 }
 
 /// Helper to determine if 'a' is available at 'b's block.
-static bool safelyDoms(Value a, Value b) {
+/// TODO: Use MLIR bits, and/or ensure this does everything it needs to.
+static bool safelyDoms(Value a, Operation *b) {
   if (a.isa<BlockArgument>())
     return true;
-  if (b.isa<BlockArgument>())
-    return false;
   // Handle cases where 'b' is in child op after 'a'.
-  auto *ancestor =
-      a.getParentBlock()->findAncestorOpInBlock(*b.getDefiningOp());
+  auto *ancestor = a.getParentBlock()->findAncestorOpInBlock(*b);
   return ancestor && a.getDefiningOp()->isBeforeInBlock(ancestor);
 }
 
@@ -1742,7 +1740,7 @@ static LogicalResult forwardThroughPipe(PipeOp op, PatternRewriter &rewriter) {
 
   // Forward in to replace out if available at each use.
   rewriter.replaceUsesWithIf(op.getOut(), source, [&](auto &use) {
-    return safelyDoms(source, use.get());
+    return safelyDoms(source, use.getOwner());
   });
 
   // Drop the driver and pipe if unused.
