@@ -47,6 +47,8 @@ void FieldSource::visitOp(Operation *op) {
                             foldFlow(op->getResult(0)));
   if (auto mem = dyn_cast<MemOp>(op))
     return visitMem(mem);
+  if (auto pipe = dyn_cast<PipeOp>(op))
+    return visitPipe(pipe);
   if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInst(inst);
 
@@ -89,6 +91,11 @@ void FieldSource::visitSubaccess(SubaccessOp sa) {
 
 void FieldSource::visitMem(MemOp mem) {
   for (auto r : mem.getResults())
+    makeNodeForValue(r, r, {}, foldFlow(r));
+}
+
+void FieldSource::visitPipe(PipeOp pipe) {
+  for (auto r : pipe.getResults())
     makeNodeForValue(r, r, {}, foldFlow(r));
 }
 

@@ -53,7 +53,7 @@ public:
       if (!src.getDefiningOp())
         return true;
       // ports are wires, on this side of the instance too.
-      return isa<WireOp, InstanceOp>(src.getDefiningOp());
+      return isa<WireOp, InstanceOp, PipeOp>(src.getDefiningOp());
     }
   };
 
@@ -65,6 +65,7 @@ private:
   void visitSubindex(SubindexOp si);
   void visitSubaccess(SubaccessOp sa);
   void visitMem(MemOp mem);
+  void visitPipe(PipeOp pipe);
   void visitInst(InstanceOp inst);
 
   void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
