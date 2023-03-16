@@ -108,6 +108,10 @@ def PassiveType : FIRRTLDialectType<
   CPred<"$_self.isa<FIRRTLBaseType>() && $_self.cast<FIRRTLBaseType>().isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
+def PassiveBaseOrRefType : FIRRTLDialectType<
+  CPred<"$_self.isa<FIRRTLType>() && ::circt::firrtl::getBaseType(cast<FIRRTLType>($_self)).isPassive()">,
+  "a passive base type or a ref to a passive base type (contain no flips)", "::circt::firrtl::FIRRTLType">;
+
 def RefType : FIRRTLDialectType<
   CPred<"$_self.isa<RefType>()">,
    "reference type", "::circt::firrtl::RefType">;

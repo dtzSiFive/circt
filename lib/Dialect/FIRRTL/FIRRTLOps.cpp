@@ -201,6 +201,12 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
           return Flow::Source;
         return swap();
       })
+      .Case<PipeOp>([&](PipeOp op) {
+        if (val == op.getOut())
+          return Flow::Source;
+        else
+          return Flow::Sink;
+      })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
 }
@@ -2192,6 +2198,25 @@ void PipeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto base = getName();
   setNameFn(getOut(), base.empty() ? base : (Twine(base) + "_out").str());
   setNameFn(getIn(), base.empty() ? base : (Twine(base) + "_in").str());
+}
+
+LogicalResult PipeOp::verify() {
+  if (!getIn().use_empty() && !getIn().hasOneUse())
+    return emitError("pipe input can have at most one user");
+  if (getIn().hasOneUse()) {
+    auto &use = *getIn().use_begin();
+    auto connect = dyn_cast<FConnectLike>(use.getOwner());
+    if (!connect)
+      return emitError("pipe input user must be a connect")
+          .attachNote(use.getOwner()->getLoc())
+          .append("user is here");
+    // Maybe just let the connect check its flow requirement...
+    if (use.get() != connect.getDest())
+      return emitError("pipe input must be connect dest")
+          .attachNote(use.getOwner()->getLoc())
+          .append("connect is here");
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

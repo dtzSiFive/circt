@@ -370,9 +370,10 @@ def PipeOp : ReferableDeclOp<"pipe", [TypesMatchWith<"result types should match"
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyType:$out, AnyType:$in);
+  let results = (outs PassiveBaseOrRefType:$out, PassiveBaseOrRefType:$in);
 
   // let hasCanonicalizer = true;
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
