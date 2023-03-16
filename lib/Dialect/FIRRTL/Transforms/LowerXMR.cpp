@@ -202,8 +202,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<PipeOp>([&](PipeOp pipe) {
-            dataFlowClasses.unionSets(pipe.getIn(), pipe.getOut());
-            return success();
+             auto refType = dyn_cast<RefType>(pipe.getOut().getType());
+             if (!refType)
+               return success();
+             markForRemoval(pipe);
+             if (!isZeroWidth(refType.getType()))
+               dataFlowClasses.unionSets(pipe.getIn(), pipe.getOut());
+             return success();
           })
           .Default([&](auto) { return success(); });
     };
