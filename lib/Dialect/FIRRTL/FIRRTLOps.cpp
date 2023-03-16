@@ -2188,10 +2188,10 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void PipeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // auto base = getName();
-  // if (!base)
-  //   base = "pipe";
-  // setNameFn(getResult(), getName());
+  // Consider name:2 ?
+  auto base = getName();
+  setNameFn(getOut(), base.empty() ? base : (Twine(base) + "_out").str());
+  setNameFn(getIn(), base.empty() ? base : (Twine(base) + "_in").str());
 }
 
 //===----------------------------------------------------------------------===//
