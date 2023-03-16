@@ -404,77 +404,53 @@ static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
 
 /// Resolve RefType 'backedge' placeholder values.
 /// These should have at most one driver that isn't self-connect,
-/// replace each with their driver and remove connections to them.
-/// Insert RefCastOp's as needed.
+/// replace each with a new PipeOp separating driver from uses.
 /// Also clears out 'edges'.
 static void replaceRefEdges(SmallVectorImpl<Backedge> &edges, OpBuilder &b) {
   /// Find connections to `val` and:
-  /// * Mark for removal.
   /// * Identify the single non-self-connect as driver, return it.
   /// * Check for other drivers and error.
-  auto getDriverAndLocAndRemoveConnects =
-      [&](Value val) -> std::pair<Value, Location> {
-    Value driver;
-    Location loc = val.getLoc();
-    llvm::SmallPtrSet<Operation *, 16> toRemove;
+  auto getSingleConnect = [&](Value val) {
+    FConnectLike theSingleConnect;
     for (Operation *use : val.getUsers())
       if (auto connect = dyn_cast<FConnectLike>(use))
         if (connect.getDest() == val) {
-          auto newdriver = connect.getSrc();
 
-          // Mark for removal all connections to the placeholder value.
-          toRemove.insert(connect);
-
-          // Self-connections are not drivers.
-          if (newdriver == val)
-            continue;
-          if (driver) {
-            auto diag = val.getDefiningOp()->emitError(
-                "refty should not have multiple drivers");
-            diag.attachNote(driver.getLoc()) << "first driver here";
-            diag.attachNote(newdriver.getLoc()) << "second driver here";
-            diag.attachNote(connect.getLoc()) << "second driver connected here";
-          }
-          assert(!driver && "unable to resolve through multiple drivers");
-          driver = newdriver;
-          loc = connect.getLoc();
+          if (theSingleConnect)
+            theSingleConnect
+                .emitError(
+                    "reftype connected to more than once, first connect here")
+                .attachNote(connect.getLoc())
+                .append("second connect here");
+          assert(!theSingleConnect &&
+                 "unable to resolve through multiple drivers");
+          theSingleConnect = connect;
         }
-
-    // Drop connections to placeholder values.
-    for (auto *op : toRemove)
-      op->erase();
-
-    return {driver, loc};
-  };
-
-  // Ensure that all users of the `opToRemove` are defined after the driver.
-  // This is required to ensure the driver dominates the users.
-  auto moveUseAfterDef = [&](Operation *opToRemove, Operation *driver) {
-    for (Operation *user : opToRemove->getUsers())
-      if (user->isBeforeInBlock(driver))
-        user->moveAfter(driver);
+    return theSingleConnect;
   };
 
   for (auto &edge : edges) {
     Value v = edge;
     assert(v.getType().isa<RefType>());
 
-    auto [driver, loc] = getDriverAndLocAndRemoveConnects(v);
-    if (!driver) {
+    auto connect = getSingleConnect(v);
+    if (!connect) {
       v.getDefiningOp()->emitError(
           "unable to find driver for refty placeholder");
       continue;
     }
-    if (!driver.isa<BlockArgument>())
-      moveUseAfterDef(v.getDefiningOp(), driver.getDefiningOp());
 
-    // Insert any needed RefCastOp.
-    if (driver.getType() != v.getType()) {
-      b.setInsertionPointAfter(driver.getDefiningOp());
-      driver = b.create<RefCastOp>(loc, v.getType(), driver);
-    }
-    // Resolve the edge (RAUW to driver).
-    edge.setValue(driver);
+     // Replace with new PipeOp.  Most uses get the 'out' port, driver connects to 'in'.
+    b.setInsertionPointAfterValue(v);
+    auto pipe = b.create<PipeOp>(connect.getLoc(), v.getType());
+
+    // Replace the connect dest with the in result.
+    assert(connect.getSrc() != connect.getDest());
+    assert(connect.getDest() == connect->getOperand(0)); // check operand numbering :/
+    connect->setOperand(0, pipe.getIn());
+
+    // Resolve the edge (RAUW to out result).
+    edge.setValue(pipe.getOut());
   }
 
   edges.clear();
