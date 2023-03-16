@@ -840,7 +840,7 @@ firrtl.circuit "Top" {
     // CHECK:  %[[OUT:.+]], %[[IN:.+]] = firrtl.pipe
     // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK:  %[[SEND:.+]] = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %[[IN]], [[SEND]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %[[IN]], %[[SEND]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
     // CHECK:  firrtl.ref.define %_a, %[[OUT]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
