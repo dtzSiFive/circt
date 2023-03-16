@@ -381,14 +381,14 @@ def PipeOp : ReferableDeclOp<"pipe", [TypesMatchWith<"result types should match"
                       CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, name, nameKind,
+      return build($_builder, $_state, elementType, elementType, name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
-      return build($_builder, $_state, elementType, name, nameKind, annotations,
+      return build($_builder, $_state, elementType, elementType, name, nameKind, annotations,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>
   ];
