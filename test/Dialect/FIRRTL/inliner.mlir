@@ -837,9 +837,11 @@ firrtl.circuit "Top" {
   firrtl.module @Bar(out %_a: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.ref<uint<1>>)
     firrtl.ref.define %_a, %xmr   : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  %[[OUT:.+]], %[[IN:.+]] = firrtl.pipe
     // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  %[[SEND:.+]] = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK:  firrtl.ref.define %[[IN]], [[SEND]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    // CHECK:  firrtl.ref.define %_a, %[[OUT]] : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
   }
   firrtl.module @Top() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.ref<uint<1>>)
