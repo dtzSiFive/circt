@@ -2187,6 +2187,13 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 
+void PipeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // auto base = getName();
+  // if (!base)
+  //   base = "pipe";
+  // setNameFn(getResult(), getName());
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//

@@ -354,6 +354,51 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   let hasVerifier = 1;
 }
 
+def PipeOp : ReferableDeclOp<"pipe", [TypesMatchWith<"result types should match", "out", "in", "$_self">]> {
+  let summary = "Define a pipe";
+  let description = [{
+    Declare a new pipe:
+    ```
+      %name_out, %name_in = firrtl.pipe : t1
+    ```
+
+    Similar to a node.
+    Driver connects to the 'in' result, users read from 'out' result.
+    Type must be passive, must have at most one driver.
+    }];
+
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs AnyType:$out, AnyType:$in);
+
+  // let hasCanonicalizer = true;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                      CArg<"StringRef", "{}">:$name,
+                      CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                      CArg<"ArrayRef<Attribute>","{}">:$annotations,
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, elementType, name, nameKind,
+                   $_builder.getArrayAttr(annotations),
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
+                   "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+      return build($_builder, $_state, elementType, name, nameKind, annotations,
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
+    custom<FIRRTLImplicitSSAName>(attr-dict) `:`
+    qualified(type($out))
+  }];
+}
+
 def WireOp : ReferableDeclOp<"wire"> {
   let summary = "Define a new wire";
   let description = [{
