@@ -1734,6 +1734,7 @@ static LogicalResult forwardThroughPipe(PipeOp op, PatternRewriter &rewriter) {
     return failure();
 
   assert(in.use_begin()->is(driver.getDest()));
+  assert(in.use_begin()->getOperandNumber() == 0);
 
   auto source = driver.getSrc();
   if (source.getType() != op.getOut().getType())
@@ -1747,8 +1748,8 @@ static LogicalResult forwardThroughPipe(PipeOp op, PatternRewriter &rewriter) {
   // Drop the driver and pipe if unused.
   // Don't worry about droppable name (?).
   if (op.getOut().getUses().empty()) {
-    rewriter.eraseOp(op);
     rewriter.eraseOp(driver);
+    rewriter.eraseOp(op);
   }
 
   return success();
