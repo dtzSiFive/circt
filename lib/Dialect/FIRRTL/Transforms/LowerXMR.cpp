@@ -178,6 +178,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
             return success();
           })
+          .Case<RefCastOp>([&](RefCastOp cast) {
+            dataFlowClasses.unionSets(cast.getInput(), cast.getResult());
+            return success();
+          })
           .Case<RefResolveOp>([&](RefResolveOp resolve) {
             // Merge dataflow, under the same conditions as above for Connect.
             // 1. If dataflow at the resolve.getRef is known, propagate that to
