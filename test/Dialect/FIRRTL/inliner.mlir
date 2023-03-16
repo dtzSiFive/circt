@@ -1161,3 +1161,32 @@ firrtl.circuit "RefCastForInlinedPort" {
     firrtl.connect %out, %res : !firrtl.uint, !firrtl.uint
   }
 }
+
+// -----
+
+// Check inlining instances with ref ports that are used.
+
+// CHECK-LABEL: "InlinerRefs"
+firrtl.circuit "InlinerRefs" {
+   // CHECK-NOT: @Child
+  firrtl.module private @ChildIn(in %in: !firrtl.ref<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  }
+  firrtl.module private @ChildOut(in %in_a: !firrtl.uint<1>, in %in_b: !firrtl.uint<2>, out %out_a: !firrtl.ref<uint<1>>, out %out_b: !firrtl.ref<uint<2>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %0 = firrtl.ref.send %in_a : !firrtl.uint<1>
+    %1 = firrtl.ref.send %in_b : !firrtl.uint<2>
+    firrtl.ref.define %out_a, %0 : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+    firrtl.ref.define %out_b, %1 : !firrtl.ref<uint<2>>, !firrtl.ref<uint<2>>
+  }
+  // CHECK: @InlinerRefs
+  firrtl.module @InlinerRefs(in %in_a: !firrtl.uint<1>, in %in_b: !firrtl.uint<2>, out %out: !firrtl.uint<1>) {
+    // CHECK-NOT: firrtl.instance
+    // TODO: maybe check more here, wait to see if can produce better IR on-the-fly cheaply.
+    %ci_in = firrtl.instance ci @ChildIn(in in: !firrtl.ref<uint<1>>)
+    %0 = firrtl.ref.resolve %ci_in : !firrtl.ref<uint<1>>
+    firrtl.strictconnect %out, %0 : !firrtl.uint<1>
+    %co_in_a, %co_in_b, %co_out_a, %co_out_b = firrtl.instance co @ChildOut(in in_a: !firrtl.uint<1>, in in_b: !firrtl.uint<2>, out out_a: !firrtl.ref<uint<1>>, out out_b: !firrtl.ref<uint<2>>)
+    firrtl.strictconnect %co_in_a, %in_a : !firrtl.uint<1>
+    firrtl.strictconnect %co_in_b, %in_b : !firrtl.uint<2>
+    firrtl.ref.define %ci_in, %co_out_a : !firrtl.ref<uint<1>>, !firrtl.ref<uint<1>>
+  }
+}
