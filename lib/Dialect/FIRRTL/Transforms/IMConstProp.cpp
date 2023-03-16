@@ -30,9 +30,9 @@ using namespace firrtl;
 
 #define DEBUG_TYPE "IMCP"
 
-/// Return true if this is a wire or register.
-static bool isWireOrReg(Operation *op) {
-  return isa<WireOp, RegResetOp, RegOp>(op);
+/// Return true if this is a wire,  register, or pipe.
+static bool isWireOrRegOrPipe(Operation *op) {
+  return isa<WireOp, RegResetOp, RegOp, PipeOp>(op);
 }
 
 /// Return true if this is an aggregate indexer.
@@ -41,8 +41,8 @@ static bool isAggregate(Operation *op) {
 }
 
 /// Return true if this is a wire or register we're allowed to delete.
-static bool isDeletableWireOrRegOrNode(Operation *op) {
-  return (isWireOrReg(op) || isa<NodeOp>(op)) && AnnotationSet(op).empty() &&
+static bool isDeletableWireOrRegOrPipeOrNode(Operation *op) {
+  return (isWireOrRegOrPipe(op) || isa<NodeOp>(op)) && AnnotationSet(op).empty() &&
          !hasDontTouch(op) && hasDroppableName(op);
 }
 
@@ -282,6 +282,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
   void markWireOp(WireOp wireOrReg);
+  void markPipeOp(PipeOp pipe);
   void markMemOp(MemOp mem);
 
   void markInvalidValueOp(InvalidValueOp invalid);
@@ -295,6 +296,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitRefResolve(RefResolveOp resolve);
   void visitNode(NodeOp node);
   void visitOperation(Operation *op);
+  void visitPipeOp(PipeOp pipe);
 
 private:
   /// This is the current instance graph for the Circuit.
@@ -423,6 +425,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markOverdefined(op.getResult(0));
     else if (auto wire = dyn_cast<WireOp>(&op))
       markWireOp(wire);
+    else if (auto pipe = dyn_cast<PipeOp>(&op))
+      markPipeOp(pipe);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
     else if (auto aggregateConstant = dyn_cast<AggregateConstantOp>(op))
@@ -487,6 +491,16 @@ void IMConstPropPass::markWireOp(WireOp wire) {
 
   if (hasDontTouch(wire.getResult()))
     return markOverdefined(wire);
+
+  // Otherwise, this starts out as unknown and is upgraded by connects.
+}
+
+void IMConstPropPass::markPipeOp(PipeOp pipe) {
+  auto type = pipe.getOut().getType();
+  if (!getBaseType(type).getPassiveType().isGround() || hasDontTouch(pipe)) {
+    markOverdefined(pipe.getOut());
+    markOverdefined(pipe.getIn());
+  }
 
   // Otherwise, this starts out as unknown and is upgraded by connects.
 }
@@ -616,7 +630,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect) {
 
     // For wires and registers, we drive the value of the wire itself, which
     // automatically propagates to users.
-    if (isWireOrReg(dest.getOwner()))
+    if (isWireOrRegOrPipe(dest.getOwner()))
       return mergeLatticeValue(fieldRefDestConnected, srcValue);
 
     // Driving an instance argument port drives the corresponding argument
@@ -670,6 +684,11 @@ void IMConstPropPass::visitNode(NodeOp node) {
   return mergeLatticeValue(node.getResult(), node.getInput());
 }
 
+void IMConstPropPass::visitPipeOp(PipeOp pipe) {
+  // (don't check op, setup during markPipeOp)
+  return mergeLatticeValue(pipe.getOut(), pipe.getIn());
+}
+
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -686,6 +705,8 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitRefResolve(resolveOp);
   if (auto nodeOp = dyn_cast<NodeOp>(op))
     return visitNode(nodeOp);
+  if (auto pipeOp = dyn_cast<PipeOp>(op))
+    return visitPipeOp(pipeOp);
 
   // The clock operand of regop changing doesn't change its result value.  All
   // other registers are over-defined. Aggregate operations also doesn't change
@@ -871,7 +892,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         // aggregate if entire aggregate is dead.
         if (auto type = connect.getDest().getType().dyn_cast<FIRRTLType>()) {
           if (getBaseType(type).isGround() &&
-              isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
+              isDeletableWireOrRegOrPipeOrNode(destOp) && !isOverdefined(fieldRef)) {
             connect.erase();
             ++numErasedOp;
           }
@@ -887,7 +908,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
     // If this operation is already dead, then go ahead and remove it.
     if (op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrPipeOrNode(&op))) {
       LLVM_DEBUG({ logger.getOStream() << "Trivially dead : " << op << "\n"; });
       op.erase();
       continue;
@@ -908,7 +929,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
     // If the operation folded to a constant then we can probably nuke it.
     if (foldedAny && op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrPipeOrNode(&op))) {
       LLVM_DEBUG({ logger.getOStream() << "Made dead : " << op << "\n"; });
       op.erase();
       ++numErasedOp;
