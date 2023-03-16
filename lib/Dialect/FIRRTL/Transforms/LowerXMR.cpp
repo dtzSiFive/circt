@@ -199,6 +199,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             resolveOps.push_back(resolve);
             return success();
           })
+          .Case<PipeOp>([&](PipeOp pipe) {
+            dataFlowClasses.unionSets(pipe.getIn(), pipe.getOut());
+            return success();
+          })
           .Default([&](auto) { return success(); });
     };
 
