@@ -369,10 +369,10 @@ def PipeOp : ReferableDeclOp<"pipe", [TypesMatchWith<"result types should match"
 
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym); /* Maybe don't allow symbol? */
   let results = (outs PassiveBaseOrRefType:$out, PassiveBaseOrRefType:$in);
 
-  // let hasCanonicalizer = true;
+  let hasCanonicalizer = true;
   let hasVerifier = 1;
 
   let builders = [

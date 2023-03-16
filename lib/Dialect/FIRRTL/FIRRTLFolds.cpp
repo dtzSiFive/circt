@@ -1706,6 +1706,60 @@ LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,
   return failure();
 }
 
+/// Helper to determine if 'a' is available at 'b's block.
+static bool safelyDoms(Value a, Value b) {
+  if (a.isa<BlockArgument>())
+    return true;
+  if (b.isa<BlockArgument>())
+    return false;
+  // Handle cases where 'b' is in child op after 'a'.
+  auto *ancestor =
+      a.getParentBlock()->findAncestorOpInBlock(*b.getDefiningOp());
+  return ancestor && a.getDefiningOp()->isBeforeInBlock(ancestor);
+}
+
+/// Replace use of pipe's output with single driver's source where possible.
+static LogicalResult forwardThroughPipe(PipeOp op, PatternRewriter &rewriter) {
+  Value in = op.getIn();
+  if (!in.hasOneUse())
+    return failure();
+
+  // If symbol or annotations leave this alone.
+  if (op.getInnerSym() ||
+      !op.getAnnotations().empty())
+    return failure();
+
+  auto driver = dyn_cast<FConnectLike>(*in.user_begin());
+  if (!driver)
+    return failure();
+
+  assert(in.use_begin()->is(driver.getDest()));
+
+  auto source = driver.getSrc();
+  if (source.getType() != op.getOut().getType())
+    return failure();
+
+  // Forward in to replace out if available at each use.
+  rewriter.replaceUsesWithIf(op.getOut(), source, [&](auto &use) {
+    return safelyDoms(source, use.get());
+  });
+
+  // Drop the driver and pipe if unused.
+  // Don't worry about droppable name (?).
+  if (op.getOut().getUses().empty()) {
+    rewriter.eraseOp(op);
+    rewriter.eraseOp(driver);
+  }
+
+  return success();
+}
+
+// TODO: Fold define + cast, define + pipe, etc.
+void PipeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.add(forwardThroughPipe);
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
