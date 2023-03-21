@@ -2489,6 +2489,7 @@ ParseResult FIRStmtParser::parseRefForce() {
     return failure();
 
   // Check reference expression is of reference type.
+  // TODO: RWProbe!
   if (!isa<RefType>(dest.getType()))
     return emitError(startTok.getLoc(), "expected reference-type expression for force destination, got")
            << dest.getType();
@@ -2516,6 +2517,7 @@ ParseResult FIRStmtParser::parseRefForceInitial() {
     return failure();
 
   // Check reference expression is of reference type.
+  // TODO: RWProbe!
   if (!isa<RefType>(dest.getType()))
     return emitError(startTok.getLoc(), "expected reference-type expression for force_initial destination, got")
            << dest.getType();
@@ -2543,6 +2545,7 @@ ParseResult FIRStmtParser::parseRefRelease() {
     return failure();
 
   // Check reference expression is of reference type.
+  // TODO: RWProbe!
   if (!isa<RefType>(dest.getType()))
     return emitError(startTok.getLoc(), "expected reference-type expression for release destination, got")
            << dest.getType();
@@ -2558,15 +2561,15 @@ ParseResult FIRStmtParser::parseRefRelease() {
 ParseResult FIRStmtParser::parseRefReleaseInitial() {
   auto startTok = consumeToken(FIRToken::lp_release_initial);
 
-  Value dest, src;
+  Value dest;
   if (parseRefExp(
           dest, "expected destination reference expression in release_initial") ||
-      parseExp(src, "expected source expression in release_initial") ||
       parseToken(FIRToken::r_paren, "expected ')' in release_initial") ||
       parseOptionalInfo())
     return failure();
 
   // Check reference expression is of reference type.
+  // TODO: RWProbe!
   if (!isa<RefType>(dest.getType()))
     return emitError(startTok.getLoc(), "expected reference-type expression for release_initial destination, got")
            << dest.getType();
