@@ -1154,7 +1154,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
-  ; CHECK-SAME: out %rw: !firrtl.probe<uint<1>>
+  ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>
   module RefsChild :
     input in : UInt<1>
     output r : Probe<UInt<1>>
@@ -1187,6 +1187,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: ref.define %r, %[[OUTREF]]
     define r = probe(out)
     ; CHECK-NEXT: ref.define %rw, %[[RC_RW]]
+    ; CHECK-SAME: rwprobe
     define rw = rc.rw
 
     ; CHECK-NEXT: %[[READ_RC_R:.+]] = firrtl.ref.resolve %[[RC_R]]
