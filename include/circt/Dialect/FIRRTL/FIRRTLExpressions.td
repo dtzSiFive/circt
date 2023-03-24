@@ -815,17 +815,24 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
 
-def RefSendOp: FIRRTLExprOp<"ref.send", [RefResultTypeConstraint<"base", "result">]> {
+def RefSendOp: FIRRTLExprOp<"ref.send",
+    [
+      RefResultTypeConstraint<"base", "result">,
+      DeclareOpInterfaceMethods<InnerRefUserOpInterface>
+    ]> {
   let summary = "FIRRTL Send through Reference";
   let description = [{
     Endpoint of a remote reference. Send a value through a reference
     to be read from the firrtl.ref.resolve op.
     It takes a BaseType input and returns the corresponding RefType value.
+    May also take an inner symbol of a declaration creating the value,
+    for use creating force-able probes of the target.
   }];
-  let arguments = (ins FIRRTLBaseType:$base);
+  let arguments = (ins FIRRTLBaseType:$base, OptionalAttr<HWInnerRefAttr>:$forceSym);
   let results = (outs RefType:$result);
 
-  let assemblyFormat = "$base attr-dict `:` qualified(type($base))";
+  let hasCustomAssemblyFormat = 1;
+  // let assemblyFormat = "$base ($forceSym^ attr-dict `:` qualified(type($base))";
 }
 
 def RefSubOp : FIRRTLExprOp<"ref.sub"> {

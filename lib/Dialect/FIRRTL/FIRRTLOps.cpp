@@ -3850,6 +3850,72 @@ void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // RefOps
 //===----------------------------------------------------------------------===//
 
+void RefSendOp::print(OpAsmPrinter &printer) {
+  // firrtl.ref.send %val [forceable @inner_sym] : T
+  printer << " ";
+  printer.printOperand(getBase());
+  printer << " ";
+  if (auto sym = getForceSym()) {
+    printer << "forceable ";
+    printer.printSymbolName(sym->getModule().strref());
+    printer << "::";
+    printer.printSymbolName(sym->getName().strref());
+  }
+  printer.printOptionalAttrDict(getOperation()->getAttrs(),
+                          /*elidedAttrs=*/{"forceSym"});
+  printer << " : " << getBase().getType();
+}
+
+ParseResult RefSendOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand base;
+  if (parser.parseOperand(base))
+    return failure();
+
+  bool forceable = false;
+  if (succeeded(parser.parseOptionalKeyword("forceable"))) {
+    StringAttr moduleSym, forceSym;
+    if (parser.parseSymbolName(moduleSym) || parser.parseKeyword("::") || parser.parseSymbolName(forceSym))
+      return failure();
+    result.addAttribute(getForceSymAttrName(result.name),
+                        hw::InnerRefAttr::get(moduleSym, forceSym));
+    forceable = true;
+  }
+
+  FIRRTLBaseType type;
+  if (parser.parseColonType<FIRRTLBaseType>(type) || parser.resolveOperand(base, type, result.operands))
+    return failure();
+
+  result.addTypes({RefType::get(type.getPassiveType(), forceable)});
+
+  return success();
+}
+
+LogicalResult RefSendOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto ref = getForceSym();
+  if (!ref)
+    return success();
+
+  auto target = ns.lookup(*ref);
+  if (!target)
+    return emitOpError("unable to resolve forceable target");
+  if (target.isPort())
+    return emitOpError("cannot force a port");
+  if (target.isField())
+    return emitOpError("cannot force a field");
+
+  auto *mod = ns.symTable.lookup(ref->getModule());
+  if (!mod || mod->isAncestor(*this))
+    return emitOpError(
+        "force symbol points to operation in different module, but be local");
+
+  auto *op = target.getOp();
+  auto *baseDefOp = getBase().getDefiningOp();
+  if (baseDefOp != op)
+    return emitOpError("value sent is not created by forceable target");
+
+  return success();
+}
+
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {

@@ -435,7 +435,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     // RefSend on the register.
     if (regOfVec)
       for (auto r : debugPorts)
-        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec));
+        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec.getResult()));
   }
 
 private:
