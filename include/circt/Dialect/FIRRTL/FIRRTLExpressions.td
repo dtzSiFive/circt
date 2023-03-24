@@ -791,10 +791,6 @@ class RefTypeConstraint<string ref, string base>
                    ref, base,
                    "$_self.cast<RefType>().getType()">;
 
-class RefResultTypeConstraint<string base, string ref>
-  : TypesMatchWith<"reference base type should match",
-                   base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
 
 //===----------------------------------------------------------------------===//
 // RefOps
@@ -817,7 +813,7 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
 
 def RefSendOp: FIRRTLExprOp<"ref.send",
     [
-      RefResultTypeConstraint<"base", "result">,
+      RefTypeConstraint<"result", "base">, // TODO: compare agnostic to probe/rwprobe
       DeclareOpInterfaceMethods<InnerRefUserOpInterface>
     ]> {
   let summary = "FIRRTL Send through Reference";

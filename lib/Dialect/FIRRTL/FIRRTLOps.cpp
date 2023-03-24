@@ -3874,7 +3874,8 @@ ParseResult RefSendOp::parse(OpAsmParser &parser, OperationState &result) {
   bool forceable = false;
   if (succeeded(parser.parseOptionalKeyword("forceable"))) {
     StringAttr moduleSym, forceSym;
-    if (parser.parseSymbolName(moduleSym) || parser.parseKeyword("::") || parser.parseSymbolName(forceSym))
+    if (parser.parseSymbolName(moduleSym) || parser.parseColon() ||
+        parser.parseColon() || parser.parseSymbolName(forceSym))
       return failure();
     result.addAttribute(getForceSymAttrName(result.name),
                         hw::InnerRefAttr::get(moduleSym, forceSym));
@@ -3904,7 +3905,7 @@ LogicalResult RefSendOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     return emitOpError("cannot force a field");
 
   auto *mod = ns.symTable.lookup(ref->getModule());
-  if (!mod || mod->isAncestor(*this))
+  if (!mod || !mod->isAncestor(*this))
     return emitOpError(
         "force symbol points to operation in different module, but be local");
 
@@ -3935,7 +3936,14 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
   if (!inBaseType)
     return emitInferRetTypeError(
         loc, "ref.send operand must be base type, not ", inType);
-  return RefType::get(inBaseType.getPassiveType());
+  bool forceable = false;
+  for (auto &attr : attrs) {
+    if (attr.getName() == "forceSym") {
+      forceable = true;
+      break;
+    }
+  }
+  return RefType::get(inBaseType, forceable);
 }
 
 void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

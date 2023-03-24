@@ -2468,8 +2468,33 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
           staticRef.getDefiningOp()))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
+  // Get inner_sym for source.
+  // TODO: Support for non-public ports.
+  // TODO: Just create a rwprobe, convert to ref.send / symbol after?
+  if (isa<BlockArgument>(staticRef))
+    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  auto *op = staticRef.getDefiningOp();
+  if (!op)
+    return emitError(startTok.getLoc(), "rwprobe value must be defined by an operation");
+  auto namable = dyn_cast<FNamableOp>(op);
+  if (!namable)
+    return emitError(startTok.getLoc(), "rwprobe expression not namable")
+        .attachNote(op->getLoc());
+  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op);
+  if (!symOp)
+    return emitError(startTok.getLoc(), "rwprobe expression not forceable")
+        .attachNote(op->getLoc());
+  // InnerRef to the defining operation, not the value directly.
+  // auto ref = hw::InnerRefAttr::get(modNameSpace.newName(namable.getName()));
+
+  // Ensure op has symbol. (can't use getInnerRefTo, wants ModuleNamespace not Namespace).
+  auto sym = symOp.getInnerNameAttr();
+  if (!sym)
+    symOp.setInnerSymbol(
+        StringAttr::get(getContext(), modNameSpace.newName(namable.getName())));
+
   // TODO: RWProbe<T>.  rework ref.send, not good for force.
-  result = builder.create<RefSendOp>(staticRef);
+  result = builder.create<RefSendOp>(staticRef, symOp.getInnerRef());
 
   return success();
 }
