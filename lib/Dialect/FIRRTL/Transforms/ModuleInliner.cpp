@@ -513,7 +513,7 @@ private:
   /// InstanceOp no longer contains the BreadCrumbs which indicated the
   /// `HierPathOps` that it participates in.
   void rename(StringRef prefix, Operation *op, ModuleNamespace &moduleNamespace,
-              SmallVector<StringAttr> &validHierPaths);
+              SmallVector<StringAttr> &validHierPaths, InnerRefAttr oldInnerRef);
 
   /// Clone and rename an operation.
   void cloneAndRename(StringRef prefix, OpBuilder &b, IRMapping &mapper,
@@ -631,7 +631,7 @@ bool Inliner::doesNLAMatchCurrentPath(hw::HierPathOp nla) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::rename(StringRef prefix, Operation *op,
                      ModuleNamespace &moduleNamespace,
-                     SmallVector<StringAttr> &validHierPaths) {
+                     SmallVector<StringAttr> &validHierPaths, InnerRefAttr oldInnerRef) {
   // Add a prefix to things that has a "name" attribute.  We don't prefix
   // memories since it will affect the name of the generated module.
   // TODO: We should find a way to prefix the instance of a memory module.
@@ -682,7 +682,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
           auto &mnla = nlaMap[nla];
           mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
         }
-        auto oldInnerRef = InnerRefAttr::get(instanceParent, oldInstSym);
+        // auto oldInnerRef = InnerRefAttr::get(instanceParent, oldInstSym);
         instOpHierPaths.erase(oldInnerRef);
       }
     }
@@ -692,7 +692,7 @@ void Inliner::rename(StringRef prefix, Operation *op,
   for (auto &region : op->getRegions())
     for (auto &block : region)
       for (auto &op : block)
-        rename(prefix, &op, moduleNamespace, validHierPaths);
+        rename(prefix, &op, moduleNamespace, validHierPaths, oldInnerRef);
 }
 
 /// This function is used before inlining a module, to handle the conversion
@@ -806,10 +806,11 @@ void Inliner::cloneAndRename(
   // and the InstanceOp which is being replaced after inlining. That is the set
   // of HierPathOps that is common between these two.
   SmallVector<StringAttr> validHierPaths;
+  InnerRefAttr oldInnerRef;
   if (auto instance = dyn_cast<InstanceOp>(&op))
     if (auto instSym = getInnerSymName(instance)) {
       // Get the innerRef to the original InstanceOp that is being inlined here.
-      auto oldInnerRef = InnerRefAttr::get(
+      oldInnerRef = InnerRefAttr::get(
           instance->getParentOfType<FModuleOp>().getNameAttr(), instSym);
       // For all the HierPathOps that the instance being inlined participates
       // in.
@@ -830,7 +831,7 @@ void Inliner::cloneAndRename(
             }
       }
     }
-  rename(prefix, newOp, moduleNamespace, validHierPaths);
+  rename(prefix, newOp, moduleNamespace, validHierPaths, oldInnerRef);
   if (isa<InstanceOp>(&op)) {
     auto innerRef =
         InnerRefAttr::get(newOp->getParentOfType<FModuleOp>().getNameAttr(),
