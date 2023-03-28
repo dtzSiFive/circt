@@ -3943,7 +3943,7 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
       break;
     }
   }
-  return RefType::get(inBaseType, forceable);
+  return RefType::get(inBaseType.getPassiveType(), forceable);
 }
 
 void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

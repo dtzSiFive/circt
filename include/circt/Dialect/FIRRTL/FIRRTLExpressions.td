@@ -791,7 +791,6 @@ class RefTypeConstraint<string ref, string base>
                    ref, base,
                    "$_self.cast<RefType>().getType()">;
 
-
 //===----------------------------------------------------------------------===//
 // RefOps
 //===----------------------------------------------------------------------===//
@@ -813,7 +812,6 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
 
 def RefSendOp: FIRRTLExprOp<"ref.send",
     [
-      RefTypeConstraint<"result", "base">, // TODO: compare agnostic to probe/rwprobe
       DeclareOpInterfaceMethods<InnerRefUserOpInterface>
     ]> {
   let summary = "FIRRTL Send through Reference";
