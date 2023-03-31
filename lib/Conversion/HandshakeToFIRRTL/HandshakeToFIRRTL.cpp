@@ -1229,8 +1229,8 @@ bool HandshakeBuilder::visitHandshake(SyncOp op) {
   // Create wires that will be used to connect the join and the fork logic
   auto bitType = UIntType::get(op->getContext(), 1);
   ValueVector connector;
-  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allValid"));
-  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allReady"));
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allValid").getResult());
+  connector.push_back(rewriter.create<WireOp>(insertLoc, bitType, "allReady").getResult());
 
   // Collect all input ports.
   SmallVector<ValueVector *, 4> inputs;
@@ -1386,7 +1386,7 @@ bool HandshakeBuilder::visitHandshake(handshake::SelectOp op) {
   rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
 
   // 'and' the arg valids and select valid
-  Value allValid = rewriter.create<WireOp>(insertLoc, bitType, "allValid");
+  Value allValid = rewriter.create<WireOp>(insertLoc, bitType, "allValid").getResult();
   buildReductionTree<AndPrimOp>({trueValid, falseValid, selectValid}, allValid);
 
   // Connect that to the result valid.
@@ -1444,10 +1444,11 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
       createConstantOp(indexType, APInt(numInputs, 0), insertLoc, rewriter);
 
   // Declare wire for arbitration winner.
-  auto win = rewriter.create<WireOp>(insertLoc, indexType, "win");
+  auto win = rewriter.create<WireOp>(insertLoc, indexType, "win").getResult();
 
   // Declare wires for if each output is done.
-  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, "resultDone");
+  auto resultDone =
+      rewriter.create<WireOp>(insertLoc, bitType, "resultDone").getResult();
 
   // Create predicates to assert if the win wire holds a valid index.
   auto hasWinnerCondition = rewriter.create<OrRPrimOp>(insertLoc, bitType, win);
@@ -1541,10 +1542,10 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
                                          noWinner, "won");
 
   // Declare wire for arbitration winner.
-  auto win = rewriter.create<WireOp>(insertLoc, indexType, "win");
+  auto win = rewriter.create<WireOp>(insertLoc, indexType, "win").getResult();
 
   // Declare wire for whether the circuit just fired and emitted both outputs.
-  auto fired = rewriter.create<WireOp>(insertLoc, bitType, "fired");
+  auto fired = rewriter.create<WireOp>(insertLoc, bitType, "fired").getResult();
 
   // Declare registers for storing if each output has been emitted.
   auto resultEmitted = rewriter.create<RegResetOp>(
@@ -1554,9 +1555,9 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
       insertLoc, bitType, clock, reset, falseConst, "controlEmitted");
 
   // Declare wires for if each output is done.
-  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, "resultDone");
+  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, "resultDone").getResult();
 
-  auto controlDone = rewriter.create<WireOp>(insertLoc, bitType, "controlDone");
+  auto controlDone = rewriter.create<WireOp>(insertLoc, bitType, "controlDone").getResult();
 
   // Create predicates to assert if the win wire or won register hold a valid
   // index.
@@ -1802,13 +1803,13 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
   for (unsigned i = 0; i < resultNum; ++i) {
     auto doneWire =
         rewriter.create<WireOp>(insertLoc, bitType, "done" + std::to_string(i));
-    doneWires.push_back(doneWire);
+    doneWires.push_back(doneWire.getResult());
   }
 
   // Create an AndPrimOp chain for generating the ready signal. Only if all
   // result ports are handshaked (done), the argument port is ready to accept
   // the next token.
-  Value allDoneWire = rewriter.create<WireOp>(insertLoc, bitType, "allDone");
+  Value allDoneWire = rewriter.create<WireOp>(insertLoc, bitType, "allDone").getResult();
   buildReductionTree<AndPrimOp>(doneWires, allDoneWire);
 
   // Connect the allDoneWire to the input ready.
@@ -1816,7 +1817,7 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
 
   // Create a notAllDoneWire for later use.
   auto notAllDoneWire =
-      rewriter.create<WireOp>(insertLoc, bitType, "notAllDone");
+      rewriter.create<WireOp>(insertLoc, bitType, "notAllDone").getResult();
   rewriter.create<ConnectOp>(
       insertLoc, notAllDoneWire,
       rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
@@ -1853,8 +1854,10 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     rewriter.create<ConnectOp>(insertLoc, emtdReg, emtd);
 
     // Create a notEmtdWire for later use.
-    auto notEmtdWire = rewriter.create<WireOp>(insertLoc, bitType,
-                                               "notEmtd" + std::to_string(idx));
+    auto notEmtdWire =
+        rewriter
+            .create<WireOp>(insertLoc, bitType, "notEmtd" + std::to_string(idx))
+            .getResult();
     rewriter.create<ConnectOp>(
         insertLoc, notEmtdWire,
         rewriter.create<NotPrimOp>(insertLoc, bitType, emtdReg));
@@ -1867,8 +1870,11 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
 
     // Create validReady wire signal, which indicates a successful handshake in
     // the current clock cycle.
-    auto validReadyWire = rewriter.create<WireOp>(
-        insertLoc, bitType, "validReady" + std::to_string(idx));
+    auto validReadyWire =
+        rewriter
+            .create<WireOp>(insertLoc, bitType,
+                            "validReady" + std::to_string(idx))
+            .getResult();
     rewriter.create<ConnectOp>(
         insertLoc, validReadyWire,
         rewriter.create<AndPrimOp>(insertLoc, bitType, resultReady, valid));
@@ -1938,7 +1944,7 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
 
   // Create a wire and connect it to the register for the ready buffer.
   auto readyRegWire =
-      rewriter.create<WireOp>(insertLoc, bitType, "readyRegWire");
+      rewriter.create<WireOp>(insertLoc, bitType, "readyRegWire").getResult();
 
   auto readyReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
                                               falseConst, "readyReg");
@@ -1975,7 +1981,7 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
   if (predData) {
     auto dataType = predData.getType().cast<FIRRTLBaseType>();
     auto ctrlDataRegWire =
-        rewriter.create<WireOp>(insertLoc, dataType, "ctrlDataRegWire");
+        rewriter.create<WireOp>(insertLoc, dataType, "ctrlDataRegWire").getResult();
 
     auto ctrlZeroConst = createZeroDataConst(dataType, insertLoc, rewriter);
 
@@ -2123,17 +2129,18 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   auto oneConst =
       createConstantOp(bitType, APInt(1, 1), builder.getLoc(), builder);
 
-  auto readEn = builder.create<WireOp>(bitType, "read_en");
-  auto writeEn = builder.create<WireOp>(bitType, "write_en");
+  auto readEn = builder.create<WireOp>(bitType, "read_en").getResult();
+  auto writeEn = builder.create<WireOp>(bitType, "write_en").getResult();
   auto tail =
       builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "tail_reg");
   auto head =
       builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "head_reg");
-  auto full = builder.create<WireOp>(bitType, "full");
-  auto empty = builder.create<WireOp>(bitType, "empty");
+  auto full = builder.create<WireOp>(bitType, "full").getResult();
+  auto empty = builder.create<WireOp>(bitType, "empty").getResult();
   auto notEmpty = builder.create<NotPrimOp>(empty);
   auto count =
-      builder.create<RegResetOp>(depthType, clk, rst, zeroConst, "count_reg");
+      builder.create<RegResetOp>(depthType, clk, rst, zeroConst, "count_reg")
+          .getResult();
 
   // Function for truncating results to a given types' width.
   auto trunc = [&](Value v, FIRRTLBaseType toType) {
@@ -2300,16 +2307,16 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
   auto outputReady = outputSubfields[1];
 
   auto bitType = UIntType::get(builder.getContext(), 1);
-  auto muxSelWire = builder.create<WireOp>(insertLoc, bitType, "muxSelWire");
-  auto fifoValid = builder.create<WireOp>(insertLoc, bitType, "fifoValid");
-  auto fifoPValid = builder.create<WireOp>(insertLoc, bitType, "fifoPValid");
-  auto fifoReady = builder.create<WireOp>(insertLoc, bitType, "fifoReady");
-  auto fifoNReady = builder.create<WireOp>(insertLoc, bitType, "fifoNReady");
+  auto muxSelWire = builder.create<WireOp>(insertLoc, bitType, "muxSelWire").getResult();
+  auto fifoValid = builder.create<WireOp>(insertLoc, bitType, "fifoValid").getResult();
+  auto fifoPValid = builder.create<WireOp>(insertLoc, bitType, "fifoPValid").getResult();
+  auto fifoReady = builder.create<WireOp>(insertLoc, bitType, "fifoReady").getResult();
+  auto fifoNReady = builder.create<WireOp>(insertLoc, bitType, "fifoNReady").getResult();
   Value fifoIn = nullptr;
   Value fifoOut = nullptr;
   if (!isControl) {
-    fifoIn = builder.create<WireOp>(insertLoc, dataType, "fifoIn");
-    fifoOut = builder.create<WireOp>(insertLoc, dataType, "fifoOut");
+    fifoIn = builder.create<WireOp>(insertLoc, dataType, "fifoIn").getResult();
+    fifoOut = builder.create<WireOp>(insertLoc, dataType, "fifoOut").getResult();
   }
 
   // Connect output valid and ready signals.
@@ -2429,12 +2436,12 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
 
     // Create wires for ready signal from the success buffer stage.
     auto readyWire = rewriter.create<WireOp>(insertLoc, bitType,
-                                             "readyWire" + std::to_string(i));
+                                             "readyWire" + std::to_string(i)).getResult();
 
     // Create a register for valid signal.
     auto validReg = rewriter.create<RegResetOp>(
         insertLoc, bitType, clock, reset,
-        isInitialized ? trueConst : falseConst, "validReg" + std::to_string(i));
+        isInitialized ? trueConst : falseConst, "validReg" + std::to_string(i)).getResult();
 
     // Create registers for data signal.
     Value dataReg = nullptr;
@@ -2449,21 +2456,21 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
       }
       dataReg =
           rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
-                                      initValue, "dataReg" + std::to_string(i));
+                                      initValue, "dataReg" + std::to_string(i)).getResult();
     }
 
     // Create wires for valid, ready and data signal coming from the control
     // buffer stage.
     auto ctrlValidWire = rewriter.create<WireOp>(
-        insertLoc, bitType, "ctrlValidWire" + std::to_string(i));
+        insertLoc, bitType, "ctrlValidWire" + std::to_string(i)).getResult();
 
     auto ctrlReadyWire = rewriter.create<WireOp>(
-        insertLoc, bitType, "ctrlReadyWire" + std::to_string(i));
+        insertLoc, bitType, "ctrlReadyWire" + std::to_string(i)).getResult();
 
     Value ctrlDataWire;
     if (!isControl)
       ctrlDataWire = rewriter.create<WireOp>(
-          insertLoc, dataType, "ctrlDataWire" + std::to_string(i));
+          insertLoc, dataType, "ctrlDataWire" + std::to_string(i)).getResult();
 
     // Build the current stage of the buffer.
     buildDataBufferLogic(currentValid, validReg, currentReady, readyWire,
@@ -2745,7 +2752,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     auto falseConst =
         createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
     auto writeValidBuffer = rewriter.create<RegResetOp>(
-        insertLoc, bitType, clock, reset, falseConst, "writeValidBuffer");
+        insertLoc, bitType, clock, reset, falseConst, "writeValidBuffer").getResult();
 
     // Connect the write valid buffer to the store control valid.
     rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
@@ -2753,7 +2760,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Create the logic for when both the buffered write valid signal and the
     // store complete ready signal are asserted.
     Value storeCompleted =
-        rewriter.create<WireOp>(insertLoc, bitType, "storeCompleted");
+        rewriter.create<WireOp>(insertLoc, bitType, "storeCompleted").getResult();
     ValueVector storeCompletedVector({Value(), storeCompleted});
     buildAllReadyLogic({&storeCompletedVector}, &storeControl,
                        writeValidBuffer);
@@ -2774,7 +2781,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     SmallVector<Value, 2> storeValids;
     extractValues({&storeAddr, &storeData}, 0, storeValids);
     Value writeValid =
-        rewriter.create<WireOp>(insertLoc, bitType, "writeValid");
+        rewriter.create<WireOp>(insertLoc, bitType, "writeValid").getResult();
     buildReductionTree<AndPrimOp>(storeValids, writeValid);
 
     // Create a mux that drives the buffer input. If the emptyOrComplete signal
@@ -2833,7 +2840,7 @@ bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
   auto bitType = UIntType::get(rewriter.getContext(), 1);
 
   // Create a wire that will be asserted when all inputs are valid.
-  auto inputsValid = rewriter.create<WireOp>(insertLoc, bitType, "inputsValid");
+  auto inputsValid = rewriter.create<WireOp>(insertLoc, bitType, "inputsValid").getResult();
 
   // Create a gate that will be asserted when all outputs are ready.
   auto outputsReady = rewriter.create<AndPrimOp>(
