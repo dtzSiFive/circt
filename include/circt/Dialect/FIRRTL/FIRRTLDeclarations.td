@@ -214,8 +214,10 @@ def MemOp : ReferableDeclOp<"mem"> {
   }];
 }
 
-def NodeOp : ReferableDeclOp<"node",
-      [SameOperandsAndResultType, InferTypeOpInterface]> {
+def NodeOp : ReferableDeclOp<"node", [
+      AllTypesMatch<["input","result"]>,
+      RefResultTypeConstraint<"input","ref">,
+      InferTypeOpInterface]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -232,7 +234,7 @@ def NodeOp : ReferableDeclOp<"node",
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLBaseType:$result);
+  let results = (outs FIRRTLBaseType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
@@ -256,7 +258,7 @@ def NodeOp : ReferableDeclOp<"node",
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    $input `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
+    $input `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input)) (`,` qualified(type($ref))^)?
   }];
 
   let hasCanonicalizer = true;
@@ -277,7 +279,7 @@ def RegOp : ReferableDeclOp<"reg"> {
     ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyRegisterType:$result);
+  let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -300,7 +302,8 @@ def RegOp : ReferableDeclOp<"reg"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result))
+    operands `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
+
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -320,7 +323,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyRegisterType:$result);
+  let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -347,7 +350,8 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     operands `` custom<FIRRTLImplicitSSAName>(attr-dict)
-    `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
+    `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
+
   }];
 
   let hasCanonicalizer = true;
@@ -366,7 +370,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs AnyType:$result);
+  let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
   let hasCanonicalizer = true;
 
@@ -391,7 +395,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
     custom<FIRRTLImplicitSSAName>(attr-dict) `:`
-    qualified(type($result))
+    qualified(type($result)) (`,` qualified(type($ref))^)?
   }];
 }
 
