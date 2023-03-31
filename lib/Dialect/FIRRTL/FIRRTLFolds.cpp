@@ -1813,6 +1813,8 @@ struct NodeBypass : public mlir::RewritePattern {
 } // namespace
 
 // Interesting names and symbols and don't touch force nodes to stick around.
+// TODO
+/*
 OpFoldResult NodeOp::fold(FoldAdaptor adaptor) {
   if (!hasDroppableName())
     return {};
@@ -1822,6 +1824,7 @@ OpFoldResult NodeOp::fold(FoldAdaptor adaptor) {
     return {};
   return adaptor.getInput();
 }
+*/
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
@@ -2041,7 +2044,7 @@ struct FoldResetMux : public mlir::RewritePattern {
       return failure();
 
     // Check all types should be typed by now
-    auto regTy = reg.getType();
+    auto regTy = reg.getResult().getType();
     if (con.getDest().getType() != regTy || con.getSrc().getType() != regTy ||
         mux.getHigh().getType() != regTy || mux.getLow().getType() != regTy ||
         regTy.getBitWidthOrSentinel() < 0)
@@ -2065,7 +2068,7 @@ struct FoldResetMux : public mlir::RewritePattern {
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegResetWithZeroReset,
-                 patterns::RegResetWithOneReset, FoldResetMux>(context);
+                 /* patterns::RegResetWithOneReset ,*/ FoldResetMux>(context);
 }
 
 // Returns the value connected to a port, if there is only one.
