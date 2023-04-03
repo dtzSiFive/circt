@@ -83,27 +83,4 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
-//===----------------------------------------------------------------------===//
-// References
-//===----------------------------------------------------------------------===//
-
-// Not quite what we want re: forceable being read AND forceable.
-//def ReadDataRef : I8BitEnumAttrCase<"ReadDataRef", 1, "read">;
-//def ForceableRef : I8BitEnumAttrCase<"ForceableRef", 3, "forceable">;
-//def AnnotationRef : I8BitEnumAttrCase<"AnnotationRef", 4, "annotated">;
-//
-//def RefKindAttr : I8BitEnumAttr<"ReferenceKind", "reference kinds",
-//                                   [ReadDataRef, ForceableRef, AnnotationRef]>  {
-//  let cppNamespace = "::circt::firrtl";
-//}
-def ReadDataRef : I8BitEnumAttrCase<"ReadDataRef", 1, "read">;
-def ForceableOnlyDataRef : I8BitEnumAttrCaseBit<"ForceableBitRef", 0, "forceable_bit">;
-def ForceableDataRef : I8BitEnumAttrCaseGroup<"ForceableRef", [ReadDataRef, ForceableOnlyDataRef], "forceable">;
-def AnnotationRef : I8BitEnumAttrCaseBit<"AnnotationRef", 1, "annotated">;
-
-def RefKindAttr : I8BitEnumAttr<"ReferenceKind", "reference kinds",
-                                   [ReadDataRef, ForceableOnlyDataRef, ForceableDataRef, AnnotationRef]>  {
-  let cppNamespace = "::circt::firrtl";
-}
-
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLENUMS_TD
