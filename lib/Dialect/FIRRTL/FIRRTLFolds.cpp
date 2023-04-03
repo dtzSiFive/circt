@@ -2083,15 +2083,9 @@ static LogicalResult canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRew
 
   // Ignore 'passthrough'.  XXX: Make this better.
   (void)dropWrite(rewriter, reg->getResult(0), {});
-//  auto node = rewriter.create<NodeOp>(
-//      reg.getLoc(), reg.getResetValue(), reg.getNameAttr(),
-//      reg.getNameKindAttr(), reg.getAnnotationsAttr(), reg.getInnerSymAttr());
-//  rewriter.replaceOp(reg, node.getResults());
-reg.dump();
-  auto node = replaceOpWithNewOpAndCopyName<NodeOp>(
-      rewriter, reg, reg.getResetValue(), reg.getNameAttr(),
-      reg.getNameKindAttr(), reg.getAnnotationsAttr(), reg.getInnerSymAttr());
-node.dump();
+  replaceOpWithNewOpAndCopyName<NodeOp>(
+      rewriter, reg, reg.getResetValue(), reg.getNameAttr(), reg.getNameKind(),
+      reg.getAnnotationsAttr(), reg.getInnerSymAttr()/*, reg.getForceable() */);
   return success();
 }
 
