@@ -1813,18 +1813,18 @@ struct NodeBypass : public mlir::RewritePattern {
 } // namespace
 
 // Interesting names and symbols and don't touch force nodes to stick around.
-// TODO
-/*
-OpFoldResult NodeOp::fold(FoldAdaptor adaptor) {
+LogicalResult NodeOp::fold(FoldAdaptor adaptor, SmallVectorImpl<OpFoldResult>& results) {
   if (!hasDroppableName())
-    return {};
+    return failure();
   if (hasDontTouch(getResult())) // handles inner symbols
-    return {};
+    return failure();
   if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
-    return {};
-  return adaptor.getInput();
+    return failure();
+  if (getRef())
+    return failure();
+  results.push_back(adaptor.getInput());
+  return success();
 }
-*/
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
