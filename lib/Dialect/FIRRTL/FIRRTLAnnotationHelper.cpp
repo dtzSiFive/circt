@@ -647,7 +647,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       auto addWireWithCast = [&](auto createCast) {
         auto wire = sinkBuilder.create<WireOp>(
             valType,
-            state.getNamespace(wireModule).newName(tapName.getValue()));
+            state.getNamespace(wireModule).newName(tapName.getValue())).getResult();
         sinkBuilder.create<ConnectOp>(sink, createCast(wire));
         sink = wire;
       };
