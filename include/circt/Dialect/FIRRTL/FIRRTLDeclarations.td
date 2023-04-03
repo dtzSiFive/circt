@@ -262,8 +262,8 @@ def NodeOp : ReferableDeclOp<"node", [
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
-    $input (`forceable` $forceable^)? custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    $input `` (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
