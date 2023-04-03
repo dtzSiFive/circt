@@ -283,7 +283,8 @@ def RegOp : ReferableDeclOp<"reg"> {
   let arguments = (
     ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<InnerSymAttr>:$inner_sym);
+        OptionalAttr<InnerSymAttr>:$inner_sym,
+        UnitAttr:$forceable);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let builders = [
@@ -291,11 +292,14 @@ def RegOp : ReferableDeclOp<"reg"> {
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType, clockVal, name,
                    nameKind, $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>,
+    // Why does this builder exist?
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
@@ -327,7 +331,8 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
         AnyRegisterType:$resetValue,
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
-        OptionalAttr<InnerSymAttr>:$inner_sym);
+        OptionalAttr<InnerSymAttr>:$inner_sym,
+        UnitAttr:$forceable);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let builders = [
@@ -336,12 +341,15 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
                    resetValue, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>,
+    // Why does this builder exist?
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    "StringRef":$name, "NameKindEnum":$nameKind,
@@ -374,7 +382,8 @@ def WireOp : ReferableDeclOp<"wire"> {
 
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$forceable); // ReferenceKinds
   let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
   let hasCanonicalizer = true;
@@ -384,16 +393,20 @@ def WireOp : ReferableDeclOp<"wire"> {
                       CArg<"StringRef", "{}">:$name,
                       CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
-                      CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                      CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType, name, nameKind, annotations,
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   forceable);
     }]>
   ];
 
