@@ -2068,10 +2068,31 @@ struct FoldResetMux : public mlir::RewritePattern {
 };
 } // namespace
 
+static bool isDefinedByOneConstantOp(Value v) {
+  if (auto c = v.getDefiningOp<ConstantOp>())
+    return c.getValue().isOne();
+  if (auto sc = v.getDefiningOp<SpecialConstantOp>())
+    return sc.getValue();
+  return false;
+}
+
+static LogicalResult canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
+  if (!isDefinedByOneConstantOp(reg.getResetSignal()))
+    return failure();
+
+  // Ignore 'passthrough'.  XXX: Make this better.
+  (void)dropWrite(rewriter, reg->getResult(0), {});
+  auto node = rewriter.create<NodeOp>(reg.getLoc(), reg.getResetValue(),
+                                      reg.getName(), reg.getNameKind(),
+                                      reg.getAnnotations(), reg.getInnerSym());
+  rewriter.replaceOp(reg, node.getResults());
+  return success();
+}
+
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::RegResetWithZeroReset,
-                 /* patterns::RegResetWithOneReset ,*/ FoldResetMux>(context);
+  results.add<patterns::RegResetWithZeroReset, FoldResetMux>(context);
+  results.add(canonicalizeRegResetWithOneReset);
 }
 
 // Returns the value connected to a port, if there is only one.
