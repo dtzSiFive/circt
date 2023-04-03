@@ -1628,7 +1628,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
   if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty() ||
-      !hasDroppableName(connectedDecl))
+      !hasDroppableName(connectedDecl) || connectedDecl->hasAttr("forceable") /* boo-urns */)
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
