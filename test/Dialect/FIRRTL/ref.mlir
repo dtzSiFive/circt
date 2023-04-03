@@ -216,7 +216,7 @@ firrtl.circuit "Forceable" {
     %n, %n_f = firrtl.node %value forceable : !firrtl.uint<2>
     firrtl.ref.define %node_ref, %n_f : !firrtl.rwprobe<uint<2>>
 
-    // TODO: infer ref result existence + type based on "forceable" or other ref-kind indicator.
+    // TODO: infer ref result existence + type based on "forceable" or other ref-kind(s) indicator.
     %w, %w_f = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %wire_ref, %w_f : !firrtl.rwprobe<uint<2>>
     firrtl.strictconnect %w, %value : !firrtl.uint<2>
