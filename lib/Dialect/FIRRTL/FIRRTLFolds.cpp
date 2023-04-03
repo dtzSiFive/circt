@@ -1779,7 +1779,7 @@ struct FoldNodeName : public mlir::RewritePattern {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !node.getAnnotations().empty())
+        !node.getAnnotations().empty() || !node.getRef())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort
