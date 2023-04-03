@@ -153,6 +153,7 @@ class RefTypeConstraint<string ref, string base>
 class RefResultTypeConstraint<string base, string ref>
   : TypesMatchWith<"reference base type should match",
                    base, ref,
-                   "RefType::get($_self.cast<FIRRTLBaseType>().getPassiveType())">;
+                   "$_self",
+                   "[](auto B, auto R) { return !R || std::equal_to()(cast<FIRRTLBaseType>(B).getPassiveType(), cast<RefType>(R).getType()); }">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD
