@@ -233,32 +233,37 @@ def NodeOp : ReferableDeclOp<"node", [
   let arguments = (ins PassiveType:$input, StrAttr:$name,
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLBaseType:$result, Optional<RefType>:$ref);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<RefKindAttr>:$refKinds);
+  let results = (outs FIRRTLBaseType:$result, Variadic<RefType>:$references);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
                   CArg<"StringRef", "{}">:$name,
                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                  CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                  CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                  CArg<"ReferenceKind", "{}">:$refKinds), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
                    $_builder.getArrayAttr(annotations),
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   refKinds);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$input,
                   "StringRef":$name, "NameKindEnum":$nameKind,
                   "::mlir::ArrayAttr":$annotations,
-                  CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
+                  CArg<"StringAttr", "StringAttr()">:$inner_sym,
+                  CArg<"ReferenceKind", "{}">:$refKinds), [{
       return build($_builder, $_state, elementType, input, name, nameKind,
                    annotations,
-                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
+                   inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
+                   refKinds);
     }]>
   ];
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    $input `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input)) (`,` qualified(type($ref))^)?
+    $input `` $refKinds custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
