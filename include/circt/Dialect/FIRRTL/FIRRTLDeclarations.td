@@ -262,8 +262,8 @@ def NodeOp : ReferableDeclOp<"node", [
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    $input `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
+    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
+    $input (`forceable` $forceable^)? custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
@@ -361,8 +361,8 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<FIRRTLImplicitSSAName>(attr-dict)
+    (`sym` $inner_sym^)? custom<NameKind>($nameKind)
+    operands (`forceable` $forceable^)? custom<FIRRTLImplicitSSAName>(attr-dict)
     `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
 
   }];
