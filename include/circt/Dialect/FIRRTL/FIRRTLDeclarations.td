@@ -311,7 +311,7 @@ def RegOp : ReferableDeclOp<"reg"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
+    operands `` (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
 
   }];
   let hasCanonicalizeMethod = true;
