@@ -412,7 +412,7 @@ def WireOp : ReferableDeclOp<"wire"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
-    custom<FIRRTLImplicitSSAName>(attr-dict) `:`
+    (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
     qualified(type($result)) (`,` qualified(type($ref))^)?
   }];
 }
