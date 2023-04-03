@@ -1778,6 +1778,7 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
+    assert(!node.getRef());
     if (!node.hasDroppableName() || node.getInnerSym() ||
         !node.getAnnotations().empty() || node.getRef())
       return failure();
@@ -1822,10 +1823,10 @@ LogicalResult NodeOp::fold(FoldAdaptor adaptor, SmallVectorImpl<OpFoldResult>& r
     return failure();
   if (getRef())
     return failure();
-  if (adaptor.getInput())
-    results.push_back(adaptor.getInput());
-  else
-    results.push_back(getInput());
+  if (!adaptor.getInput())
+    return failure();
+
+  results.push_back(adaptor.getInput());
   return success();
 }
 
@@ -2082,10 +2083,15 @@ static LogicalResult canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRew
 
   // Ignore 'passthrough'.  XXX: Make this better.
   (void)dropWrite(rewriter, reg->getResult(0), {});
-  auto node = rewriter.create<NodeOp>(reg.getLoc(), reg.getResetValue(),
-                                      reg.getName(), reg.getNameKind(),
-                                      reg.getAnnotations(), reg.getInnerSym());
-  rewriter.replaceOp(reg, node.getResults());
+//  auto node = rewriter.create<NodeOp>(
+//      reg.getLoc(), reg.getResetValue(), reg.getNameAttr(),
+//      reg.getNameKindAttr(), reg.getAnnotationsAttr(), reg.getInnerSymAttr());
+//  rewriter.replaceOp(reg, node.getResults());
+reg.dump();
+  auto node = replaceOpWithNewOpAndCopyName<NodeOp>(
+      rewriter, reg, reg.getResetValue(), reg.getNameAttr(),
+      reg.getNameKindAttr(), reg.getAnnotationsAttr(), reg.getInnerSymAttr());
+node.dump();
   return success();
 }
 
