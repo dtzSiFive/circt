@@ -1778,9 +1778,9 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
-    assert(!node.getRef());
+    assert(!node.getRefKinds());
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !node.getAnnotations().empty() || node.getRef())
+        !node.getAnnotations().empty() || node.getRefKinds())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort
@@ -1821,7 +1821,7 @@ LogicalResult NodeOp::fold(FoldAdaptor adaptor, SmallVectorImpl<OpFoldResult>& r
     return failure();
   if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
     return failure();
-  if (getRef())
+  if (getRefKinds())
     return failure();
   if (!adaptor.getInput())
     return failure();
