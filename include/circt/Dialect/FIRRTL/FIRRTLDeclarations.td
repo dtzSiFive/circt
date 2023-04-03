@@ -215,8 +215,8 @@ def MemOp : ReferableDeclOp<"mem"> {
 }
 
 def NodeOp : ReferableDeclOp<"node", [
-      AllTypesMatch<["input","result"]>,
-      RefResultTypeConstraint<"input","ref">]> {
+      AllTypesMatch<["input","result"]>/*,
+      RefResultTypeConstraint<"input","ref">*/]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
