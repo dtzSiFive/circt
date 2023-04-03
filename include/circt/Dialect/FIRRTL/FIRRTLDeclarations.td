@@ -216,7 +216,7 @@ def MemOp : ReferableDeclOp<"mem"> {
 
 def NodeOp : ReferableDeclOp<"node", [
       AllTypesMatch<["input","result"]>,
-      InferTypeOpInterface/*,
+      DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>/*,
       RefResultTypeConstraint<"input","ref">*/]> {
   let summary = "No-op to name a value";
   let description = [{
