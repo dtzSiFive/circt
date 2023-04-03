@@ -2188,14 +2188,21 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  StringRef name = getName();
+  if (!name.empty()) {
+    setNameFn(getResult(), name);
+    if (getForceable())
+      setNameFn(getRef(), (name + "_ref").str());
+  }
 }
 
 LogicalResult NodeOp::inferReturnTypes(mlir::MLIRContext *context, std::optional<mlir::Location> location, ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes, ::mlir::RegionRange regions, ::llvm::SmallVectorImpl<::mlir::Type>&inferredReturnTypes) {
-  // TODO: cannot handle inferring ref type :(
   if (operands.empty())
     return failure();
   inferredReturnTypes.push_back(operands[0].getType());
+  for (auto &attr : attributes)
+    if (attr.getName() == "forceable" /* :( */)
+      inferredReturnTypes.push_back(RefType::get(operands[0].getType().cast<FIRRTLBaseType>().getPassiveType(), true));
   return success();
 }
 

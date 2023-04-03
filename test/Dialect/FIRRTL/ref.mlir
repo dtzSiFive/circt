@@ -208,10 +208,13 @@ firrtl.circuit "Forceable" {
     in %clock : !firrtl.clock,
     in %reset : !firrtl.uint<1>,
     in %value : !firrtl.uint<2>,
-  //  out %node_ref : !firrtl.rwprobe<uint<2>>,
-  //  out %wire_ref : !firrtl.rwprobe<uint<2>>,
-  //  out %reg_ref : !firrtl.rwprobe<uint<2>>,
+    out %node_ref : !firrtl.rwprobe<uint<2>>,
+    //out %wire_ref : !firrtl.rwprobe<uint<2>>,
+    //out %reg_ref : !firrtl.rwprobe<uint<2>>,
     out %regreset_ref : !firrtl.rwprobe<uint<2>>) {
+
+    %n, %n_f = firrtl.node %value forceable : !firrtl.uint<2>
+    firrtl.ref.define %node_ref, %n_f : !firrtl.rwprobe<uint<2>>
 
     // TODO: infer ref result existence + type based on "forceable" or other ref-kind indicator.
     %regreset, %regreset_f = firrtl.regreset %clock, %reset, %value forceable : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
