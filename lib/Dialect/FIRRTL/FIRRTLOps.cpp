@@ -2191,6 +2191,14 @@ void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 
+LogicalResult NodeOp::inferReturnTypes(mlir::MLIRContext *context, std::optional<mlir::Location> location, ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes, ::mlir::RegionRange regions, ::llvm::SmallVectorImpl<::mlir::Type>&inferredReturnTypes) {
+  // TODO: cannot handle inferring ref type :(
+  if (operands.empty())
+    return failure();
+  inferredReturnTypes.push_back(operands[0].getType());
+  return success();
+}
+
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
