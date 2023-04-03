@@ -1802,7 +1802,7 @@ struct NodeBypass : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     if (node.getInnerSym() || !node.getAnnotations().empty() ||
-        node.use_empty())
+        node.use_empty() || node.getRef())
       return failure();
     rewriter.startRootUpdate(node);
     node.getResult().replaceAllUsesWith(node.getInput());
