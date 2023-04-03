@@ -1539,7 +1539,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   // Declare register for storing arbitration winner.
   auto won = rewriter.create<RegResetOp>(insertLoc, indexType, clock, reset,
-                                         noWinner, "won");
+                                         noWinner, "won").getResult();
 
   // Declare wire for arbitration winner.
   auto win = rewriter.create<WireOp>(insertLoc, indexType, "win").getResult();
@@ -1549,10 +1549,10 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   // Declare registers for storing if each output has been emitted.
   auto resultEmitted = rewriter.create<RegResetOp>(
-      insertLoc, bitType, clock, reset, falseConst, "resultEmitted");
+      insertLoc, bitType, clock, reset, falseConst, "resultEmitted").getResult();
 
   auto controlEmitted = rewriter.create<RegResetOp>(
-      insertLoc, bitType, clock, reset, falseConst, "controlEmitted");
+      insertLoc, bitType, clock, reset, falseConst, "controlEmitted").getResult();
 
   // Declare wires for if each output is done.
   auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, "resultDone").getResult();
@@ -1844,7 +1844,7 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     // Create a emitted register.
     auto emtdReg =
         rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
-                                    falseConst, "emtd" + std::to_string(idx));
+                                    falseConst, "emtd" + std::to_string(idx)).getResult();
 
     // Connect the emitted register with {doneWire && notallDoneWire}. Only if
     // notallDone, the emtdReg will be set to the value of doneWire. Otherwise,
@@ -1946,8 +1946,8 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
   auto readyRegWire =
       rewriter.create<WireOp>(insertLoc, bitType, "readyRegWire").getResult();
 
-  auto readyReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
-                                              falseConst, "readyReg");
+  Value readyReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
+                                              falseConst, "readyReg").getResult();
   rewriter.create<ConnectOp>(insertLoc, readyReg, readyRegWire);
 
   // Create the logic to drive the successor valid and potentially data.
@@ -1986,7 +1986,7 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
     auto ctrlZeroConst = createZeroDataConst(dataType, insertLoc, rewriter);
 
     auto ctrlDataReg = rewriter.create<RegResetOp>(
-        insertLoc, dataType, clock, reset, ctrlZeroConst, "ctrlDataReg");
+        insertLoc, dataType, clock, reset, ctrlZeroConst, "ctrlDataReg").getResult();
 
     rewriter.create<ConnectOp>(insertLoc, ctrlDataReg, ctrlDataRegWire);
 
@@ -2132,9 +2132,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
   auto readEn = builder.create<WireOp>(bitType, "read_en").getResult();
   auto writeEn = builder.create<WireOp>(bitType, "write_en").getResult();
   auto tail =
-      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "tail_reg");
+      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "tail_reg").getResult();
   auto head =
-      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "head_reg");
+      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "head_reg").getResult();
   auto full = builder.create<WireOp>(bitType, "full").getResult();
   auto empty = builder.create<WireOp>(bitType, "empty").getResult();
   auto notEmpty = builder.create<NotPrimOp>(empty);
