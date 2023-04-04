@@ -114,6 +114,20 @@ RefType circt::firrtl::detail::getForceableResultType(bool forceable,
 }
 
 LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
+  bool forceable = op.isForceable();
+  auto ref = op.getDataRef();
+  if ((bool)ref != forceable)
+    return op.emitOpError("must have ref result iff marked forceable");
+  if (!forceable)
+    return success();
+  auto data = op.getDataRaw();
+  auto baseType = dyn_cast<FIRRTLBaseType>(data.getType());
+  if (!baseType)
+    return op.emitOpError("has data that is not a base type");
+  auto expectedRefType = getForceableResultType(forceable, baseType);
+  if (ref.getType() != expectedRefType)
+    return op.emitOpError("reference result of incorrect type, found ")
+           << ref.getType() << ", expected " << expectedRefType;
   return success();
 }
 
