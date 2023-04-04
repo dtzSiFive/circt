@@ -2082,11 +2082,11 @@ static LogicalResult canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRew
   if (!isDefinedByOneConstantOp(reg.getResetSignal()))
     return failure();
 
-  // Ignore 'passthrough'.  XXX: Make this better.
+  // Ignore 'passthrough'.
   (void)dropWrite(rewriter, reg->getResult(0), {});
   replaceOpWithNewOpAndCopyName<NodeOp>(
       rewriter, reg, reg.getResetValue(), reg.getNameAttr(), reg.getNameKind(),
-      reg.getAnnotationsAttr(), reg.getInnerSymAttr()/*, reg.getForceable() */);
+      reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceable());
   return success();
 }
 
