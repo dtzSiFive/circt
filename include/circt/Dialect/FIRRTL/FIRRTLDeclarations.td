@@ -395,7 +395,9 @@ def WireOp : ReferableDeclOp<"wire"> {
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$inner_sym,
                       CArg<"bool", "false">:$forceable), [{
-      return build($_builder, $_state, elementType, name, nameKind,
+      return build($_builder, $_state, elementType,
+                   getForceableRefType(forceable, elementType),
+                   name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
                    forceable);
