@@ -1628,7 +1628,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
   if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty() ||
-      !hasDroppableName(connectedDecl) || connectedDecl->hasAttr("forceable") /* boo-urns */)
+      !hasDroppableName(connectedDecl) ||
+      cast<Forceable>(connectedDecl).isForceable())
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
@@ -1752,7 +1753,8 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
     // TODO: May need to be sensitive to "don't touch" or other
     // annotations.
     if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
-      if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse()) {
+      if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse() &&
+          !wire.isForceable()) {
         SmallVector<Value> newOperands;
         for (auto newOperand : op.getOperands())
           if (newOperand != operand) // Don't the add wire.
@@ -1779,7 +1781,7 @@ struct FoldNodeName : public mlir::RewritePattern {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !node.getAnnotations().empty() || node.getRef())
+        !node.getAnnotations().empty() || node.isForceable())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort
@@ -1802,7 +1804,7 @@ struct NodeBypass : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     if (node.getInnerSym() || !node.getAnnotations().empty() ||
-        node.use_empty() || node.getRef())
+        node.use_empty() || node.isForceable())
       return failure();
     rewriter.startRootUpdate(node);
     node.getResult().replaceAllUsesWith(node.getInput());
@@ -1820,7 +1822,7 @@ LogicalResult NodeOp::fold(FoldAdaptor adaptor, SmallVectorImpl<OpFoldResult>& r
     return failure();
   if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
     return failure();
-  if (getRef())
+  if (isForceable())
     return failure();
   if (!adaptor.getInput())
     return failure();
@@ -2023,7 +2025,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     auto reset =
         dyn_cast_or_null<ConstantOp>(reg.getResetValue().getDefiningOp());
     if (!reset || hasDontTouch(reg.getOperation()) ||
-        !reg.getAnnotations().empty())
+        !reg.getAnnotations().empty() || reg.isForceable())
       return failure();
     // Find the one true connect, or bail
     auto con = getSingleConnectUserOf(reg.getResult());
@@ -2915,7 +2917,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 }
 
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
-  if (!hasDontTouch(op.getOperation()) &&
+  if (!hasDontTouch(op.getOperation()) && !op.isForceable() &&
       succeeded(foldHiddenReset(op, rewriter)))
     return success();
 
