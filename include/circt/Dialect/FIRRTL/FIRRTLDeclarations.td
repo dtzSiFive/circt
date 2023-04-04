@@ -263,7 +263,7 @@ def NodeOp : ReferableDeclOp<"node", [
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    $input (`forceable` $forceable^)? custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
+    $input (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
@@ -314,7 +314,7 @@ def RegOp : ReferableDeclOp<"reg", [Forceable]> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
+    operands (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
 
   }];
   let hasCanonicalizeMethod = true;
@@ -369,7 +369,7 @@ def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
-    operands `` (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
+    operands (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
     `:` type($clockVal) `,` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
 
   }];
@@ -422,7 +422,7 @@ def WireOp : ReferableDeclOp<"wire", [Forceable]> {
   ];
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind) ``
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
     qualified(type($result)) (`,` qualified(type($ref))^)?
   }];
