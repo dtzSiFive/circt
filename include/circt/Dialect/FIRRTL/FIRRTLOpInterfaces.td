@@ -419,4 +419,23 @@ def FNamableOp : OpInterface<"FNamableOp"> {
   ];
 }
 
+def Forceable : OpInterface<"Forceable"> {
+  let cppNamespace = "circt::firrtl";
+  let description = [{
+    Interaction with declarations of forceable hardware components,
+    and managing references to them.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Return true if the operation is forceable.",
+    "bool", "isForceable", (ins), [{}], /*defaultImplementation=*/[{
+      return getForceable();
+    }]>/*,
+    InterfaceMethod<"Return data result.",
+    "Op", "isForceable", (ins), [{}], /*defaultImplementation=*/[{
+      return getForceable();
+    }]>*/
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
