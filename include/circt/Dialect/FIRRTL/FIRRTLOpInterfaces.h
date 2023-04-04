@@ -111,6 +111,7 @@ LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
 namespace detail {
 /// Return null or forceable reference result type.
 RefType getForceableResultType(bool forceable, Type type);
+/// Verify a Forceable op.
 LogicalResult verifyForceableOp(Forceable op);
 } // end namespace detail
 
