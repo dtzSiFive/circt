@@ -101,4 +101,20 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// Forceable
+//===----------------------------------------------------------------------===//
+
+RefType circt::firrtl::detail::getForceableResultType(bool forceable,
+                                                      Type type) {
+  auto base = dyn_cast_or_null<FIRRTLBaseType>(type);
+  if (!forceable || !base)
+    return {};
+  return circt::firrtl::RefType::get(base.getPassiveType(), forceable);
+}
+
+LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
+  return success();
+}
+
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc"

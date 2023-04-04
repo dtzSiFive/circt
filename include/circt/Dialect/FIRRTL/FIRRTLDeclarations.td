@@ -216,8 +216,8 @@ def MemOp : ReferableDeclOp<"mem"> {
 
 def NodeOp : ReferableDeclOp<"node", [
       AllTypesMatch<["input","result"]>,
-      DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>/*,
-      RefResultTypeConstraint<"input","ref">*/]> {
+      DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
+      Forceable]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -270,7 +270,7 @@ def NodeOp : ReferableDeclOp<"node", [
   let hasFolder = 1;
 }
 
-def RegOp : ReferableDeclOp<"reg"> {
+def RegOp : ReferableDeclOp<"reg", [Forceable]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -294,17 +294,20 @@ def RegOp : ReferableDeclOp<"reg"> {
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym,
                    CArg<"bool", "false">:$forceable), [{
-      return build($_builder, $_state, elementType, clockVal, name,
-                   nameKind, $_builder.getArrayAttr(annotations),
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, name, nameKind,
+                   $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
                    forceable);
     }]>,
-    // Why does this builder exist?
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "StringRef":$name, "NameKindEnum":$nameKind,
-                   "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
-      return build($_builder, $_state, elementType, clockVal, name,
-                   nameKind, annotation,
+                   "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym,
+                   CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, name, nameKind, annotation,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>
   ];
@@ -317,7 +320,7 @@ def RegOp : ReferableDeclOp<"reg"> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : ReferableDeclOp<"regreset"> {
+def RegResetOp : ReferableDeclOp<"regreset", [Forceable]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -343,19 +346,23 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym,
                    CArg<"bool", "false">:$forceable), [{
-      return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, nameKind,
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, resetSignal, resetValue,
+                   name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
                    forceable);
     }]>,
-    // Why does this builder exist?
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    "StringRef":$name, "NameKindEnum":$nameKind,
-                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym), [{
-      return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name, nameKind, annotation,
+                    "::mlir::ArrayAttr":$annotation, "StringAttr":$inner_sym,
+                    CArg<"bool", "false">:$forceable), [{
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   clockVal, resetSignal, resetValue,
+                   name, nameKind, annotation,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr());
     }]>
   ];
@@ -371,7 +378,7 @@ def RegResetOp : ReferableDeclOp<"regreset"> {
   let hasVerifier = 1;
 }
 
-def WireOp : ReferableDeclOp<"wire"> {
+def WireOp : ReferableDeclOp<"wire", [Forceable]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -396,7 +403,7 @@ def WireOp : ReferableDeclOp<"wire"> {
                       CArg<"StringAttr", "StringAttr()">:$inner_sym,
                       CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   getForceableRefType(forceable, elementType),
+                   detail::getForceableResultType(forceable, elementType),
                    name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
@@ -406,7 +413,9 @@ def WireOp : ReferableDeclOp<"wire"> {
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym,
                    CArg<"bool", "false">:$forceable), [{
-      return build($_builder, $_state, elementType, name, nameKind, annotations,
+      return build($_builder, $_state, elementType,
+                   detail::getForceableResultType(forceable, elementType),
+                   name, nameKind, annotations,
                    inner_sym ? hw::InnerSymAttr::get(inner_sym) : hw::InnerSymAttr(),
                    forceable);
     }]>

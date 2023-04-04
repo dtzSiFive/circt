@@ -429,13 +429,26 @@ def Forceable : OpInterface<"Forceable"> {
   let methods = [
     InterfaceMethod<"Return true if the operation is forceable.",
     "bool", "isForceable", (ins), [{}], /*defaultImplementation=*/[{
-      return getForceable();
-    }]>/*,
-    InterfaceMethod<"Return data result.",
-    "Op", "isForceable", (ins), [{}], /*defaultImplementation=*/[{
-      return getForceable();
-    }]>*/
+      return $_op.getForceable();
+    }]>,
+    InterfaceMethod<"Return data value that will be targeted.",
+    "mlir::TypedValue<FIRRTLBaseType>", "getData", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast<mlir::TypedValue<FIRRTLBaseType>>($_op.getDataRaw());
+    }]>,
+    InterfaceMethod<"Return raw data value that will be targeted.",
+    "Value", "getDataRaw", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getResult();
+    }]>,
+    InterfaceMethod<"Return data type that will be referenced.",
+    "FIRRTLBaseType", "getDataType", (ins), [{}], /*defaultImplementation=*/[{
+      return cast<FIRRTLBaseType>($_op.getDataRaw().getType());
+    }]>,
+    InterfaceMethod<"Return reference result, or null if not active.",
+    "mlir::TypedValue<RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast_or_null<mlir::TypedValue<RefType>>($_op.getRef());
+    }]>
   ];
+  let verify = [{ return detail::verifyForceableOp($_op); }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
