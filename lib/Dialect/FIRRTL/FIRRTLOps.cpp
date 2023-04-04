@@ -2196,13 +2196,18 @@ void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
-LogicalResult NodeOp::inferReturnTypes(mlir::MLIRContext *context, std::optional<mlir::Location> location, ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes, ::mlir::RegionRange regions, ::llvm::SmallVectorImpl<::mlir::Type>&inferredReturnTypes) {
+LogicalResult NodeOp::inferReturnTypes(
+    mlir::MLIRContext *context, std::optional<mlir::Location> location,
+    ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
+    ::mlir::RegionRange regions,
+    ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
   inferredReturnTypes.push_back(operands[0].getType());
   for (auto &attr : attributes)
-    if (attr.getName() == "forceable" /* :( */)
-      inferredReturnTypes.push_back(RefType::get(operands[0].getType().cast<FIRRTLBaseType>().getPassiveType(), true));
+    if (attr.getName() == Forceable::getForceableAttrName())
+      inferredReturnTypes.push_back(
+          firrtl::detail::getForceableResultType(true, operands[0].getType()));
   return success();
 }
 
