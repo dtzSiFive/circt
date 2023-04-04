@@ -383,11 +383,4 @@ def RegResetWithZeroReset : Pat<
   (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable),
   (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable), [(ZeroConstantOp $reset)]>;
 
-// TODO: How to maintain 'ref' from regreset through this?
-// regreset(clock, constant_one, resetValue) -> node(resetValue)
-//def RegResetWithOneReset : Pat<
-//  (RegResetOp:$reg $clock, $reset, $resetVal, $name, $nameKind, $annotations, $inner_sym),
-//  (DropWrite $reg__0, (NodeOp $resetVal, $name, $nameKind, $annotations, $inner_sym)),
-//  [(OneConstantOp $reset)]>;
-
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
