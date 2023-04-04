@@ -2052,6 +2052,7 @@ firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<
 }
 
 // CHECK-LABEL: firrtl.module @ForceableRegResetToNode
+// Correctness, revisit if this is "valid" if forceable.
 firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo: !firrtl.uint<1>, out %ref : !firrtl.rwprobe<uint<1>>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
