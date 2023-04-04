@@ -448,6 +448,10 @@ def Forceable : OpInterface<"Forceable"> {
       return llvm::cast_or_null<mlir::TypedValue<RefType>>($_op.getRef());
     }]>
   ];
+  let extraClassDeclaration = [{
+    /// Attribute name for 'forceable' tracking.
+    static StringRef getForceableAttrName() { return "forceable"; }
+  }];
   let verify = [{ return detail::verifyForceableOp($_op); }];
 }
 

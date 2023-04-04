@@ -3666,8 +3666,9 @@ static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
 
 static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                        DictionaryAttr attrs) {
-  SmallVector<StringRef, 2> elides;
+  SmallVector<StringRef, 4> elides;
   elides.push_back(hw::InnerName::getInnerNameAttrName());
+  elides.push_back(Forceable::getForceableAttrName());
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
 }
