@@ -1598,10 +1598,12 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
       if (nodeOp && !dom.dominates(nodeOp.getInput(), opsToUpdate[0])) {
         LLVM_DEBUG(llvm::dbgs()
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
+        // TODO: Add test!
+        assert(0);
         ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
         auto wireOp = builder.create<WireOp>(
             nodeOp.getResult().getType(), nodeOp.getNameAttr(), nodeOp.getNameKind(),
-            nodeOp.getAnnotationsAttr(), nodeOp.getInnerSymAttr());
+            nodeOp.getAnnotationsAttr(), nodeOp.getInnerSymAttr(), nodeOp.getForceable());
         builder.create<StrictConnectOp>(wireOp.getResult(), nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
