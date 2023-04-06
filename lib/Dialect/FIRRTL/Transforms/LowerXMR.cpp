@@ -58,7 +58,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
-    SmallVector<Operation*> forceAndReleaseOps;
+    SmallVector<Operation *> forceAndReleaseOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
     auto transferFunc = [&](Operation &op) -> LogicalResult {
@@ -256,7 +256,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     garbageCollect();
   }
 
-  LogicalResult resolveReference(mlir::TypedValue<RefType> refVal, Type desiredType, Location loc,
+  LogicalResult resolveReference(mlir::TypedValue<RefType> refVal,
+                                 Type desiredType, Location loc,
                                  Operation *insertBefore, Value &out) {
     auto remoteOpPath = getRemoteRefSend(refVal);
     if (!remoteOpPath)
@@ -293,8 +294,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto referentType = refVal.getType().getType();
     auto xmr = builder.create<sv::XMRRefOp>(
         sv::InOutType::get(lowerType(referentType)), ref, xmrString);
-    out = builder.create<mlir::UnrealizedConversionCastOp>(
-        desiredType, xmr.getResult()).getResult(0);
+    out = builder
+              .create<mlir::UnrealizedConversionCastOp>(desiredType,
+                                                        xmr.getResult())
+              .getResult(0);
     return success();
   }
 
