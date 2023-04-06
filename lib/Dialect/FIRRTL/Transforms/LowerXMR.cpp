@@ -58,6 +58,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     dataFlowClasses = llvm::EquivalenceClasses<Value, ValueComparator>();
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     SmallVector<RefResolveOp> resolveOps;
+    SmallVector<Operation*> forceAndReleaseOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
     auto transferFunc = [&](Operation &op) -> LogicalResult {
@@ -202,8 +203,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           })
           .Case<RefForceOp, RefForceInitialOp, RefReleaseOp,
                 RefReleaseInitialOp>([&](auto op) {
-            return op.emitError(
-                "force and release not supported in LowerXMR yet");
+            forceAndReleaseOps.push_back(op);
+            return success();
           })
           .Default([&](auto) { return success(); });
     };
@@ -249,23 +250,15 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     for (auto refResolve : resolveOps)
       if (handleRefResolve(refResolve).failed())
         return signalPassFailure();
+    for (auto op : forceAndReleaseOps)
+      if (failed(handleForceReleaseOp(op)))
+        return signalPassFailure();
     garbageCollect();
   }
 
-  // Replace the RefResolveOp with verbatim op representing the XMR.
-  LogicalResult handleRefResolve(RefResolveOp resolve) {
-    auto resWidth = getBitWidth(resolve.getType());
-    if (resWidth.has_value() && *resWidth == 0) {
-      // Donot emit 0 width XMRs, replace it with constant 0.
-      ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
-      auto zeroUintType = UIntType::get(builder.getContext(), 0);
-      auto zeroC = builder.createOrFold<BitCastOp>(
-          resolve.getType(), builder.create<ConstantOp>(
-                                 zeroUintType, getIntZerosAttr(zeroUintType)));
-      resolve.getResult().replaceAllUsesWith(zeroC);
-      return success();
-    }
-    auto remoteOpPath = getRemoteRefSend(resolve.getRef());
+  LogicalResult resolveReference(mlir::TypedValue<RefType> refVal, Location loc,
+                                 Operation *insertBefore, Value &out) {
+    auto remoteOpPath = getRemoteRefSend(refVal);
     if (!remoteOpPath)
       return failure();
     SmallVector<Attribute> refSendPath;
@@ -287,7 +280,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     // Compute the reference given to the SVXMRRefOp.  If the path is size 1,
     // then this is just an InnerRefAttr (module--component pair).  Otehrwise,
     // we need to use the symbol of a HierPathOp that stores the path.
-    ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
+    ImplicitLocOpBuilder builder(loc, insertBefore);
     Attribute ref;
     if (refSendPath.size() == 1)
       ref = refSendPath.front();
@@ -296,13 +289,48 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
               .getSymNameAttr());
 
-    // Create the XMR op and replace users of the result of the resolve with the
-    // result of the XMR.
+    // Create the XMR op and convert it to the referenced FIRRTL type.
+    auto referentType = refVal.getType().getType();
     auto xmr = builder.create<sv::XMRRefOp>(
-        sv::InOutType::get(lowerType(resolve.getType())), ref, xmrString);
-    auto conversion = builder.create<mlir::UnrealizedConversionCastOp>(
-        resolve.getType(), xmr.getResult());
-    resolve.getResult().replaceAllUsesWith(conversion.getResult(0));
+        sv::InOutType::get(lowerType(referentType)), ref, xmrString);
+    out = builder.create<mlir::UnrealizedConversionCastOp>(
+        referentType, xmr.getResult()).getResult(0);
+    return success();
+  }
+
+  // Replace the Force/Release's ref argument with a resolved XMRRef.
+  LogicalResult handleForceReleaseOp(Operation *op) {
+    return TypeSwitch<Operation *, LogicalResult>(op)
+        .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
+            [&](auto op) {
+              Value ref;
+              if (failed(resolveReference(op.getDest(), op.getLoc(), op, ref)))
+                return failure();
+              op.getDestMutable().assign(ref);
+              return success();
+            })
+        .Default([](auto *op) {
+          return op->emitError("unexpected operation kind");
+        });
+  }
+
+  // Replace the RefResolveOp with verbatim op representing the XMR.
+  LogicalResult handleRefResolve(RefResolveOp resolve) {
+    auto resWidth = getBitWidth(resolve.getType());
+    if (resWidth.has_value() && *resWidth == 0) {
+      // Donot emit 0 width XMRs, replace it with constant 0.
+      ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
+      auto zeroUintType = UIntType::get(builder.getContext(), 0);
+      auto zeroC = builder.createOrFold<BitCastOp>(
+          resolve.getType(), builder.create<ConstantOp>(
+                                 zeroUintType, getIntZerosAttr(zeroUintType)));
+      resolve.getResult().replaceAllUsesWith(zeroC);
+      return success();
+    }
+    Value result;
+    if (failed(resolveReference(resolve.getRef(), resolve.getLoc(), resolve, result)))
+        return failure();
+    resolve.getResult().replaceAllUsesWith(result);
     return success();
   }
 
