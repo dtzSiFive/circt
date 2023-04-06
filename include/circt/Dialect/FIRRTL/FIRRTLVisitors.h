@@ -212,6 +212,10 @@ public:
   HANDLE(AssumeOp);
   HANDLE(CoverOp);
   HANDLE(ProbeOp);
+  HANDLE(RefForceOp);
+  HANDLE(RefForceInitialOp);
+  HANDLE(RefReleaseOp);
+  HANDLE(RefReleaseInitialOp);
 
 #undef HANDLE
 };
