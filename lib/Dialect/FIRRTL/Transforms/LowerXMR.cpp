@@ -256,7 +256,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     garbageCollect();
   }
 
-  LogicalResult resolveReference(mlir::TypedValue<RefType> refVal, Location loc,
+  LogicalResult resolveReference(mlir::TypedValue<RefType> refVal, Type desiredType, Location loc,
                                  Operation *insertBefore, Value &out) {
     auto remoteOpPath = getRemoteRefSend(refVal);
     if (!remoteOpPath)
@@ -294,7 +294,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     auto xmr = builder.create<sv::XMRRefOp>(
         sv::InOutType::get(lowerType(referentType)), ref, xmrString);
     out = builder.create<mlir::UnrealizedConversionCastOp>(
-        referentType, xmr.getResult()).getResult(0);
+        desiredType, xmr.getResult()).getResult(0);
     return success();
   }
 
@@ -304,7 +304,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) {
               Value ref;
-              if (failed(resolveReference(op.getDest(), op.getLoc(), op, ref)))
+              if (failed(resolveReference(op.getDest(), op.getDest().getType(),
+                                          op.getLoc(), op, ref)))
                 return failure();
               op.getDestMutable().assign(ref);
               return success();
@@ -328,8 +329,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       return success();
     }
     Value result;
-    if (failed(resolveReference(resolve.getRef(), resolve.getLoc(), resolve, result)))
-        return failure();
+    if (failed(resolveReference(resolve.getRef(), resolve.getType(),
+                                resolve.getLoc(), resolve, result)))
+      return failure();
     resolve.getResult().replaceAllUsesWith(result);
     return success();
   }
