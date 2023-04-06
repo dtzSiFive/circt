@@ -172,7 +172,8 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, ProbeOp>(
+                       AssumeOp, CoverOp, ProbeOp, RefForceOp,
+                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
