@@ -2743,7 +2743,8 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     symName = builder.getStringAttr(moduleNamespace.newName(
         Twine("__") + moduleName + Twine("__") + name.getValue()));
   }
-  if (!symName && !op.hasDroppableName()) {
+  // For now, if forceable ensure has symbol.
+  if (!symName && (!op.hasDroppableName() || op.isForceable())) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(moduleNamespace.newName(
         Twine("__") + moduleName + Twine("__") + name.getValue()));
@@ -2796,7 +2797,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
   }
-  if (!symName && !hasDroppableName(op)) {
+  // For now, if forceable ensure has symbol.
+  if (!symName && (!hasDroppableName(op) || op.isForceable())) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
@@ -2820,9 +2822,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return failure();
 
   // Add symbol if DontTouch annotation present.
+  // For now, also ensure has symbol if forceable.
   auto symName = getInnerSymName(op);
   if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
-       op.getNameKind() == NameKindEnum::InterestingName) &&
+       op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
       !symName)
     symName = op.getNameAttr();
 
@@ -2861,9 +2864,11 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
+  // Add symbol if DontTouch annotation present.
+  // For now, also ensure has symbol if forceable.
   auto symName = getInnerSymName(op);
   if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
-       op.getNameKind() == NameKindEnum::InterestingName) &&
+       op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
       !symName)
     symName = op.getNameAttr();
 
