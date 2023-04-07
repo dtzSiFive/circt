@@ -3876,9 +3876,11 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   if (!destVal)
     return failure();
 
-  // TODO: always clock / pred.
   addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
-    addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, src); });
+    addToAlwaysBlock(clock, [&]() {
+      addIfProceduralBlock(
+          pred, [&]() { builder.create<sv::ForceOp>(destVal, src); });
+    });
   });
   return success();
 }
@@ -3906,9 +3908,11 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   if (!destVal)
     return failure();
 
-  // TODO: always clock / pred.
   addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
-    addToInitialBlock([&]() { builder.create<sv::ReleaseOp>(destVal); });
+    addToAlwaysBlock(clock, [&]() {
+      addIfProceduralBlock(
+          pred, [&]() { builder.create<sv::ReleaseOp>(destVal); });
+    });
   });
   return success();
 }
