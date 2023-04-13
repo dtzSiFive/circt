@@ -212,9 +212,9 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     struct BundleElement {
       StringAttr name;
       bool isFlip;
-      FIRRTLBaseType type;
+      FIRRTLType type;
 
-      BundleElement(StringAttr name, bool isFlip, FIRRTLBaseType type)
+      BundleElement(StringAttr name, bool isFlip, FIRRTLType type)
           : name(name), isFlip(isFlip), type(type) {}
 
       bool operator==(const BundleElement &rhs) const {
@@ -248,11 +248,11 @@ def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
     BundleElement getElement(size_t index);
 
     /// Look up an element type by name.
-    FIRRTLBaseType getElementType(StringAttr name);
-    FIRRTLBaseType getElementType(StringRef name);
+    FIRRTLType getElementType(StringAttr name);
+    FIRRTLType getElementType(StringRef name);
 
     /// Look up an element type by index.
-    FIRRTLBaseType getElementType(size_t index);
+    FIRRTLType getElementType(size_t index);
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
@@ -409,7 +409,7 @@ def RefImpl : FIRRTLImplType<"Ref",
     Used for remote reads and writes of the wrapped base type.
 
     Parameterized over the referenced base type,
-    which must be passive and for now must also be ground.
+    which must be passive and may not contain references.
 
     Not a base type.
 
