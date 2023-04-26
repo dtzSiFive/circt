@@ -1225,21 +1225,16 @@ FVectorType FVectorType::getConstType(bool isConst) {
 }
 
 uint64_t FVectorType::getFieldID(uint64_t index) {
-  auto type = getElementType();
-  auto base = getBaseType(type);
-  auto stride = 1 + (type == base ? base.getMaxFieldID() : 0);
-
-  return 1 + index * stride;
+  auto elementType = llvm::cast<hw::FieldIDTypeInterface>(getElementType());
+  return 1 + index * (elementType.getMaxFieldID() + 1);
 }
 
 uint64_t FVectorType::getIndexForFieldID(uint64_t fieldID) {
   assert(fieldID && "fieldID must be at least 1");
-  auto type = getElementType();
-  auto base = getBaseType(type);
-  auto stride = 1 + (type == base ? base.getMaxFieldID() : 0);
+  auto elementType = llvm::cast<hw::FieldIDTypeInterface>(getElementType());
 
   // Divide the field ID by the number of fieldID's per element.
-  return (fieldID - 1) / stride;
+  return (fieldID - 1) / (elementType.getMaxFieldID() + 1);
 }
 
 std::pair<uint64_t, uint64_t>
