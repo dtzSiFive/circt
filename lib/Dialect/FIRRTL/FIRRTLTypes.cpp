@@ -633,7 +633,8 @@ uint64_t FIRRTLBaseType::getGroundFields() const {
       .Case<BundleType>([](auto type) {
         unsigned sum = 0;
         for (auto &field : type.getElements())
-          sum += llvm::cast<hw::FieldIDTypeInterface>(field.type).getGroundFields();
+          sum += llvm::cast<hw::FieldIDTypeInterface>(field.type)
+                     .getGroundFields();
         return sum;
       })
       .Case<FVectorType>([](auto type) {
@@ -1211,10 +1212,10 @@ FIRRTLBaseType FVectorType::getPassiveType() {
   // Otherwise, rebuild a passive version.
   return impl->passiveType = FVectorType::get(getElementType().getPassiveType(),
                                               getNumElements(), isConst());
-  //return impl->passiveType = FVectorType::get(
-  //           mapBaseType(getElementType(),
-  //                       [](auto base) { return base.getPassiveType(); }),
-  //           getNumElements(), isConst());
+  // return impl->passiveType = FVectorType::get(
+  //            mapBaseType(getElementType(),
+  //                        [](auto base) { return base.getPassiveType(); }),
+  //            getNumElements(), isConst());
 }
 
 FVectorType FVectorType::getConstType(bool isConst) {
