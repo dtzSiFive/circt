@@ -306,6 +306,8 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     using iterator = ArrayRef<BundleElement>::iterator;
     iterator begin() const { return getElements().begin(); }
     iterator end() const { return getElements().end(); }
+
+    bool isConst();
   }];
 }
 

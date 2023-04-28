@@ -69,7 +69,6 @@ struct PortInfo {
   /// Return true if this is an inout port.  This will be true if the port
   /// contains either bi-directional signals or analog types.
   bool isInOut() {
-
     auto flags = TypeSwitch<Type, RecursiveTypeProperties>(type)
                      .Case<FIRRTLBaseType,OpenBundleType>([](auto base) {
                        return base.getRecursiveTypeProperties();

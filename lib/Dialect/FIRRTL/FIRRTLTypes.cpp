@@ -1182,6 +1182,8 @@ std::pair<uint64_t, bool> BundleType::rootChildFieldID(uint64_t fieldID,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
+bool BundleType::isConst() { return getImpl()->isConst; }
+
 //===----------------------------------------------------------------------===//
 // OpenBundle Type
 //===----------------------------------------------------------------------===//
@@ -1276,13 +1278,13 @@ FIRRTLType OpenBundleType::getPassiveType() {
                            })});
   }
 
-  auto passiveType = OpenBundleType::get(getContext(), newElements, impl->isConst /* isConst()*/);
+  auto passiveType = OpenBundleType::get(getContext(), newElements, isConst());
   impl->passiveType = passiveType;
   return passiveType;
 }
 
 OpenBundleType OpenBundleType::getConstType(bool isConst) {
-  if (isConst == getImpl()->isConst /* isConst() */)
+  if (isConst == this->isConst())
     return *this;
   return get(getContext(), getElements(), isConst);
 }
@@ -1405,6 +1407,8 @@ uint64_t OpenBundleType::getGroundFields() const {
     sum += llvm::cast<hw::FieldIDTypeInterface>(field.type).getGroundFields();
   return sum;
 }
+
+bool OpenBundleType::isConst() { return getImpl()->isConst; }
 
 //===----------------------------------------------------------------------===//
 // FVectorType
