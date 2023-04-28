@@ -181,7 +181,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
   Operation *op = val.getDefiningOp();
 
   return TypeSwitch<Operation *, Flow>(op)
-      .Case<SubfieldOp>([&](auto op) {
+      .Case<SubfieldOp,OpenSubfieldOp>([&](auto op) {
         return foldFlow(op.getInput(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
@@ -3219,7 +3219,7 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
-  auto inType = operands[0].getType().cast<BundleType>();
+  auto inType = operands[0].getType().cast<OpenBundleType>();
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
@@ -3231,7 +3231,8 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
   // OpenSubfieldOp verifier checks that the field index is valid with number of
   // subelements.
   auto elementType = inType.getElement(fieldIndex).type;
-  return elementType.getConstType(elementType.isConst() || inType.isConst());
+  return elementType;
+  // return elementType.getConstType(elementType.isConst() || false /* inType.isConst()*/);
 }
 
 bool SubfieldOp::isFieldFlipped() {

@@ -1614,14 +1614,22 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-  auto bundle = getBaseOfType<BundleType>(result.getType());
-  if (!bundle)
+  std::optional<unsigned> indexV;
+  auto type = result.getType();
+  if (auto refTy = dyn_cast<RefType>(type))
+    type = refTy.getType();
+  if (auto bundle = dyn_cast<BundleType>(type))
+    indexV = bundle.getElementIndex(fieldName);
+  else if (auto bundle = dyn_cast<OpenBundleType>(type))
+    indexV = bundle.getElementIndex(fieldName);
+  else
     return emitError(loc, "subfield requires bundle operand ");
-  auto indexV = bundle.getElementIndex(fieldName);
   if (!indexV)
     return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
            << result.getType();
   auto indexNo = *indexV;
+
+
 
   FailureOr<Value> subResult;
   if (isa<RefType>(result.getType())) {
@@ -1631,7 +1639,11 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   } else {
     NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
                             builder.getI32IntegerAttr(indexNo)};
-    subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+    if (isa<BundleType>(type))
+      subResult = emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+    else
+      subResult =
+          emitCachedSubAccess<OpenSubfieldOp>(result, attrs, indexNo, loc);
   }
 
   if (failed(subResult))
