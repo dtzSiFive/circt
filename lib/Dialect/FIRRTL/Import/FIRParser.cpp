@@ -772,7 +772,20 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           return success();
         }))
       return failure();
-    result = OpenBundleType::get(getContext(), elements);
+
+    // Try to emit base-only bundle.
+    // TODO: Do better! :)
+    SmallVector<BundleType::BundleElement, 4> baseElements;
+    for (auto element : elements)
+      if (auto baseType = dyn_cast<BundleType::ElementType>(element.type)) {
+        baseElements.push_back({element.name, element.isFlip, baseType});
+      } else
+        break;
+
+    if (baseElements.size() == elements.size())
+      result = BundleType::get(getContext(), baseElements);
+    else
+      result = OpenBundleType::get(getContext(), elements);
     break;
   }
   }
