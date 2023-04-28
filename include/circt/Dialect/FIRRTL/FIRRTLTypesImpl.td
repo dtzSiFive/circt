@@ -139,34 +139,35 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
   let genVerifyDecl = true;
 }
 
-def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
+class BaseVectorTypeImpl<string name, string ElementType> : FIRRTLImplType<name, [FieldIDTypeInterface], ElementType /* as base */> {
   let summary = "a fixed size collection of elements, like an array.";
   let parameters = (ins
-      TypeParameter<"::circt::firrtl::FIRRTLBaseType", "Type of vector elements">:$elementType,
+      TypeParameter<ElementType, "Type of vector elements">:$lementType,
      "size_t":$numElements,
      "bool":$isConst
   );
-  let storageClass = "FVectorTypeStorage";
+  let storageClass = name # "TypeStorage";
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins
-      "FIRRTLBaseType":$elementType,
+      ElementType:$elementType,
       "size_t":$numElements,
        CArg<"bool", "false">:$isConst)
     >
   ];
-  let extraClassDeclaration = [{
-    FIRRTLBaseType getElementType() const;
+  let extraClassDeclaration =
+    "using ElementType = " # ElementType # ";\n\n" #
+    "/// Return a 'const' or non-'const' version of this type.\n" #
+    name # "Type getConstType(bool isConst);\n" #
+ [{
+    ElementType getElementType() const;
     size_t getNumElements() const;
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
 
     /// Return this type with any flip types recursively removed from itself.
-    FIRRTLBaseType getPassiveType();
-
-    /// Return a 'const' or non-'const' version of this type.
-    FVectorType getConstType(bool isConst);
+    ElementType getPassiveType();
 
     /// Get an integer ID for the field. Field IDs start at 1, and are assigned
     /// to each field in a vector in a recursive depth-first walk of all
@@ -198,6 +199,8 @@ def FVectorTypeImpl : FIRRTLImplType<"FVector", [FieldIDTypeInterface]> {
     std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
   }];
 }
+
+def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType">;
 
 def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
