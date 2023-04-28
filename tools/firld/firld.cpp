@@ -264,7 +264,8 @@ static LogicalResult executeFirld(MLIRContext &context) {
       pm.enableTiming(lowerTimer);
       if (verbosePassExecutions)
         pm.addInstrumentation(std::make_unique<FirldPassInstrumentation>());
-      applyPassManagerCLOptions(pm);
+      if (failed(applyPassManagerCLOptions(pm)))
+        return failure();
 
       pm.nest<firrtl::CircuitOp>().addPass(
           firrtl::createLowerFIRRTLAnnotationsPass());
@@ -317,8 +318,8 @@ static LogicalResult executeFirld(MLIRContext &context) {
 
   //===- Magic------------------------------------------------------------===//
 
-  for (auto &input: llvm::makeArrayRef(inputs).drop_front()) {
-    
+  for (auto &input: ArrayRef(inputs).drop_front()) {
+
   }
 
   // (I) Split IR interface, either to be linked back or in a new dialect that
