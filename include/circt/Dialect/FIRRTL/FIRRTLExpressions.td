@@ -249,9 +249,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
 
-// def SubfieldOp : FIRRTLExprOp<"subfield"> {
-class BaseSubfieldOp<string name, Type btype> : FIRRTLExprOp<name> {
-  string elementType = btype # "::ElementType";
+class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
   let summary = "Extract a subfield of another value";
   let description = [{
     The subfield expression refers to a subelement of an expression with a
@@ -262,7 +260,7 @@ class BaseSubfieldOp<string name, Type btype> : FIRRTLExprOp<name> {
     }];
 
   let arguments = (ins btype:$input, I32Attr:$fieldIndex);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs rtype:$result);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
@@ -278,6 +276,8 @@ class BaseSubfieldOp<string name, Type btype> : FIRRTLExprOp<name> {
   ];
 
   let firrtlExtraClassDeclaration = [{
+    using InputType = }] # btype # [{;
+
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();
 
@@ -294,8 +294,8 @@ class BaseSubfieldOp<string name, Type btype> : FIRRTLExprOp<name> {
   }];
 }
 
-def SubfieldOp : BaseSubfieldOp<"subfield", BundleType>;
-//def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", "OpenBundleType">;
+def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, FIRRTLBaseType>;
+def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", OpenBundleType, FIRRTLType>;
 
 def SubindexOp : FIRRTLExprOp<"subindex"> {
   let summary = "Extract an element of a vector value";
