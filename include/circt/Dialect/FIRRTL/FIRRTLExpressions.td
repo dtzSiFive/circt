@@ -249,7 +249,9 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
 
-def SubfieldOp : FIRRTLExprOp<"subfield"> {
+// def SubfieldOp : FIRRTLExprOp<"subfield"> {
+class BaseSubfieldOp<string name, Type btype> : FIRRTLExprOp<name> {
+  string elementType = btype # "::ElementType";
   let summary = "Extract a subfield of another value";
   let description = [{
     The subfield expression refers to a subelement of an expression with a
@@ -259,8 +261,8 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     ```
     }];
 
-  let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
-  let results = (outs FIRRTLBaseType:$result);
+  let arguments = (ins btype:$input, I32Attr:$fieldIndex);
+  let results = (outs FIRRTLType:$result);
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
@@ -268,7 +270,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto bundleType = input.getType().cast<BundleType>();
+      auto bundleType = input.getType().cast<}] # btype # [{>();
       auto fieldIndex = bundleType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subfield operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -281,17 +283,19 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
 
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().cast<BundleType>()
+      return FieldRef(getInput(), getInput().getType()
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return getInput().getType().cast<BundleType>()
-        .getElementName(getFieldIndex());
+      return getInput().getType().getElementName(getFieldIndex());
     }
   }];
 }
+
+def SubfieldOp : BaseSubfieldOp<"subfield", BundleType>;
+//def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", "OpenBundleType">;
 
 def SubindexOp : FIRRTLExprOp<"subindex"> {
   let summary = "Extract an element of a vector value";
