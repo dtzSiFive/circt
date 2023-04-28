@@ -79,6 +79,18 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
                               });
         os << '>';
       })
+      .Case<OpenBundleType>([&](auto bundleType) {
+        os << "openbundle<";
+        llvm::interleaveComma(bundleType, os,
+                              [&](OpenBundleType::BundleElement element) {
+                                os << element.name.getValue();
+                                if (element.isFlip)
+                                  os << " flip";
+                                os << ": ";
+                                printNestedType(element.type, os);
+                              });
+        os << '>';
+      })
       .Case<FEnumType>([&](auto fenumType) {
         os << "enum<";
         llvm::interleaveComma(fenumType, os,
@@ -219,6 +231,42 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = BundleType::get(context, elements, isConst), success();
+  }
+  if (name.equals("openbundle")) {
+    SmallVector<OpenBundleType::BundleElement, 4> elements;
+
+    auto parseBundleElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLType type;
+
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = parser.parseOptionalInteger(fieldIntName);
+      if (intName.has_value()) {
+        if (failed(intName.value()))
+          return failure();
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (parser.parseKeyword(&name))
+          return failure();
+      }
+
+      bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
+      if (parser.parseColon() || parseNestedType(type, parser))
+        return failure();
+
+      elements.push_back({StringAttr::get(context, name), isFlip, type});
+      return success();
+    };
+
+    if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                       parseBundleElement))
+      return failure();
+
+    return result = OpenBundleType::get(context, elements, isConst), success();
   }
 
   if (name.equals("enum")) {
@@ -427,7 +475,7 @@ bool FIRRTLBaseType::isGround() {
   return TypeSwitch<FIRRTLBaseType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
-      .Case<BundleType, FVectorType, FEnumType>([](Type) { return false; })
+      .Case<BundleType, FVectorType, FEnumType, OpenBundleType>([](Type) { return false; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
