@@ -38,6 +38,7 @@ class SIntType;
 class UIntType;
 class AnalogType;
 class BundleType;
+class OpenBundleType;
 class FVectorType;
 class FEnumType;
 class RefType;
@@ -138,7 +139,7 @@ public:
 
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<FIRRTLDialect>(type.getDialect()) && !type.isa<RefType>();
+    return llvm::isa<FIRRTLDialect>(type.getDialect()) && !type.isa<RefType>() && !type.isa<OpenBundleType>();
   }
 
   /// Return true if this is a valid "reset" type.
