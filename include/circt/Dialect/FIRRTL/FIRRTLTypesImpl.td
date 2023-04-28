@@ -205,7 +205,7 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
 
 def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType">;
 
-class BaseBundleTypeImpl<string name, string ElementType> : FIRRTLImplType<name, [FieldIDTypeInterface], ElementType /* also base*/> {
+class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = []> : FIRRTLImplType<name, traits, ElementType /* also base*/> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
   let parameters = (ins "ArrayRef<BundleElement>":$elements, "bool":$isConst);
   let storageClass = name # "TypeStorage";
@@ -309,8 +309,8 @@ class BaseBundleTypeImpl<string name, string ElementType> : FIRRTLImplType<name,
   }];
 }
 
-def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType">;
-def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType">;
+def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", [FieldIDTypeInterface]>;
+def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]>;
 
 def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
   let summary = "a sum type of named elements.";

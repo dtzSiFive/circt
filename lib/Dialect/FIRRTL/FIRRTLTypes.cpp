@@ -1389,6 +1389,23 @@ std::pair<uint64_t, bool> OpenBundleType::rootChildFieldID(uint64_t fieldID,
   return std::make_pair(fieldID - childRoot,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
+
+circt::hw::FieldIDTypeInterface
+OpenBundleType::getFinalTypeByFieldID(uint64_t fieldID) const {
+  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
+  while (pair.second)
+    pair = pair.first.getSubTypeByFieldID(pair.second);
+  return pair.first;
+}
+
+uint64_t OpenBundleType::getGroundFields() const {
+  unsigned sum = 0;
+  // TODO: make elements FieldIDTypeInterface
+  for (auto &field : getElements())
+    sum += llvm::cast<hw::FieldIDTypeInterface>(field.type).getGroundFields();
+  return sum;
+}
+
 //===----------------------------------------------------------------------===//
 // FVectorType
 //===----------------------------------------------------------------------===//
@@ -1792,7 +1809,7 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType, FEnumType, RefType>();
+           BundleType, FVectorType, FEnumType, RefType, OpenBundleType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
