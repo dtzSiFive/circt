@@ -202,6 +202,8 @@ class BaseVectorTypeImpl<string name, string ElementType> : FIRRTLImplType<name,
 
 def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType">;
 
+def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType">;
+
 def BundleImpl : FIRRTLImplType<"Bundle", [FieldIDTypeInterface]> {
   let summary = "an aggregate of named elements. This is effectively a struct.";
   let parameters = (ins "ArrayRef<BundleElement>":$elements, "bool":$isConst);
