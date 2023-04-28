@@ -3011,7 +3011,8 @@ FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
   return UIntType::get(operands[0].getContext(), 1, /*isConst=*/false);
 }
 
-ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+template <typename OpTy>
+ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
 
   OpAsmParser::UnresolvedOperand input;
@@ -3026,7 +3027,7 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = inputType.dyn_cast<BundleType>();
+  auto bundleType = inputType.dyn_cast<typename OpTy::InputType>();
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be bundle type, got ")
@@ -3091,6 +3092,13 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addTypes(inferredReturnTypes);
 
   return success();
+}
+
+ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<SubfieldOp>(parser, result);
+}
+ParseResult OpenSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<OpenSubfieldOp>(parser, result);
 }
 
 void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
@@ -4245,6 +4253,9 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
