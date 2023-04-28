@@ -3043,7 +3043,7 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
-  if (failed(SubfieldOp::inferReturnTypes(
+  if (failed(OpTy::inferReturnTypes(
           context, result.location, result.operands,
           result.attributes.getDictionary(context), result.regions,
           inferredReturnTypes)))
@@ -3110,6 +3110,15 @@ void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   printer.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
   printer << " : " << getInput().getType();
 }
+void OpenSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  printer << ' ' << getInput() << '[';
+  printer.printKeywordOrString(getFieldName());
+  printer << ']';
+  ::llvm::SmallVector<::llvm::StringRef, 2> elidedAttrs;
+  elidedAttrs.push_back("fieldIndex");
+  printer.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  printer << " : " << getInput().getType();
+}
 
 void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << ' ' << getInput() << '[';
@@ -3122,6 +3131,12 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
 }
 
 LogicalResult SubfieldOp::verify() {
+  if (getFieldIndex() >= getInput().getType().getNumElements())
+    return emitOpError("subfield element index is greater than the number "
+                       "of fields in the bundle type");
+  return success();
+}
+LogicalResult OpenSubfieldOp::verify() {
   if (getFieldIndex() >= getInput().getType().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
@@ -3201,7 +3216,29 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   return elementType.getConstType(elementType.isConst() || inType.isConst());
 }
 
+FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       std::optional<Location> loc) {
+  auto inType = operands[0].getType().cast<BundleType>();
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subfield element index is greater than the "
+                                 "number of fields in the bundle type");
+
+  // OpenSubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  auto elementType = inType.getElement(fieldIndex).type;
+  return elementType.getConstType(elementType.isConst() || inType.isConst());
+}
+
 bool SubfieldOp::isFieldFlipped() {
+  auto bundle = getInput().getType();
+  return bundle.getElement(getFieldIndex()).isFlip;
+}
+bool OpenSubfieldOp::isFieldFlipped() {
   auto bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }

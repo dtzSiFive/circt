@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1133,6 +1134,213 @@ std::pair<uint64_t, bool> BundleType::rootChildFieldID(uint64_t fieldID,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
+//===----------------------------------------------------------------------===//
+// OpenBundle Type
+//===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::OpenBundleTypeStorage
+    : detail::FIRRTLBaseTypeStorage {
+  using KeyTy = std::pair<ArrayRef<OpenBundleType::BundleElement>, char>;
+
+  OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements, bool isConst)
+      : detail::FIRRTLBaseTypeStorage(isConst),
+        elements(elements.begin(), elements.end()), props{true, false, false,
+                                                          false, false} {
+    uint64_t fieldID = 0;
+    fieldIDs.reserve(elements.size());
+    for (auto &element : elements) {
+      auto type = element.type;
+      auto eltInfo = getBaseType(type).getRecursiveTypeProperties();
+      props.isPassive &= eltInfo.isPassive & !element.isFlip;
+      props.containsAnalog |= eltInfo.containsAnalog;
+      props.containsReference |= eltInfo.containsReference;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      props.hasUninferredReset |= eltInfo.hasUninferredReset;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      // TODO: Maybe just have elementType be FieldIDTypeInterface ?
+      fieldID += getBaseType(type).getMaxFieldID();
+    }
+    maxFieldID = fieldID;
+  }
+
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elements, isConst);
+  }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(
+        llvm::hash_combine_range(key.first.begin(), key.first.end()),
+        key.second);
+  }
+
+  static OpenBundleTypeStorage *construct(TypeStorageAllocator &allocator,
+                                      KeyTy key) {
+    return new (allocator.allocate<OpenBundleTypeStorage>())
+        OpenBundleTypeStorage(key.first, static_cast<bool>(key.second));
+  }
+
+  SmallVector<OpenBundleType::BundleElement, 4> elements;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
+
+  /// This holds the bits for the type's recursive properties, and can hold a
+  /// pointer to a passive version of the type.
+  RecursiveTypeProperties props;
+  OpenBundleType passiveType;
+};
+
+OpenBundleType OpenBundleType::get(MLIRContext *context,
+                           ArrayRef<BundleElement> elements, bool isConst) {
+  return Base::get(context, elements, isConst);
+}
+
+auto OpenBundleType::getElements() const -> ArrayRef<BundleElement> {
+  return getImpl()->elements;
+}
+
+/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+RecursiveTypeProperties OpenBundleType::getRecursiveTypeProperties() const {
+  return getImpl()->props;
+}
+
+/// Return this type with any flip types recursively removed from itself.
+FIRRTLType OpenBundleType::getPassiveType() {
+  auto *impl = getImpl();
+
+  // If we've already determined and cached the passive type, use it.
+  if (impl->passiveType)
+    return impl->passiveType;
+
+  // If this type is already passive, use it and remember for next time.
+  if (impl->props.isPassive) {
+    impl->passiveType = *this;
+    return *this;
+  }
+
+  // Otherwise at least one element is non-passive, rebuild a passive version.
+  SmallVector<OpenBundleType::BundleElement, 16> newElements;
+  newElements.reserve(impl->elements.size());
+  for (auto &elt : impl->elements) {
+    newElements.push_back({elt.name, false, mapBaseType(elt.type, [&](auto t) {
+                             return t.getPassiveType();
+                           })});
+  }
+
+  auto passiveType = OpenBundleType::get(getContext(), newElements, impl->isConst /* isConst()*/);
+  impl->passiveType = passiveType;
+  return passiveType;
+}
+
+OpenBundleType OpenBundleType::getConstType(bool isConst) {
+  if (isConst == getImpl()->isConst /* isConst() */)
+    return *this;
+  return get(getContext(), getElements(), isConst);
+}
+
+std::optional<unsigned> OpenBundleType::getElementIndex(StringAttr name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<unsigned> OpenBundleType::getElementIndex(StringRef name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+StringRef OpenBundleType::getElementName(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].name.getValue();
+}
+
+std::optional<OpenBundleType::BundleElement>
+OpenBundleType::getElement(StringAttr name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+std::optional<OpenBundleType::BundleElement>
+OpenBundleType::getElement(StringRef name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return std::nullopt;
+}
+
+/// Look up an element by index.
+OpenBundleType::BundleElement OpenBundleType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index];
+}
+
+OpenBundleType::ElementType OpenBundleType::getElementType(StringAttr name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+OpenBundleType::ElementType OpenBundleType::getElementType(StringRef name) {
+  auto element = getElement(name);
+  return element ? element->type : FIRRTLBaseType();
+}
+
+OpenBundleType::ElementType OpenBundleType::getElementType(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].type;
+}
+
+uint64_t OpenBundleType::getFieldID(uint64_t index) {
+  return getImpl()->fieldIDs[index];
+}
+
+uint64_t OpenBundleType::getIndexForFieldID(uint64_t fieldID) {
+  assert(getElements().size() && "Bundle must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+OpenBundleType::getIndexAndSubfieldID(uint64_t fieldID) {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElementType(subfieldIndex);
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {subfieldType.cast<circt::hw::FieldIDTypeInterface>(), subfieldID};
+}
+
+uint64_t OpenBundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
+
+std::pair<uint64_t, bool> OpenBundleType::rootChildFieldID(uint64_t fieldID,
+                                                       uint64_t index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
 //===----------------------------------------------------------------------===//
 // FVectorType
 //===----------------------------------------------------------------------===//
