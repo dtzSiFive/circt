@@ -3212,7 +3212,7 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
   auto elementType = inType.getElement(fieldIndex).type;
-  return mapConstType(elementType, [&](auto T, bool isConst) {
+  return mapConstType(elementType, [&](auto _, bool isConst) {
     return isConst || inType.isConst();
   });
 }
@@ -3232,7 +3232,7 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
   // OpenSubfieldOp verifier checks that the field index is valid with number of
   // subelements.
   auto elementType = inType.getElement(fieldIndex).type;
-  return mapConstType(elementType, [&](auto T, bool isConst) {
+  return mapConstType(elementType, [&](auto _, bool isConst) {
     return isConst || inType.isConst();
   });
 }
@@ -3256,7 +3256,7 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements()) {
       auto elementType = vectorType.getElementType();
-      return mapConstType(elementType, [&](auto T, bool isConst) {
+      return mapConstType(elementType, [&](auto _, bool isConst) {
         return isConst || vectorType.isConst();
       });
     }
@@ -3277,7 +3277,7 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
   if (auto vectorType = inType.dyn_cast<OpenVectorType>()) {
     if (fieldIdx < vectorType.getNumElements()) {
       auto elementType = vectorType.getElementType();
-      return mapConstType(elementType, [&](auto T, bool isConst) {
+      return mapConstType(elementType, [&](auto _, bool isConst) {
         return isConst || vectorType.isConst();
       });
     }
