@@ -410,7 +410,7 @@ firrtl.circuit "RewriteInnerNameRefs" {
     ]
   } {
     %wire = firrtl.wire sym @wire : !firrtl.uint<1>
-    firrtl.instance nested @Nested()
+    firrtl.instance mid @Mid()
 
     // CHECK: #hw.innerNameRef<@Prefix_RewriteInnerNameRefs::@wire>
     sv.verbatim "{{0}}" {symbols=[#hw.innerNameRef<@RewriteInnerNameRefs::@wire>]}
@@ -423,7 +423,27 @@ firrtl.circuit "RewriteInnerNameRefs" {
     ]}
   }
 
-  firrtl.module @Nested() {
+  firrtl.module @Mid() attributes {
+    annotations = [
+     {
+       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "Prefix2_",
+       inclusive = true
+     }
+    ]
+  } {
+    firrtl.instance nested @Nested()
+  }
+
+  firrtl.module @Nested() attributes {
+    annotations = [
+     {
+       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "Prefix3_",
+       inclusive = true
+     }
+    ]
+  } {
     %wire = firrtl.wire sym @wire : !firrtl.uint<1>
   }
 }
