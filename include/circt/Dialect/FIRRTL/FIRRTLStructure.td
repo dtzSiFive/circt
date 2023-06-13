@@ -25,7 +25,7 @@ include "mlir/IR/SymbolInterfaces.td"
 
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
-       NoRegionArguments, InnerRefNamespace]> {
+       NoRegionArguments, InnerRefNamespace, OpAsmOpInterface]> {
   let summary = "FIRRTL Circuit";
   let description = [{
     The "firrtl.circuit" operation represents an overall Verilog circuit,
@@ -55,6 +55,8 @@ def CircuitOp : FIRRTLOp<"circuit",
     // Return the main module that is the entry point of the circuit.  This may
     // be either an FModuleOp or an FExtModuleOp.  A SymbolTable is optional.
     FModuleLike getMainModule(mlir::SymbolTable* symtbl = nullptr);
+
+    static StringRef getDefaultDialect() { return "firrtl"; }
   }];
 
   let assemblyFormat = "$name `` custom<CircuitOpAttrs>(attr-dict) $body";
@@ -134,6 +136,8 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
     ArrayAttr getParameters();
+
+    static StringRef getDefaultDialect() { return "firrtl"; }
   }];
 
 }
