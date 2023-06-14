@@ -176,7 +176,8 @@ def CoverOp : VerifOp<"cover"> {
 }
 
 def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
-                               RecursiveMemoryEffects, RecursivelySpeculatable]> {
+                               RecursiveMemoryEffects, RecursivelySpeculatable,
+                               OpAsmOpInterface]> {
   let summary = "When Statement";
   let description = [{
     The "firrtl.when" operation represents a conditional.  Connections within
@@ -225,11 +226,13 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
       Block &body = getElseBlock();
       return OpBuilder::atBlockEnd(&body);
     }
+
+    static StringRef getDefaultDialect() { return "firrtl"; }
   }];
 }
 
 def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
-    RecursiveMemoryEffects, RecursivelySpeculatable]> {
+    RecursiveMemoryEffects, RecursivelySpeculatable, OpAsmOpInterface]> {
   let summary = "Match Statement";
   let description = [{
     The "firrtl.match" operation represents a pattern matching statement on a
@@ -269,6 +272,8 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
     uint32_t getFieldIndex(size_t caseIndex) {
       return getFieldIndexAttr(caseIndex).getUInt();
     }
+
+    static StringRef getDefaultDialect() { return "firrtl"; }
   }];
 }
 
