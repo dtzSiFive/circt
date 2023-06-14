@@ -16,7 +16,7 @@ firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization() {
   // expected-error @below {{sink "w.a" not fully initialized in module "CheckInitialization"}}
   // expected-error @below {{sink "w.b" not fully initialized in module "CheckInitialization"}}
-  %w = firrtl.wire : !firrtl.bundle<a : uint<1>, b  flip: uint<1>>
+  %w = wire : !firrtl.bundle<a : uint<1>, b  flip: uint<1>>
 }
 }
 
@@ -24,11 +24,11 @@ firrtl.module @CheckInitialization() {
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @simple(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
-    firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
 }
 firrtl.module @CheckInitialization() {
   // expected-error @below {{sink "test.in" not fully initialized}}
-  %simple_out, %simple_in = firrtl.instance test @simple(in in : !firrtl.uint<1>, out out : !firrtl.uint<1>)
+  %simple_out, %simple_in = instance test @simple(in in : !firrtl.uint<1>, out out : !firrtl.uint<1>)
 }
 }
 
@@ -39,7 +39,7 @@ firrtl.module @CheckInitialization() {
   // expected-error @below {{sink "memory.r.addr" not fully initialized}}
   // expected-error @below {{sink "memory.r.en" not fully initialized}}
   // expected-error @below {{sink "memory.r.clk" not fully initialized}}
-  %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
+  %memory_r = mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
 }
 }
 
@@ -48,9 +48,9 @@ firrtl.module @CheckInitialization() {
 firrtl.circuit "declaration_in_when" {
 // Check that wires declared inside of a when are detected as uninitialized.
 firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
-  firrtl.when %p : !firrtl.uint<1> {
+  when %p : !firrtl.uint<1> {
     // expected-error @below {{sink "w_then" not fully initialized}}
-    %w_then = firrtl.wire : !firrtl.uint<2>
+    %w_then = wire : !firrtl.uint<2>
   }
 }
 }
@@ -60,10 +60,10 @@ firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
 firrtl.circuit "declaration_in_when" {
 // Check that wires declared inside of a when are detected as uninitialized.
 firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
-  firrtl.when %p : !firrtl.uint<1> {
+  when %p : !firrtl.uint<1> {
   } else {
     // expected-error @below {{sink "w_else" not fully initialized}}
-    %w_else = firrtl.wire : !firrtl.uint<2>
+    %w_else = wire : !firrtl.uint<2>
   }
 }
 }
@@ -75,17 +75,17 @@ firrtl.circuit "complex" {
 // completely initialized.
 firrtl.module @complex(in %p : !firrtl.uint<1>, in %q : !firrtl.uint<1>) {
   // expected-error @below {{sink "w" not fully initialized}}
-  %w = firrtl.wire : !firrtl.uint<2>
+  %w = wire : !firrtl.uint<2>
 
-  firrtl.when %p : !firrtl.uint<1> {
-    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-    firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  when %p : !firrtl.uint<1> {
+    %c1_ui2 = constant 1 : !firrtl.uint<2>
+    connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 
-  firrtl.when %q : !firrtl.uint<1> {
+  when %q : !firrtl.uint<1> {
   } else {
-    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-    firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    %c1_ui2 = constant 1 : !firrtl.uint<2>
+    connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
 
@@ -105,7 +105,7 @@ firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization() {
   // expected-error @below {{sink "w[0]" not fully initialized}}
   // expected-error @below {{sink "w[1]" not fully initialized}}
-  %w = firrtl.wire : !firrtl.vector<uint<1>, 2>
+  %w = wire : !firrtl.vector<uint<1>, 2>
 }
 }
 
@@ -114,8 +114,8 @@ firrtl.module @CheckInitialization() {
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.vector<uint<1>, 2>) {
   // expected-error @above {{port "out[1]" not fully initialized in module "CheckInitialization"}}
-  %0 = firrtl.subindex %out[0] : !firrtl.vector<uint<1>, 2>
-  firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = subindex %out[0] : !firrtl.vector<uint<1>, 2>
+  connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
 
@@ -151,7 +151,7 @@ firrtl.module @RefInitOut(out %out : !firrtl.probe<uint<1>>) {
 firrtl.circuit "RefInitIn" {
 firrtl.module @Child(in %in: !firrtl.probe<uint<1>>) { }
 firrtl.module @RefInitIn() {
-  %child_in = firrtl.instance child @Child(in in : !firrtl.probe<uint<1>>)
+  %child_in = instance child @Child(in in : !firrtl.probe<uint<1>>)
   // expected-error @above {{sink "child.in" not fully initialized in module "RefInitIn"}}
 }
 }
@@ -171,7 +171,7 @@ firrtl.module @PropInitOut(out %out : !firrtl.string) {
 firrtl.circuit "PropInitIn" {
 firrtl.module @Child(in %in: !firrtl.string) { }
 firrtl.module @PropInitIn() {
-  %child_in = firrtl.instance child @Child(in in : !firrtl.string)
+  %child_in = instance child @Child(in in : !firrtl.string)
   // expected-error @above {{sink "child.in" not fully initialized in module "PropInitIn"}}
 }
 }

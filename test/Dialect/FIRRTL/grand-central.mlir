@@ -283,7 +283,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
     }
   ]
 } {
-  firrtl.module @Companion() attributes {
+  module @Companion() attributes {
     annotations = [
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -343,15 +343,15 @@ firrtl.circuit "InterfaceGroundType" attributes {
   } {
 
     // These are dummy references created for the purposes of the test.
-    %_ui0 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<0>
-    %_ui1 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<1>
-    %_ui2 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<2>
-    %ref_ui0 = firrtl.ref.send %_ui0 : !firrtl.uint<0>
-    %ref_ui1 = firrtl.ref.send %_ui1 : !firrtl.uint<1>
-    %ref_ui2 = firrtl.ref.send %_ui2 : !firrtl.uint<2>
+    %_ui0 = verbatim.expr "???" : () -> !firrtl.uint<0>
+    %_ui1 = verbatim.expr "???" : () -> !firrtl.uint<1>
+    %_ui2 = verbatim.expr "???" : () -> !firrtl.uint<2>
+    %ref_ui0 = ref.send %_ui0 : !firrtl.uint<0>
+    %ref_ui1 = ref.send %_ui1 : !firrtl.uint<1>
+    %ref_ui2 = ref.send %_ui2 : !firrtl.uint<2>
 
-    %ui1 = firrtl.ref.resolve %ref_ui1 : !firrtl.probe<uint<1>>
-    %foo = firrtl.node %ui1 {
+    %ui1 = ref.resolve %ref_ui1 : !firrtl.probe<uint<1>>
+    %foo = node %ui1 {
       annotations = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -376,8 +376,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<1>
 
-    %ui2 = firrtl.ref.resolve %ref_ui2 : !firrtl.probe<uint<2>>
-    %bar = firrtl.node %ui2 {
+    %ui2 = ref.resolve %ref_ui2 : !firrtl.probe<uint<2>>
+    %bar = node %ui2 {
       annotations = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -418,8 +418,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<2>
 
-    %ui0 = firrtl.ref.resolve %ref_ui0 : !firrtl.probe<uint<0>>
-    %baz = firrtl.node %ui0 {
+    %ui0 = ref.resolve %ref_ui0 : !firrtl.probe<uint<0>>
+    %baz = node %ui0 {
       annotations = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -428,10 +428,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<0>
 
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+    %c0_ui1 = constant 0 : !firrtl.uint<1>
+    %c-1_si2 = constant -1 : !firrtl.sint<2>
 
-    %node_c0_ui1 = firrtl.node %c0_ui1 {
+    %node_c0_ui1 = node %c0_ui1 {
       annotations = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -440,7 +440,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
       ]
     } : !firrtl.uint<1>
 
-    %node_c-1_si2 = firrtl.node %c-1_si2 {
+    %node_c-1_si2 = node %c-1_si2 {
       annotations = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -450,14 +450,14 @@ firrtl.circuit "InterfaceGroundType" attributes {
     } : !firrtl.sint<2>
 
   }
-  firrtl.module @InterfaceGroundType() {
-    firrtl.instance companion @Companion()
+  module @InterfaceGroundType() {
+    instance companion @Companion()
   }
 }
 
 // All AugmentedBundleType annotations are removed from the circuit.
 //
-// CHECK-LABEL: firrtl.circuit "InterfaceGroundType" {{.+}} {annotations =
+// CHECK-LABEL: circuit "InterfaceGroundType" {{.+}} {annotations =
 // CHECK-SAME:    class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
 // CHECK-NOT:     class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
@@ -548,7 +548,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // AugmentedGroundType annotations are removed.  Interface is driven via XMRs
 // directly from ref resolve ops.
 //
-// CHECK:          firrtl.module @Companion
+// CHECK:          module @Companion
 // CHECK-SAME:       output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 //
 // CHECK-NEXT:       %VectorOfVerbatimView = sv.interface.instance sym @[[vectorOfVerbatim:[a-zA-Z0-9_]+]] : !sv.interface<@VectorOfVerbatimView>
@@ -561,9 +561,9 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-NEXT:       %VectorView = sv.interface.instance sym @[[vectorSym:[a-zA-Z0-9_]+]] : !sv.interface<@VectorView>
 // CHECK-NEXT:       %GroundView = sv.interface.instance sym @[[groundSym:[a-zA-Z0-9_]+]] : !sv.interface<@GroundView>
 //
-// CHECK:            %[[foo_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.probe<uint<1>>
+// CHECK:            %[[foo_ref:[a-zA-Z0-9_]+]] = ref.resolve {{.+}} : !firrtl.probe<uint<1>>
 // CHECK-NOT:        sifive.enterprise.grandcentral.AugmentedGroundType
-// CHECK:            %[[bar_ref:[a-zA-Z0-9_]+]] = firrtl.ref.resolve {{.+}} : !firrtl.probe<uint<2>>
+// CHECK:            %[[bar_ref:[a-zA-Z0-9_]+]] = ref.resolve {{.+}} : !firrtl.probe<uint<2>>
 // CHECK-NOT:        sifive.enterprise.grandcentral.AugmentedGroundType
 //
 // CHECK{LITERAL}:   sv.verbatim "assign {{1}}.foo = {{0}};"
@@ -628,8 +628,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // The companion instance is marked "lowerToBind" in the parent.  This instance
 // gets the correct output file.
 //
-// CHECK:          firrtl.module @InterfaceGroundType()
-// CHECK:            firrtl.instance companion
+// CHECK:          module @InterfaceGroundType()
+// CHECK:            instance companion
 // CHECK-SAME:         lowerToBind
 // CHECK-SAME:         output_file = #hw.output_file<"bindings.sv", excludeFromFileList>}
 
@@ -695,20 +695,20 @@ firrtl.circuit "PrefixInterfacesAnnotation"
      name = "MyView"},
     {class = "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation",
      prefix = "PREFIX_"}]}  {
-  firrtl.module private @MyView_companion()
+  module private @MyView_companion()
     attributes {annotations = [{
       class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
       id = 0 : i64,
       name = "MyView"}]} {}
-  firrtl.module private @DUT() {
-    firrtl.instance MyView_companion  @MyView_companion()
+  module private @DUT() {
+    instance MyView_companion  @MyView_companion()
   }
-  firrtl.module @PrefixInterfacesAnnotation() {
-    firrtl.instance dut @DUT()
+  module @PrefixInterfacesAnnotation() {
+    instance dut @DUT()
   }
 }
 
-// CHECK-LABEL: firrtl.circuit "PrefixInterfacesAnnotation"
+// CHECK-LABEL: circuit "PrefixInterfacesAnnotation"
 // The PrefixInterfacesAnnotation was removed from the circuit.
 // CHECK-NOT:     sifive.enterprise.grandcentral.PrefixInterfacesAnnotation
 
@@ -742,86 +742,86 @@ firrtl.circuit "DirectoryBehaviorWithDUT" attributes {
   //   3) "C" indicates this is instantiated in the "Companion"
   // E.g., "ET_C" is an external module instantiated above the DUT and in the
   // Companion.
-  firrtl.module @MT__() {}
-  firrtl.module @M_D_() {}
-  firrtl.module @M__C() {}
-  firrtl.module @MTD_() {}
-  firrtl.module @M_DC() {}
-  firrtl.module @MT_C() {}
-  firrtl.module @MTDC() {}
-  firrtl.extmodule @ET__() attributes {annotations = [
+  module @MT__() {}
+  module @M_D_() {}
+  module @M__C() {}
+  module @MTD_() {}
+  module @M_DC() {}
+  module @MT_C() {}
+  module @MTDC() {}
+  extmodule @ET__() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ET__.v", text = ""}
   ]}
-  firrtl.extmodule @E_D_() attributes {annotations = [
+  extmodule @E_D_() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E_D_.v", text = ""}
   ]}
-  firrtl.extmodule @E__C() attributes {annotations = [
+  extmodule @E__C() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E__C.v", text = ""}
   ]}
-  firrtl.extmodule @ETD_() attributes {annotations = [
+  extmodule @ETD_() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ETD_.v", text = ""}
   ]}
-  firrtl.extmodule @E_DC() attributes {annotations = [
+  extmodule @E_DC() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E_DC.v", text = ""}
   ]}
-  firrtl.extmodule @ET_C() attributes {annotations = [
+  extmodule @ET_C() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ET_C.v", text = ""}
   ]}
-  firrtl.extmodule @ETDC() attributes {annotations = [
+  extmodule @ETDC() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ETDC.v", text = ""}
   ]}
 
   // The Grand Central Companion module.
-  firrtl.module private @Companion() attributes {
+  module private @Companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
        name = "View"}]} {
 
-    firrtl.instance m__c @M__C()
-    firrtl.instance m_dc @M_DC()
-    firrtl.instance mt_c @MT_C()
-    firrtl.instance mtdc @MTDC()
+    instance m__c @M__C()
+    instance m_dc @M_DC()
+    instance mt_c @MT_C()
+    instance mtdc @MTDC()
 
-    firrtl.instance e__c @E__C()
-    firrtl.instance e_dc @E_DC()
-    firrtl.instance et_c @ET_C()
-    firrtl.instance etdc @ETDC()
+    instance e__c @E__C()
+    instance e_dc @E_DC()
+    instance et_c @ET_C()
+    instance etdc @ETDC()
   }
 
   // The Design-under-test as indicated by the MarkDUTAnnotation
-  firrtl.module private @DUT() attributes {
+  module private @DUT() attributes {
     annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]
   } {
-    firrtl.instance companion @Companion()
+    instance companion @Companion()
 
-    firrtl.instance m_d_ @M_D_()
-    firrtl.instance mtd_ @MTD_()
-    firrtl.instance m_dc @M_DC()
-    firrtl.instance mtdc @MTDC()
+    instance m_d_ @M_D_()
+    instance mtd_ @MTD_()
+    instance m_dc @M_DC()
+    instance mtdc @MTDC()
 
-    firrtl.instance e_d_ @E_D_()
-    firrtl.instance etd_ @ETD_()
-    firrtl.instance e_dc @E_DC()
-    firrtl.instance etdc @ETDC()
+    instance e_d_ @E_D_()
+    instance etd_ @ETD_()
+    instance e_dc @E_DC()
+    instance etdc @ETDC()
   }
 
   // The Top module that instantiates the DUT
-  firrtl.module @DirectoryBehaviorWithDUT() {
-    firrtl.instance dut @DUT()
+  module @DirectoryBehaviorWithDUT() {
+    instance dut @DUT()
 
-    firrtl.instance mt__ @MT__()
-    firrtl.instance mtd_ @MTD_()
-    firrtl.instance mt_c @MT_C()
-    firrtl.instance mtdc @MTDC()
+    instance mt__ @MT__()
+    instance mtd_ @MTD_()
+    instance mt_c @MT_C()
+    instance mtdc @MTDC()
 
-    firrtl.instance et__ @ET__()
-    firrtl.instance etd_ @ETD_()
-    firrtl.instance et_c @ET_C()
-    firrtl.instance etdc @ETDC()
+    instance et__ @ET__()
+    instance etd_ @ETD_()
+    instance et_c @ET_C()
+    instance etdc @ETDC()
   }
 }
 
@@ -832,21 +832,21 @@ firrtl.circuit "DirectoryBehaviorWithDUT" attributes {
 // CHECK-LABEL: "DirectoryBehaviorWithDUT"
 //
 // CHECK-NOT:    output_file
-// CHECK:      firrtl.module @M__C
+// CHECK:      module @M__C
 // CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NOT:    output_file
-// CHECK:      firrtl.module @MT_C
+// CHECK:      module @MT_C
 // CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 //
 // CHECK-NOT:    output_file
-// CHECK:      firrtl.extmodule @E__C
+// CHECK:      extmodule @E__C
 // CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
 // CHECK-NOT:    output_file
-// CHECK:      firrtl.extmodule @ET_C
+// CHECK:      extmodule @ET_C
 // CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
 // CHECK-NOT:    output_file
 //
-// CHECK:      firrtl.module
+// CHECK:      module
 
 // -----
 
@@ -868,44 +868,44 @@ firrtl.circuit "DirectoryBehaviorWithoutDUT" attributes {
   //   1) "T" indicates this is instantiated in the "Top"
   //   2) "C" indicates this is instantiated in the "Companion"
   // E.g., "E_C" is an external module instantiated only in the Companion.
-  firrtl.module @MT_() {}
-  firrtl.module @M_C() {}
-  firrtl.module @MTC() {}
-  firrtl.extmodule @ET_() attributes {annotations = [
+  module @MT_() {}
+  module @M_C() {}
+  module @MTC() {}
+  extmodule @ET_() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ET_.v", text = ""}
   ]}
-  firrtl.extmodule @E_C() attributes {annotations = [
+  extmodule @E_C() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "E_C.v", text = ""}
   ]}
-  firrtl.extmodule @ETC() attributes {annotations = [
+  extmodule @ETC() attributes {annotations = [
     {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ETC.v", text = ""}
   ]}
 
   // The Grand Central Companion module.
-  firrtl.module private @Companion() attributes {
+  module private @Companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
        defName = "Foo",
        id = 0 : i64,
        name = "View"}]} {
 
-    firrtl.instance m__c @M_C()
-    firrtl.instance m_dc @MTC()
+    instance m__c @M_C()
+    instance m_dc @MTC()
 
-    firrtl.instance e__c @E_C()
-    firrtl.instance e_dc @ETC()
+    instance e__c @E_C()
+    instance e_dc @ETC()
   }
 
   // This is the DUT in the previous example, but is no longer marked as the
   // DUT.
-  firrtl.module @DirectoryBehaviorWithoutDUT() {
-    firrtl.instance companion @Companion()
+  module @DirectoryBehaviorWithoutDUT() {
+    instance companion @Companion()
 
-    firrtl.instance m_d_ @MT_()
-    firrtl.instance m_dc @MTC()
+    instance m_d_ @MT_()
+    instance m_dc @MTC()
 
-    firrtl.instance e_d_ @ET_()
-    firrtl.instance e_dc @ETC()
+    instance e_d_ @ET_()
+    instance e_dc @ETC()
   }
 
 }
@@ -917,15 +917,15 @@ firrtl.circuit "DirectoryBehaviorWithoutDUT" attributes {
 // CHECK-LABEL: "DirectoryBehaviorWithoutDUT"
 //
 // CHECK-NOT:    output_file
-// CHECK:      firrtl.module @M_C
+// CHECK:      module @M_C
 // CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
 // CHECK-NOT:    output_file
 //
-// CHECK:      firrtl.extmodule @E_C
+// CHECK:      extmodule @E_C
 // CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}">
 // CHECK-NOT:    output_file
 //
-// CHECK:      firrtl.module
+// CHECK:      module
 
 // -----
 
@@ -978,7 +978,7 @@ firrtl.circuit "Top" attributes {
     }
   ]
 } {
-  firrtl.module @Companion_w1(in %_gen_uint: !firrtl.probe<uint<1>>) attributes {
+  module @Companion_w1(in %_gen_uint: !firrtl.probe<uint<1>>) attributes {
     annotations = [
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -987,8 +987,8 @@ firrtl.circuit "Top" attributes {
       }
     ]
   } {
-    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.probe<uint<1>>
-    %view_uintrefPort = firrtl.node  %0  {
+    %0 = ref.resolve %_gen_uint : !firrtl.probe<uint<1>>
+    %view_uintrefPort = node  %0  {
       annotations = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -997,7 +997,7 @@ firrtl.circuit "Top" attributes {
       ]
     } : !firrtl.uint<1>
   }
-  firrtl.module @Companion_w2(in %_gen_uint: !firrtl.probe<uint<2>>) attributes {
+  module @Companion_w2(in %_gen_uint: !firrtl.probe<uint<2>>) attributes {
     annotations = [
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -1006,8 +1006,8 @@ firrtl.circuit "Top" attributes {
       }
     ]
   } {
-    %0 = firrtl.ref.resolve %_gen_uint : !firrtl.probe<uint<2>>
-    %view_uintrefPort = firrtl.node  %0  {
+    %0 = ref.resolve %_gen_uint : !firrtl.probe<uint<2>>
+    %view_uintrefPort = node  %0  {
       annotations = [
         {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
@@ -1016,22 +1016,22 @@ firrtl.circuit "Top" attributes {
       ]
     } : !firrtl.uint<2>
   }
-  firrtl.module private @DUT() {
-    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %a_w1 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
-    firrtl.strictconnect %a_w1, %c0_ui1 : !firrtl.uint<1>
-    %a_w2 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
-    firrtl.strictconnect %a_w2, %c0_ui2 : !firrtl.uint<2>
-    %companion_w1__gen_uint = firrtl.instance companion_w1  @Companion_w1(in _gen_uint: !firrtl.probe<uint<1>>)
-    %companion_w2__gen_uint = firrtl.instance companion_w2  @Companion_w2(in _gen_uint: !firrtl.probe<uint<2>>)
-    %0 = firrtl.ref.send %a_w1 : !firrtl.uint<1>
-    firrtl.ref.define %companion_w1__gen_uint, %0 : !firrtl.probe<uint<1>>
-    %1 = firrtl.ref.send %a_w2 : !firrtl.uint<2>
-    firrtl.ref.define %companion_w2__gen_uint, %1 : !firrtl.probe<uint<2>>
+  module private @DUT() {
+    %c0_ui2 = constant 0 : !firrtl.uint<2>
+    %c0_ui1 = constant 0 : !firrtl.uint<1>
+    %a_w1 = wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    strictconnect %a_w1, %c0_ui1 : !firrtl.uint<1>
+    %a_w2 = wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+    strictconnect %a_w2, %c0_ui2 : !firrtl.uint<2>
+    %companion_w1__gen_uint = instance companion_w1  @Companion_w1(in _gen_uint: !firrtl.probe<uint<1>>)
+    %companion_w2__gen_uint = instance companion_w2  @Companion_w2(in _gen_uint: !firrtl.probe<uint<2>>)
+    %0 = ref.send %a_w1 : !firrtl.uint<1>
+    ref.define %companion_w1__gen_uint, %0 : !firrtl.probe<uint<1>>
+    %1 = ref.send %a_w2 : !firrtl.uint<2>
+    ref.define %companion_w2__gen_uint, %1 : !firrtl.probe<uint<2>>
   }
-  firrtl.module @Top() {
-    firrtl.instance dut  @DUT()
+  module @Top() {
+    instance dut  @DUT()
   }
 }
 
@@ -1054,7 +1054,7 @@ firrtl.circuit "NoInterfaces" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
      filename = "gct.yaml"}]} {
-  firrtl.module @NoInterfaces() {}
+  module @NoInterfaces() {}
 }
 
 // CHECK-LABEL: module {
@@ -1141,7 +1141,7 @@ firrtl.circuit "Top" attributes {
 } {
   hw.hierpath private @nla_0 [@Top::@t1, @Dut::@s1]
   hw.hierpath private @nla [@Top::@t1, @Dut::@s1]
-  firrtl.module @Companion() attributes {
+  module @Companion() attributes {
     annotations = [
       {
         circt.nonlocal = @nla,
@@ -1160,13 +1160,13 @@ firrtl.circuit "Top" attributes {
     ]
   } {
       // These are dummy references created for the purposes of the test.
-      %_ui1 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<1>
-      %_ui2 = firrtl.verbatim.expr "???" : () -> !firrtl.uint<2>
-      %ref_ui1 = firrtl.ref.send %_ui1 : !firrtl.uint<1>
-      %ref_ui2 = firrtl.ref.send %_ui2 : !firrtl.uint<2>
+      %_ui1 = verbatim.expr "???" : () -> !firrtl.uint<1>
+      %_ui2 = verbatim.expr "???" : () -> !firrtl.uint<2>
+      %ref_ui1 = ref.send %_ui1 : !firrtl.uint<1>
+      %ref_ui2 = ref.send %_ui2 : !firrtl.uint<2>
 
-      %ui1 = firrtl.ref.resolve %ref_ui1 : !firrtl.probe<uint<1>>
-      %foo = firrtl.node %ui1 {
+      %ui1 = ref.resolve %ref_ui1 : !firrtl.probe<uint<1>>
+      %foo = node %ui1 {
         annotations = [
           {
             circt.nonlocal = @nla,
@@ -1179,8 +1179,8 @@ firrtl.circuit "Top" attributes {
           }
         ]
       } : !firrtl.uint<1>
-      %ui2 = firrtl.ref.resolve %ref_ui2 : !firrtl.probe<uint<2>>
-      %bar = firrtl.node %ui2 {
+      %ui2 = ref.resolve %ref_ui2 : !firrtl.probe<uint<2>>
+      %bar = node %ui2 {
         annotations = [
           {
             circt.nonlocal = @nla,
@@ -1198,11 +1198,11 @@ firrtl.circuit "Top" attributes {
       // CHECK-SAME: !sv.interface<@[[VectorOfBundleView:[a-zA-Z0-9_]+]]>
       // CHECK-NOT: sv.interface.instance
     }
-  firrtl.module public @Dut() {
-    firrtl.instance s1 sym @s1 @Companion()
+  module public @Dut() {
+    instance s1 sym @s1 @Companion()
   }
-  firrtl.module public @Top() {
-    firrtl.instance t1 sym @t1 @Dut()
+  module public @Top() {
+    instance t1 sym @t1 @Dut()
   }
 
   // CHECK:      sv.interface @[[VectorOfBundleView]] attributes

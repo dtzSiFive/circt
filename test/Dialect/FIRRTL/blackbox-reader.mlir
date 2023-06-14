@@ -11,31 +11,31 @@ firrtl.circuit "Foo" attributes {annotations = [
 {class = "sifive.enterprise.firrtl.ExtractCoverageAnnotation", directory = "cover"}
 ]}
 {
-  // CHECK-LABEL: firrtl.extmodule @ExtFoo()
+  // CHECK-LABEL: extmodule @ExtFoo()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
   // CHECK-SAME: class = "firrtl.transforms.BlackBox"
-  firrtl.extmodule @ExtFoo() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello.v", text = "// world"}]}
-  // CHECK-LABEL: firrtl.extmodule @ExtFoo2()
+  extmodule @ExtFoo() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello.v", text = "// world"}]}
+  // CHECK-LABEL: extmodule @ExtFoo2()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
-  firrtl.extmodule @ExtFoo2() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello2.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
-  // CHECK-LABEL: firrtl.extmodule @ExtFoo3()
+  extmodule @ExtFoo2() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello2.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  // CHECK-LABEL: extmodule @ExtFoo3()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
-  firrtl.extmodule @ExtFoo3() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello3.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
-  // CHECK-LABEL: firrtl.module @DUTBlackboxes
+  extmodule @ExtFoo3() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello3.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  // CHECK-LABEL: module @DUTBlackboxes
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
-  firrtl.module @DUTBlackboxes() attributes {annotations = [
+  module @DUTBlackboxes() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}, {class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello_dut.v", text = "// world"}]} {
-      firrtl.instance foo2  @ExtFoo2()
-      firrtl.instance bar @Bar()
-      firrtl.instance baz @Baz()
+      instance foo2  @ExtFoo2()
+      instance bar @Bar()
+      instance baz @Baz()
   }
-  firrtl.extmodule @Bar() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "Bar.v", text = "/* Bar */\0A"}], output_file = #hw.output_file<"bar/">}
-  firrtl.extmodule @Baz() attributes {annotations = [{class = "firrtl.transforms.BlackBoxPathAnno", path = "Baz.sv"}], output_file = #hw.output_file<"baz/">}
-  firrtl.extmodule @Qux() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "Qux.sv", text = "/* Qux */\0A"}], output_file = #hw.output_file<"qux/NotQux.jpeg">}
-  firrtl.module @Foo() {
-    firrtl.instance foo @ExtFoo()
-    firrtl.instance foo3 @ExtFoo3()
-    firrtl.instance dut @DUTBlackboxes()
+  extmodule @Bar() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "Bar.v", text = "/* Bar */\0A"}], output_file = #hw.output_file<"bar/">}
+  extmodule @Baz() attributes {annotations = [{class = "firrtl.transforms.BlackBoxPathAnno", path = "Baz.sv"}], output_file = #hw.output_file<"baz/">}
+  extmodule @Qux() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "Qux.sv", text = "/* Qux */\0A"}], output_file = #hw.output_file<"qux/NotQux.jpeg">}
+  module @Foo() {
+    instance foo @ExtFoo()
+    instance foo3 @ExtFoo3()
+    instance dut @DUTBlackboxes()
   }
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello.v">}
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover{{/|\\\\}}hello2.v">}
@@ -57,14 +57,14 @@ firrtl.circuit "Foo" attributes {annotations = [
 // Check that a TestBenchDirAnnotation has no effect without the presence of a
 // MarkDUTAnnotation.
 //
-// CHECK: firrtl.circuit "NoDUT"
+// CHECK: circuit "NoDUT"
 firrtl.circuit "NoDUT" attributes {annotations = [
   {
     class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
     dirname = "testbench"
   }
 ]} {
-  firrtl.extmodule @NoDUTBlackBox() attributes {annotations = [
+  extmodule @NoDUTBlackBox() attributes {annotations = [
   {
     class = "firrtl.transforms.BlackBoxInlineAnno",
     name = "NoDUTBlackBox.sv",
@@ -72,8 +72,8 @@ firrtl.circuit "NoDUT" attributes {annotations = [
     target = "~NoDUT|NoDUTBlackBox"
   }
 ]}
-  firrtl.module @NoDUT() {
-    firrtl.instance noDUTBlackBox @NoDUTBlackBox()
+  module @NoDUT() {
+    instance noDUTBlackBox @NoDUTBlackBox()
   }
   // CHECK:      sv.verbatim "module NoDUTBlackBox()
   // CHECK-SAME:   #hw.output_file<".{{/|\\\\}}NoDUTBlackBox.sv">

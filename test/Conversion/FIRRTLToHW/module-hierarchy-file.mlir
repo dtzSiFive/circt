@@ -8,7 +8,7 @@ firrtl.circuit "MyDUT" attributes {annotations = [
 {
   // CHECK-LABEL: hw.module @MyDUT
   // CHECK-SAME: attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"filename1.json", excludeFromFileList>, #hw.output_file<"filename2.json", excludeFromFileList>]}
-  firrtl.module @MyDUT() {}
+  module @MyDUT() {}
 }
 
 // -----
@@ -20,7 +20,7 @@ firrtl.circuit "MyDUT" attributes {annotations = [
 {
   // CHECK-LABEL: hw.module @MyDUT
   // CHECK-SAME: attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"filename1.json", excludeFromFileList>, #hw.output_file<"filename2.json", excludeFromFileList>]}
-  firrtl.module @MyDUT() attributes {annotations = [
+  module @MyDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 }
 
@@ -34,13 +34,13 @@ firrtl.circuit "MyTestHarness" attributes {annotations = [
 {
   // CHECK-LABEL: hw.module private @MyDUT
   // CHECK-SAME: attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"filename1.json", excludeFromFileList>]}
-  firrtl.module private @MyDUT() attributes {annotations = [
+  module private @MyDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 
   // CHECK-LABEL: hw.module @MyTestHarness
   // CHECK-SAME: attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"filename2.json", excludeFromFileList>]}
-  firrtl.module @MyTestHarness() {
-    firrtl.instance myDUT @MyDUT()
+  module @MyTestHarness() {
+    instance myDUT @MyDUT()
   }
 }
 
@@ -50,8 +50,8 @@ firrtl.circuit "MyTestHarness" attributes {annotations = [
 // is present.
 firrtl.circuit "MyDUT" {
   // CHECK-LABEL: hw.module @MyDUT
-  // CHECK-NOT: firrtl.moduleHierarchyFile
-  firrtl.module @MyDUT() attributes {annotations = [
+  // CHECK-NOT: moduleHierarchyFile
+  module @MyDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 }
 
@@ -61,19 +61,19 @@ firrtl.circuit "MyDUT" {
 firrtl.circuit "MyTestHarness" attributes {annotations = [ {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"}]}
 {
   // CHECK-LABEL: hw.module private @MyDUT() {
-  firrtl.module private @MyDUT() attributes {annotations = [
+  module private @MyDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 
   // CHECK-LABEL: hw.module private @Testbench
   // CHECK-SAME:  comment = "VCS coverage exclude_file"
-  // CHECK-SAME:  firrtl.extract.do_not_extract
-  firrtl.module private @Testbench() {}
+  // CHECK-SAME:  extract.do_not_extract
+  module private @Testbench() {}
 
   // CHECK-LABEL: hw.module @MyTestHarness
   // CHECK-SAME:  comment = "VCS coverage exclude_file"
-  // CHECK-SAME:  firrtl.extract.do_not_extract
-  firrtl.module @MyTestHarness() {
-    firrtl.instance myDUT @MyDUT()
-    firrtl.instance myTestBench @Testbench()
+  // CHECK-SAME:  extract.do_not_extract
+  module @MyTestHarness() {
+    instance myDUT @MyDUT()
+    instance myTestBench @Testbench()
   }
 }

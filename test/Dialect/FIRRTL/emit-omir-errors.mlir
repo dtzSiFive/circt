@@ -8,12 +8,12 @@ firrtl.circuit "Top" attributes {annotations = [{
     finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
   }}]
 }]} {
-  firrtl.extmodule private @MySRAM()
-  firrtl.module private @Submodule() {
+  extmodule private @MySRAM()
+  module private @Submodule() {
     // expected-error @+1 {{OMIR node targets uninstantiated component `mem`}}
-    firrtl.instance mem {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+    instance mem {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
   }
-  firrtl.module @Top() {}
+  module @Top() {}
 }
 
 // -----
@@ -26,17 +26,17 @@ firrtl.circuit "Top" attributes {annotations = [{
     finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
   }}]
 }]} {
-  firrtl.extmodule private @MySRAM()
-  firrtl.module private @Submodule() {
+  extmodule private @MySRAM()
+  module private @Submodule() {
     // expected-error @+4 {{OMIR node targets ambiguous component `mem`}}
     // expected-note @+3 {{may refer to the following paths:}}
     // expected-note @+2 {{- $root/sub1:Submodule}}
     // expected-note @+1 {{- $root/sub2:Submodule}}
-    firrtl.instance mem {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+    instance mem {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
   }
-  firrtl.module @Top() {
-    firrtl.instance sub1 @Submodule()
-    firrtl.instance sub2 @Submodule()
+  module @Top() {
+    instance sub1 @Submodule()
+    instance sub2 @Submodule()
   }
 }
 
@@ -52,7 +52,7 @@ firrtl.circuit "Foo" attributes {annotations = [{
     a = {info = #loc, index = 1, value = {omir.tracker, id = 0, path = "~Foo|Bar", type = "OMInstanceTarget"}}
   }}]
 }]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -67,5 +67,5 @@ firrtl.circuit "Foo" attributes {annotations = [{
     a = {info = #loc, index = 1, value = {omir.tracker, id = 0, path = "~Foo|Bar", type = "OMDontTouchedReferenceTarget"}}
   }}]
 }]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }

@@ -19,7 +19,7 @@ circuit Foo: %[[
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {rawAnnotations =
+    ; CHECK: circuit "Foo" attributes {rawAnnotations =
     ; CHECK-SAME: array = [1, 2, 3]
     ; CHECK-SAME: boolean = true
     ; CHECK-SAME: float = 3.140
@@ -35,7 +35,7 @@ circuit Foo: %[[{"class": "circt.testNT", "\"":"}]]"}]]
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {rawAnnotations =
+    ; CHECK: circuit "Foo" attributes {rawAnnotations =
 
 ; // -----
 ; JSON with a JSON-quoted string should be expanded.
@@ -44,7 +44,7 @@ circuit Foo: %[[{"class":"circt.testNT","a":"{\"b\":null}"}]]
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {rawAnnotations = [{a = {b}, class = "circt.testNT"}]}
+    ; CHECK: circuit "Foo" attributes {rawAnnotations = [{a = {b}, class = "circt.testNT"}]}
 
 ; // -----
 ; JSON with a JSON-quoted number should stay as a number.
@@ -53,7 +53,7 @@ circuit Foo: %[[{"class":"circt.testNT","a":"0","b":0,"c":"\"0\""}]]
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK:         firrtl.circuit "Foo"
+    ; CHECK:         circuit "Foo"
     ; CHECK-SAME:      a = "0"
     ; CHECK-SAME:      b = 0
     ; CHECK-SAME:      c = "0"
@@ -72,7 +72,7 @@ circuit Top : %[[
     wire a: UInt<1>
     a is invalid
 
-; CHECK-LABEL: firrtl.circuit "Top"
+; CHECK-LABEL: circuit "Top"
 
 
 ; // -----
@@ -93,7 +93,7 @@ circuit RawAnnotations: %[[
   module RawAnnotations:
     wire x: UInt<1>
 
-    ; CHECK-LABEL: firrtl.circuit "RawAnnotations"
+    ; CHECK-LABEL: circuit "RawAnnotations"
     ; CHECK-SAME:    rawAnnotations = [
     ; CHECK-SAME:      "circt.test"
     ; Check-SAME:      "circt.testNT"

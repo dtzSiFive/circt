@@ -1,24 +1,24 @@
 // RUN: firtool --verilog %s | FileCheck %s
 
 firrtl.circuit "Foo" {
-  firrtl.extmodule @Bar(
+  extmodule @Bar(
     in extClockIn: !firrtl.clock sym @symExtClockIn,
     out extClockOut: !firrtl.clock sym @symExtClockOut
   )
-  firrtl.module @Foo(
+  module @Foo(
     in %value: !firrtl.uint<42> sym @symValue,
     in %clock: !firrtl.clock sym @symClock,
     in %reset: !firrtl.uint<1> sym @symReset
   ) {
-    %instName_clockIn, %instName_clockOut = firrtl.instance instName sym @instSym @Bar(in extClockIn: !firrtl.clock, out extClockOut: !firrtl.clock)
-    %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
-    %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
-    %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
-    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %instName_clockIn, %instName_clockOut = instance instName sym @instSym @Bar(in extClockIn: !firrtl.clock, out extClockOut: !firrtl.clock)
+    %nodeName = node sym @nodeSym %value : !firrtl.uint<42>
+    %wireName = wire sym @wireSym : !firrtl.uint<42>
+    %regName = reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
+    %regResetName = regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
 
-    %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
-    firrtl.connect %instName_clockIn, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %wireName, %invalid_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
+    %invalid_ui42 = invalidvalue : !firrtl.uint<42>
+    connect %instName_clockIn, %clock : !firrtl.clock, !firrtl.clock
+    connect %wireName, %invalid_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
   }
 }
 

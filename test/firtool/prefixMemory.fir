@@ -25,7 +25,7 @@ circuit Foo : %[[
     "target": "~Foo|Baz>mem"
   }
 ]]
-  ; CHECK-FIR-LABEL: firrtl.module private @prefix1_Bar
+  ; CHECK-FIR-LABEL: module private @prefix1_Bar
   ; CHECK-HW-LABEL: hw.module private @prefix1_Bar
   module Bar :
     input clock : Clock
@@ -36,9 +36,9 @@ circuit Foo : %[[
     input writeAddr : UInt<3>
     input writeData : UInt<32>
 
-    ; REPL-FIR:     firrtl.instance mem @prefix1_mem
+    ; REPL-FIR:     instance mem @prefix1_mem
     ; REPL-HW:      hw.instance "mem" @prefix1_mem
-    ; SIM-FIR:      firrtl.mem
+    ; SIM-FIR:      mem
     ; SIM-FIR-SAME:   name = "mem"
     ; SIM-FIR-SAME:   prefix = "prefix1_"
     ; SIM-HW:       hw.instance "mem_ext" @prefix1_mem_combMem
@@ -68,7 +68,7 @@ circuit Foo : %[[
       mem.MPORT.data <= writeData
       mem.MPORT.mask <= UInt<1>("h1")
 
-  ; CHECK-FIR-LABEL: firrtl.module private @prefix2_Baz
+  ; CHECK-FIR-LABEL: module private @prefix2_Baz
   ; CHECK-HW-LABEL: hw.module private @prefix2_Baz
   module Baz :
     input clock : Clock
@@ -79,9 +79,9 @@ circuit Foo : %[[
     input writeAddr : UInt<3>
     input writeData : UInt<32>
 
-    ; REPL-FIR:     firrtl.instance mem @prefix2_mem
+    ; REPL-FIR:     instance mem @prefix2_mem
     ; REPL-HW:      hw.instance "mem" @prefix2_mem
-    ; SIM-FIR:      firrtl.mem
+    ; SIM-FIR:      mem
     ; SIM-FIR-SAME:   name = "mem"
     ; SIM-FIR-SAME:   prefix = "prefix2_"
     ; SIM-HW:       hw.instance "mem_ext" @prefix2_mem_combMem
@@ -137,8 +137,8 @@ circuit Foo : %[[
     node _readData_T = xor(bar.readData, baz.readData)
     readData <= _readData_T
 
-; REPL-FIR: firrtl.memmodule private @prefix1_mem
-; REPL-FIR: firrtl.memmodule private @prefix2_mem
+; REPL-FIR: memmodule private @prefix1_mem
+; REPL-FIR: memmodule private @prefix2_mem
 
 ; REPL-HW: hw.module.extern @prefix1_mem
 ; REPL-HW: hw.module.extern @prefix2_mem

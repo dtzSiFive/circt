@@ -3,21 +3,21 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-drop-names{preserve-values=none})))' %s  | FileCheck %s --check-prefix=NONE
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() {
-    // ALL:   %a = firrtl.wire  interesting_name : !firrtl.uint<1>
-    // NAMED: %a = firrtl.wire  interesting_name : !firrtl.uint<1>
-    // NONE:  %a = firrtl.wire  : !firrtl.uint<1>
-    %a = firrtl.wire interesting_name : !firrtl.uint<1>
+  module @Foo() {
+    // ALL:   %a = wire  interesting_name : !firrtl.uint<1>
+    // NAMED: %a = wire  interesting_name : !firrtl.uint<1>
+    // NONE:  %a = wire  : !firrtl.uint<1>
+    %a = wire interesting_name : !firrtl.uint<1>
 
-    // ALL:   %_a = firrtl.wire  interesting_name : !firrtl.uint<1>
-    // NAMED: %_a = firrtl.wire  : !firrtl.uint<1>
-    // NONE:  %_a = firrtl.wire  : !firrtl.uint<1>
-    %_a = firrtl.wire interesting_name : !firrtl.uint<1>
+    // ALL:   %_a = wire  interesting_name : !firrtl.uint<1>
+    // NAMED: %_a = wire  : !firrtl.uint<1>
+    // NONE:  %_a = wire  : !firrtl.uint<1>
+    %_a = wire interesting_name : !firrtl.uint<1>
 
-    // ALL:   %_T = firrtl.wire : !firrtl.uint<1>
-    // NAMED: %0 = firrtl.wire  : !firrtl.uint<1>
-    // NONE:  %0 = firrtl.wire  : !firrtl.uint<1>
-    %_T = firrtl.wire interesting_name : !firrtl.uint<1>
+    // ALL:   %_T = wire : !firrtl.uint<1>
+    // NAMED: %0 = wire  : !firrtl.uint<1>
+    // NONE:  %0 = wire  : !firrtl.uint<1>
+    %_T = wire interesting_name : !firrtl.uint<1>
 
   }
 }

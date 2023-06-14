@@ -15,10 +15,10 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     nodes = []
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
-// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-LABEL: circuit "Foo"
 // CHECK-SAME:    class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
 // CHECK-SAME:    nodes = []
 
@@ -37,10 +37,10 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
-// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-LABEL: circuit "Foo"
 // CHECK-SAME:    fields = {}
 
 // -----
@@ -57,10 +57,10 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
-// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-LABEL: circuit "Foo"
 // CHECK-SAME:    fields = {}
 
 // -----
@@ -91,7 +91,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // CHECK-DAG:   [[locA:#loc[0-9]*]] = loc("A":0:1)
@@ -99,7 +99,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK-DAG:   [[locC:#loc[0-9]*]] = loc("C":4:5)
 // CHECK-DAG:   [[locD:#loc[0-9]*]] = loc("D":6:7)
 // CHECK-DAG:   [[locCD:#loc[0-9]*]] = loc(fused[[[locC]], [[locD]]])
-// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-LABEL: circuit "Foo"
 // CHECK-SAME:    x = {{{[^{}]+}} info = [[locB]]
 // CHECK-SAME:    y = {{{[^{}]+}} info = [[locCD]]
 // CHECK-SAME:    id = "OMID:0", info = [[locA]]
@@ -178,10 +178,10 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
-// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-LABEL: circuit "Foo"
 // CHECK-SAME:    a = {index = 0 {{[^{}]+}} value = "OMReference:0"},
 // CHECK-SAME:    b = {index = 1 {{[^{}]+}} value = "OMBigInt:42"},
 // CHECK-SAME:    c = {index = 2 {{[^{}]+}} value = "OMLong:ff"},
@@ -246,22 +246,22 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module private @C() {}
-  firrtl.module private @D() {}
-  firrtl.module private @E() {}
-  firrtl.module private @F() {}
-  firrtl.module @Foo() {
-    %a = firrtl.wire interesting_name  : !firrtl.uint<1>
-    %b = firrtl.wire interesting_name  : !firrtl.uint<1>
-    %g = firrtl.wire interesting_name  : !firrtl.uint<1>
-    firrtl.instance c interesting_name  @C()
-    firrtl.instance d interesting_name  @D()
-    firrtl.instance e interesting_name  @E()
-    firrtl.instance f interesting_name  @F()
+  module private @C() {}
+  module private @D() {}
+  module private @E() {}
+  module private @F() {}
+  module @Foo() {
+    %a = wire interesting_name  : !firrtl.uint<1>
+    %b = wire interesting_name  : !firrtl.uint<1>
+    %g = wire interesting_name  : !firrtl.uint<1>
+    instance c interesting_name  @C()
+    instance d interesting_name  @D()
+    instance e interesting_name  @E()
+    instance f interesting_name  @F()
   }
 }
 
-// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK-LABEL: circuit "Foo"
 // CHECK-SAME:    a = {{{[^{}]+}} value = {id = [[aID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = [[A_TYPE:"OM[a-zA-Z]+"]]
 // CHECK-SAME:    b = {{{[^{}]+}} value = {id = [[bID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = [[B_TYPE:"OM[a-zA-Z]+"]]
 // CHECK-SAME:    c = {{{[^{}]+}} value = {id = [[cID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = [[C_TYPE:"OM[a-zA-Z]+"]]
@@ -271,18 +271,18 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = [[G_TYPE:"OM[a-zA-Z]+"]]
 // CHECK:       hw.hierpath private @[[Foo_cC_C:nla[_0-9]*]]
 // CHECK-NEXT:  hw.hierpath private @[[Foo_eE_E:nla[_0-9]*]]
-// CHECK:       firrtl.module private @C
+// CHECK:       module private @C
 // CHECK-SAME:    {circt.nonlocal = @[[Foo_cC_C]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[cID]] : i64, type = [[C_TYPE]]}
-// CHECK:       firrtl.module private @D
+// CHECK:       module private @D
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[dID]] : i64, type = [[D_TYPE]]}
-// CHECK:       firrtl.module private @E
+// CHECK:       module private @E
 // CHECK-SAME:    {circt.nonlocal = @[[Foo_eE_E]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[eID]] : i64, type = [[E_TYPE]]}
-// CHECK:       firrtl.module private @F
+// CHECK:       module private @F
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[fID]] : i64, type = [[F_TYPE]]}
-// CHECK:       firrtl.module @Foo
-// CHECK-NEXT:  %a = firrtl.wire
+// CHECK:       module @Foo
+// CHECK-NEXT:  %a = wire
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[aID]] : i64, type = [[A_TYPE]]}
-// CHECK-NEXT:  %b = firrtl.wire
+// CHECK-NEXT:  %b = wire
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[bID]] : i64, type = [[B_TYPE]]}
-// CHECK-NEXT:  %g = firrtl.wire
+// CHECK-NEXT:  %g = wire
 // CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[gID]] : i64, type = [[G_TYPE]]}

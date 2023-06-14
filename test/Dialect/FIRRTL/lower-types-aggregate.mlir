@@ -4,7 +4,7 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=none}))' %s   | FileCheck --check-prefix=PRESERVE_NONE %s
 
 firrtl.circuit "TopLevel" {
-  firrtl.module @TopLevel() {}
+  module @TopLevel() {}
 
   // * A module using the internal convention will have its ports lowered
   //   according to the preservation mode.
@@ -18,14 +18,14 @@ firrtl.circuit "TopLevel" {
   // PRESERVE_VEC:    @InternalModule1(in %port: !firrtl.vector<uint<8>, 2>)
   // PRESERVE_1D_VEC: @InternalModule1(in %port: !firrtl.vector<uint<8>, 2>)
   // PRESERVE_NONE:   @InternalModule1(in %port_0: !firrtl.uint<8>, in %port_1: !firrtl.uint<8>)
-  firrtl.module @InternalModule1(in %port: !firrtl.vector<uint<8>, 2>)
+  module @InternalModule1(in %port: !firrtl.vector<uint<8>, 2>)
     attributes {convention = #firrtl<convention internal>} {}
 
   // PRESERVE_ALL:    @ScalarizedModule1(in %port_0: !firrtl.uint<8>, in %port_1: !firrtl.uint<8>)
   // PRESERVE_VEC:    @ScalarizedModule1(in %port_0: !firrtl.uint<8>, in %port_1: !firrtl.uint<8>)
   // PRESERVE_1D_VEC: @ScalarizedModule1(in %port_0: !firrtl.uint<8>, in %port_1: !firrtl.uint<8>)
   // PRESERVE_NONE:   @ScalarizedModule1(in %port_0: !firrtl.uint<8>, in %port_1: !firrtl.uint<8>)
-  firrtl.module @ScalarizedModule1(in %port: !firrtl.vector<uint<8>, 2>)
+  module @ScalarizedModule1(in %port: !firrtl.vector<uint<8>, 2>)
     attributes {convention = #firrtl<convention scalarized>} {}
   
   // 2D Vector Ports
@@ -34,14 +34,14 @@ firrtl.circuit "TopLevel" {
   // PRESERVE_VEC:    @InternalModule2(in %port: !firrtl.vector<vector<uint<8>, 2>, 2>)
   // PRESERVE_1D_VEC: @InternalModule2(in %port_0: !firrtl.vector<uint<8>, 2>, in %port_1: !firrtl.vector<uint<8>, 2>)
   // PRESERVE_NONE:   @InternalModule2(in %port_0_0: !firrtl.uint<8>, in %port_0_1: !firrtl.uint<8>, in %port_1_0: !firrtl.uint<8>, in %port_1_1: !firrtl.uint<8>)
-  firrtl.module @InternalModule2(in %port: !firrtl.vector<vector<uint<8>, 2>, 2>)
+  module @InternalModule2(in %port: !firrtl.vector<vector<uint<8>, 2>, 2>)
     attributes {convention = #firrtl<convention internal>} {}
   
   // PRESERVE_ALL:    ScalarizedModule2(in %port_0_0: !firrtl.uint<8>, in %port_0_1: !firrtl.uint<8>, in %port_1_0: !firrtl.uint<8>, in %port_1_1: !firrtl.uint<8>)
   // PRESERVE_VEC:    ScalarizedModule2(in %port_0_0: !firrtl.uint<8>, in %port_0_1: !firrtl.uint<8>, in %port_1_0: !firrtl.uint<8>, in %port_1_1: !firrtl.uint<8>)
   // PRESERVE_1D_VEC: ScalarizedModule2(in %port_0_0: !firrtl.uint<8>, in %port_0_1: !firrtl.uint<8>, in %port_1_0: !firrtl.uint<8>, in %port_1_1: !firrtl.uint<8>)
   // PRESERVE_NONE:   ScalarizedModule2(in %port_0_0: !firrtl.uint<8>, in %port_0_1: !firrtl.uint<8>, in %port_1_0: !firrtl.uint<8>, in %port_1_1: !firrtl.uint<8>)
-  firrtl.module @ScalarizedModule2(in %port: !firrtl.vector<vector<uint<8>, 2>, 2>)
+  module @ScalarizedModule2(in %port: !firrtl.vector<vector<uint<8>, 2>, 2>)
     attributes {convention = #firrtl<convention scalarized>} {}
 
   // Bundle Ports
@@ -50,13 +50,13 @@ firrtl.circuit "TopLevel" {
   // PRESERVE_VEC:    @InternalModule3(in %port_field: !firrtl.uint<1>)
   // PRESERVE_1D_VEC: @InternalModule3(in %port_field: !firrtl.uint<1>)
   // PRESERVE_NONE:   @InternalModule3(in %port_field: !firrtl.uint<1>)
-  firrtl.module @InternalModule3(in %port: !firrtl.bundle<field: uint<1>>)
+  module @InternalModule3(in %port: !firrtl.bundle<field: uint<1>>)
     attributes {convention = #firrtl<convention internal>} {}
   
   // PRESERVE_ALL:    @ScalarizedModule3(in %port_field: !firrtl.uint<1>)
   // PRESERVE_VEC:    @ScalarizedModule3(in %port_field: !firrtl.uint<1>)
   // PRESERVE_1D_VEC: @ScalarizedModule3(in %port_field: !firrtl.uint<1>)
   // PRESERVE_NONE:   @ScalarizedModule3(in %port_field: !firrtl.uint<1>)
-  firrtl.module @ScalarizedModule3(in %port: !firrtl.bundle<field: uint<1>>)
+  module @ScalarizedModule3(in %port: !firrtl.bundle<field: uint<1>>)
     attributes {convention = #firrtl<convention scalarized>} {}
 }

@@ -4,7 +4,7 @@
 firrtl.circuit "Simple" attributes {annotations = [{
     class = "sifive.enterprise.firrtl.MetadataDirAnnotation"
   }]} {
-  firrtl.module @Simple() {}
+  module @Simple() {}
 }
 
 // -----
@@ -13,7 +13,7 @@ firrtl.circuit "Simple" attributes {annotations = [{
 firrtl.circuit "Simple" attributes {annotations = [{
     class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation"
   }]} {
-  firrtl.module @Simple() {}
+  module @Simple() {}
 }
 
 // -----
@@ -28,7 +28,7 @@ firrtl.circuit "Simple" attributes {annotations = [
     class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
     filename = "test"
   }]} {
-  firrtl.module @Simple() {}
+  module @Simple() {}
 }
 
 // -----
@@ -39,7 +39,7 @@ firrtl.circuit "Simple" attributes {annotations = [{
   input = true,
   width = 5
  }]} {
-  firrtl.module @Simple() { }
+  module @Simple() { }
 }
 
 // -----
@@ -50,7 +50,7 @@ firrtl.circuit "Simple" attributes {annotations = [{
   name = "user_input",
   width = 5
  }]} {
-  firrtl.module @Simple() { }
+  module @Simple() { }
 }
 
 // -----
@@ -61,5 +61,5 @@ firrtl.circuit "Simple" attributes {annotations = [{
   name = "user_input",
   input = true
  }]} {
-  firrtl.module @Simple() { }
+  module @Simple() { }
 }

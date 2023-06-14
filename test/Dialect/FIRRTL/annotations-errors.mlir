@@ -8,7 +8,7 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
     class = "circt.unknown"
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -23,7 +23,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     target = "~Fooo|Foo>bar"
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -38,7 +38,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     target = "~Fooo"
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -53,7 +53,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     target = ""
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -68,9 +68,9 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     target = "~Foo|Foo>bar[0]"
   }
 ]} {
-  firrtl.module @Bar() {}
-  firrtl.module @Foo() {
-    firrtl.instance bar @Bar()
+  module @Bar() {}
+  module @Foo() {
+    instance bar @Bar()
   }
 }
 
@@ -85,9 +85,9 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
     target = "~Foo|Foo>bar[a].baz"
   }
 ]} {
-  firrtl.module @Foo() {
+  module @Foo() {
     // expected-error @+1 {{Cannot convert 'a' to an integer}}
-    %bar = firrtl.wire : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = wire : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
   }
 }
 
@@ -110,11 +110,11 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     target = "~Foo|Foo>bar[1].baz[1337]"
   }
 ]} {
-  firrtl.module @Foo(in %clock: !firrtl.clock) {
+  module @Foo(in %clock: !firrtl.clock) {
     // expected-error @+3 {{index access '42' into non-vector type}}
     // expected-error @+2 {{cannot resolve field 'qnx' in subtype}}
     // expected-error @+1 {{index access '1337' into non-vector type}}
-    %bar = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = reg %clock : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
   }
 }
 
@@ -130,7 +130,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     target = "~Foo|Bar"
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -145,7 +145,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     target = "~Foo|Foo>x"
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -160,9 +160,9 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
     target = "~Foo|Foo/baz:Bar"
   }
 ]} {
-  firrtl.module private @Bar() {}
-  firrtl.module @Foo() {
-    firrtl.instance bar interesting_name  @Bar()
+  module private @Bar() {}
+  module @Foo() {
+    instance bar interesting_name  @Bar()
   }
 }
 
@@ -174,13 +174,13 @@ firrtl.circuit "LocalOnlyAnnotation" attributes {
     {class = "circt.testLocalOnly",
      target = "~LocalOnlyAnnotation|LocalOnlyAnnotation/foo:Foo>w"}
   ]} {
-  firrtl.module @Foo() {
+  module @Foo() {
     // expected-error @+2 {{targeted by a non-local annotation}}
     // expected-note @+1 {{see current annotation}}
-    %w = firrtl.wire : !firrtl.uint<1>
+    %w = wire : !firrtl.uint<1>
   }
-  firrtl.module @LocalOnlyAnnotation() {
-    firrtl.instance foo @Foo()
+  module @LocalOnlyAnnotation() {
+    instance foo @Foo()
   }
 }
 
@@ -193,9 +193,9 @@ firrtl.circuit "DontTouchOnNonReferenceTarget" attributes {
      target = "~DontTouchOnNonReferenceTarget|Submodule"},
     {class = "firrtl.transforms.DontTouchAnnotation",
      target = "~DontTouchOnNonReferenceTarget|DontTouchOnNonReferenceTarget>submodule"}]} {
-  firrtl.module @Submodule() {}
-  firrtl.module @DontTouchOnNonReferenceTarget() {
-    firrtl.instance submodule @Submodule()
+  module @Submodule() {}
+  module @DontTouchOnNonReferenceTarget() {
+    instance submodule @Submodule()
   }
 }
 
@@ -214,8 +214,8 @@ firrtl.circuit "GCTDataTapUnsupportedDeleted" attributes {rawAnnotations = [{
     }
   ]
 }]} {
-  firrtl.module @GCTDataTapUnsupportedDeleted() {
-    %tap = firrtl.wire : !firrtl.uint<1>
+  module @GCTDataTapUnsupportedDeleted() {
+    %tap = wire : !firrtl.uint<1>
   }
 }
 
@@ -235,8 +235,8 @@ firrtl.circuit "GCTDataTapUnsupportedLiteral" attributes {rawAnnotations = [{
     }
   ]
 }]} {
-  firrtl.module @GCTDataTapUnsupportedLiteral() {
-    %tap = firrtl.wire : !firrtl.uint<1>
+  module @GCTDataTapUnsupportedLiteral() {
+    %tap = wire : !firrtl.uint<1>
   }
 }
 
@@ -249,9 +249,9 @@ firrtl.circuit "InstancePortNotFound" attributes {rawAnnotations = [{
   class = "circt.test",
   target = "~InstancePortNotFound|InstancePortNotFound>inst.a"
 }]} {
-  firrtl.extmodule @Ext()
-  firrtl.module @InstancePortNotFound() {
-    firrtl.instance inst @Ext()
+  extmodule @Ext()
+  module @InstancePortNotFound() {
+    instance inst @Ext()
   }
 }
 
@@ -264,9 +264,9 @@ firrtl.circuit "InstancePortRef" attributes {rawAnnotations = [{
   class = "circt.test",
   target = "~InstancePortRef|InstancePortRef>inst.ref"
 }]} {
-  firrtl.extmodule @Ext(out ref : !firrtl.ref<uint<1>>)
-  firrtl.module @InstancePortRef() {
-    %ref = firrtl.instance inst @Ext(out ref : !firrtl.ref<uint<1>>)
+  extmodule @Ext(out ref : !firrtl.ref<uint<1>>)
+  module @InstancePortRef() {
+    %ref = instance inst @Ext(out ref : !firrtl.ref<uint<1>>)
   }
 }
 
@@ -279,9 +279,9 @@ firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
   class = "circt.test",
   target = "~RefAnno|RefAnno>out"
 }]} {
-  firrtl.module @RefAnno(in %in : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
-    %ref = firrtl.ref.send %in : !firrtl.uint<1>
-    firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+  module @RefAnno(in %in : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
+    %ref = ref.send %in : !firrtl.uint<1>
+    ref.define %out, %ref : !firrtl.ref<uint<1>>
   }
 }
 
@@ -297,7 +297,7 @@ firrtl.circuit "Anno" attributes {rawAnnotations = [{
   description = "attr"
 }]} {
   // expected-error @+1 {{firrtl.AttributeAnnotation must target an operation. Currently ports are not supported}}
-  firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
+  module @Anno(in %in : !firrtl.uint<1>) {}
 }
 
 // -----
@@ -310,6 +310,6 @@ firrtl.circuit "Anno" attributes {rawAnnotations = [{
   description = "ext"
 }]} {
   // expected-error @+1 {{firrtl.AttributeAnnotation unhandled operation. The target must be a module, wire, node or register}}
-  firrtl.extmodule @Ext()
-  firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
+  extmodule @Ext()
+  module @Anno(in %in : !firrtl.uint<1>) {}
 }

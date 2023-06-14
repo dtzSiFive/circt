@@ -8,7 +8,7 @@
 firrtl.circuit "NoFilename" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.RetimeModulesAnnotation"
   }]} {
-  firrtl.module @NoFilename() { }
+  module @NoFilename() { }
 }
 
 // -----
@@ -18,7 +18,7 @@ firrtl.circuit "EmptyFilename" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.RetimeModulesAnnotation",
     filename = ""
   }]} {
-  firrtl.module @EmptyFilename() { }
+  module @EmptyFilename() { }
 }
 
 // -----
@@ -31,7 +31,7 @@ firrtl.circuit "MultipleAnnotations" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.RetimeModulesAnnotation",
     filename = "test1.json"
   }]} {
-  firrtl.module @MultipleAnnotations() { }
+  module @MultipleAnnotations() { }
 }
 
 // -----
@@ -44,7 +44,7 @@ firrtl.circuit "MultipleAnnotations" attributes { annotations = [{
 firrtl.circuit "sitest" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation"
   }]} {
-  firrtl.module @sitest() { }
+  module @sitest() { }
 }
 
 // -----
@@ -53,7 +53,7 @@ firrtl.circuit "sitest" attributes { annotations = [{
 firrtl.circuit "sitest" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation"
   }]} {
-  firrtl.module @sitest() { }
+  module @sitest() { }
 }
 
 // -----
@@ -63,7 +63,7 @@ firrtl.circuit "sitest" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
     filename = ""
   }]} {
-  firrtl.module @sitest() { }
+  module @sitest() { }
 }
 
 // -----
@@ -73,7 +73,7 @@ firrtl.circuit "sitest" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
     filename = ""
   }]} {
-  firrtl.module @sitest() { }
+  module @sitest() { }
 }
 
 // -----
@@ -86,7 +86,7 @@ firrtl.circuit "sitest" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
     filename = "test.json"
   }]} {
-  firrtl.module @sitest() { }
+  module @sitest() { }
 }
 
 // -----
@@ -99,6 +99,6 @@ firrtl.circuit "sitest" attributes { annotations = [{
     class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
     filename = "test.json"
   }]} {
-  firrtl.module @sitest() { }
+  module @sitest() { }
 }
 

@@ -2,12 +2,12 @@
 
 firrtl.circuit "Foo" {
   // expected-error @+1 {{Expected reset type to be inferred for exported port}}
-  firrtl.module @Foo(in %reset: !firrtl.reset) {}
+  module @Foo(in %reset: !firrtl.reset) {}
 }
 
 // -----
 
 firrtl.circuit "Foo" {
   // expected-error @+1 {{Expected width to be inferred for exported port}}
-  firrtl.module @Foo(in %in: !firrtl.uint) {}
+  module @Foo(in %in: !firrtl.uint) {}
 }

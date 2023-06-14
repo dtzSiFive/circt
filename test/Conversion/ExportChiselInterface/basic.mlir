@@ -41,7 +41,7 @@
 // CHECK-NEXT:    }))
 // CHECK-NEXT:  }
 firrtl.circuit "Foo"  {
-    firrtl.module @Foo(
+    module @Foo(
       in %reset: !firrtl.asyncreset,
       in %clock: !firrtl.clock,
       in %uInt: !firrtl.uint<2>,

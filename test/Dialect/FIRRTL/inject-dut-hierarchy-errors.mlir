@@ -7,9 +7,9 @@ firrtl.circuit "MultipleHierarchyAnnotations" attributes {
       {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Bar"}
     ]
   } {
-  firrtl.module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
-  firrtl.module @MultipleHierarchyAnnotations() {
-    firrtl.instance dut @DUT()
+  module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+  module @MultipleHierarchyAnnotations() {
+    instance dut @DUT()
   }
 }
 
@@ -21,8 +21,8 @@ firrtl.circuit "HierarchyAnnotationWithoutMarkDUT" attributes {
       {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}
     ]
   } {
-  firrtl.module private @DUT() {}
-  firrtl.module @HierarchyAnnotationWithoutMarkDUT() {
-    firrtl.instance dut @DUT()
+  module private @DUT() {}
+  module @HierarchyAnnotationWithoutMarkDUT() {
+    instance dut @DUT()
   }
 }

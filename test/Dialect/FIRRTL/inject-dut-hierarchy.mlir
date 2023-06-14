@@ -1,28 +1,28 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-inject-dut-hier))' -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL: firrtl.circuit "Top"
+// CHECK-LABEL: circuit "Top"
 firrtl.circuit "Top" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
   } {
-  // CHECK:      firrtl.module private @Foo()
+  // CHECK:      module private @Foo()
   //
-  // CHECK:      firrtl.module private @DUT
+  // CHECK:      module private @DUT
   // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
   //
-  // CHECK-NEXT:   firrtl.instance Foo {{.+}} @Foo()
+  // CHECK-NEXT:   instance Foo {{.+}} @Foo()
   // CHECK-NEXT: }
-  firrtl.module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+  module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 
-  // CHECK:      firrtl.module @Top
-  // CHECK-NEXT:   firrtl.instance dut @DUT
-  firrtl.module @Top() {
-    firrtl.instance dut @DUT()
+  // CHECK:      module @Top
+  // CHECK-NEXT:   instance dut @DUT
+  module @Top() {
+    instance dut @DUT()
   }
 }
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "NLARenaming"
+// CHECK-LABEL: circuit "NLARenaming"
 firrtl.circuit "NLARenaming" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
   } {
@@ -48,35 +48,35 @@ firrtl.circuit "NLARenaming" attributes {
   //
   // CHECK-NEXT: hw.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
   hw.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
-  firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
-    %a = firrtl.wire sym @a : !firrtl.uint<1>
+  module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
+    %a = wire sym @a : !firrtl.uint<1>
   }
 
-  // CHECK:      firrtl.module private @Foo
-  // CHECK:      firrtl.module private @DUT
+  // CHECK:      module private @Foo
+  // CHECK:      module private @DUT
   // CHECK-SAME:   {circt.nonlocal = @[[nla_DUTLeafModule_clone]], class = "nla_DUTLeafModule"}
-  // CHECK-NEXT    firrtl.instance Foo sym @[[inst_sym]]
-  firrtl.module private @DUT(
+  // CHECK-NEXT    instance Foo sym @[[inst_sym]]
+  module private @DUT(
     in %in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla_DUTLeafPort, class = "nla_DUTLeafPort"}]
   ) attributes {
     annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
       {circt.nonlocal = @nla_DUTLeafModule, class = "nla_DUTLeafModule"}]}
   {
-    %w = firrtl.wire sym @w {
+    %w = wire sym @w {
       annotations = [
         {circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUT_LeafWire"}]
     } : !firrtl.uint<1>
-    firrtl.instance sub sym @sub @Sub()
+    instance sub sym @sub @Sub()
   }
-  firrtl.module @NLARenaming() {
-    %dut_in = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
+  module @NLARenaming() {
+    %dut_in = instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
   }
 }
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "NLARenamingNewNLAs"
+// CHECK-LABEL: circuit "NLARenamingNewNLAs"
 firrtl.circuit "NLARenamingNewNLAs" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
   } {
@@ -107,53 +107,53 @@ firrtl.circuit "NLARenamingNewNLAs" attributes {
   //
   // CHECK-NEXT: hw.hierpath private @nla_DUTPassthrough [@NLARenamingNewNLAs::@dut, @DUT::@[[inst_sym]], @Foo::@sub, @Sub]
   hw.hierpath private @nla_DUTPassthrough [@NLARenamingNewNLAs::@dut, @DUT::@sub, @Sub]
-  firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
-    %a = firrtl.wire sym @a : !firrtl.uint<1>
+  module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
+    %a = wire sym @a : !firrtl.uint<1>
   }
 
-  // CHECK:      firrtl.module private @Foo
-  // CHECK-NEXT:   %w = firrtl.wire
+  // CHECK:      module private @Foo
+  // CHECK-NEXT:   %w = wire
   // CHECK-SAME:     {annotations = [{circt.nonlocal = @nla_DUTLeafWire, class = "nla_DUT_LeafWire"}]}
 
-  // CHECK:      firrtl.module private @DUT
+  // CHECK:      module private @DUT
   // CHECK-SAME:   in %in{{.+}} [{circt.nonlocal = @[[nla_DUTLeafPort_clone]], class = "nla_DUTLeafPort"}]
-  // CHECK-NEXT    firrtl.instance Foo sym @[[inst_sym]]
-  firrtl.module private @DUT(
+  // CHECK-NEXT    instance Foo sym @[[inst_sym]]
+  module private @DUT(
     in %in: !firrtl.uint<1> [{circt.nonlocal = @nla_DUTLeafPort, class = "nla_DUTLeafPort"}]
   ) attributes {
     annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
       {circt.nonlocal = @nla_DUTLeafModule, class = "nla_DUTLeafModule"}]}
   {
-    %w = firrtl.wire {
+    %w = wire {
       annotations = [
         {circt.nonlocal = @nla_DUTLeafWire, class = "nla_DUT_LeafWire"}]
     } : !firrtl.uint<1>
-    firrtl.instance sub sym @sub @Sub()
+    instance sub sym @sub @Sub()
   }
-  firrtl.module @NLARenamingNewNLAs() {
-    %dut_in = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
+  module @NLARenamingNewNLAs() {
+    %dut_in = instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
   }
 }
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "Refs"
+// CHECK-LABEL: circuit "Refs"
 firrtl.circuit "Refs" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
   } {
 
-  firrtl.module private @DUT(
+  module private @DUT(
     in %in: !firrtl.uint<1>, out %out: !firrtl.ref<uint<1>>
   ) attributes {
     annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]}
   {
-    %ref = firrtl.ref.send %in : !firrtl.uint<1>
-    firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+    %ref = ref.send %in : !firrtl.uint<1>
+    ref.define %out, %ref : !firrtl.ref<uint<1>>
   }
-  firrtl.module @Refs() {
-    %dut_in, %dut_tap = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.ref<uint<1>>)
+  module @Refs() {
+    %dut_in, %dut_tap = instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.ref<uint<1>>)
   }
 }

@@ -14,30 +14,30 @@ circuit test_cse :
     d <= and(a1, UInt<4>(0))
     e <= and(UInt<4>(3), UInt<4>(1))
 
-; OPT-DAG: %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
-; OPT-DAG: %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
+; OPT-DAG: %c0_ui5 = constant 0 : !firrtl.uint<5>
+; OPT-DAG: %c1_ui5 = constant 1 : !firrtl.uint<5>
 
 ; Only one add.
-; OPT: %0 = firrtl.add %a1, %a2
-; OPT: firrtl.strictconnect %b, %0
-; OPT: firrtl.strictconnect %c, %0
+; OPT: %0 = add %a1, %a2
+; OPT: strictconnect %b, %0
+; OPT: strictconnect %c, %0
 
 ; Connect with zero and one directly.
-; OPT: firrtl.strictconnect %d, %c0_ui5
-; OPT: firrtl.strictconnect %e, %c1_ui5
+; OPT: strictconnect %d, %c0_ui5
+; OPT: strictconnect %e, %c1_ui5
 
 ; Both adds persist.
-; NOOPT: %0 = firrtl.add %a1, %a2
-; NOOPT: firrtl.strictconnect %b, %0
-; NOOPT: %1 = firrtl.add %a1, %a2
-; NOOPT: firrtl.strictconnect %c, %1
+; NOOPT: %0 = add %a1, %a2
+; NOOPT: strictconnect %b, %0
+; NOOPT: %1 = add %a1, %a2
+; NOOPT: strictconnect %c, %1
 
 ; Ands persist.
-; NOOPT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-; NOOPT: firrtl.and %a1, %c0_ui4
-; NOOPT: firrtl.strictconnect %d,
+; NOOPT: %c0_ui4 = constant 0 : !firrtl.uint<4>
+; NOOPT: and %a1, %c0_ui4
+; NOOPT: strictconnect %d,
 
-; NOOPT-DAG: %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
-; NOOPT-DAG: %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
-; NOOPT: firrtl.and %c3_ui4, %c1_ui4
-; NOOPT: firrtl.strictconnect %e,
+; NOOPT-DAG: %c3_ui4 = constant 3 : !firrtl.uint<4>
+; NOOPT-DAG: %c1_ui4 = constant 1 : !firrtl.uint<4>
+; NOOPT: and %c3_ui4, %c1_ui4
+; NOOPT: strictconnect %e,

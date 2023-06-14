@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -firrtl-resolve-traces | FileCheck %s
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() attributes {annotations = [
+  module @Foo() attributes {annotations = [
     {
       class = "chisel3.experimental.Trace$TraceAnnotation",
       chiselTarget = "~Foo|Original"
@@ -23,15 +23,15 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   hw.hierpath @path [@Foo::@bar, @Bar]
-  firrtl.module @Bar() attributes {annotations = [
+  module @Bar() attributes {annotations = [
     {
       class = "chisel3.experimental.Trace$TraceAnnotation",
       chiselTarget = "~Foo|Original",
       circt.nonlocal = @path
     }
   ]} {}
-  firrtl.module @Foo() {
-    firrtl.instance bar sym @bar @Bar()
+  module @Foo() {
+    instance bar sym @bar @Bar()
   }
 }
 
@@ -42,7 +42,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(
+  module @Foo(
     in %a: !firrtl.uint<1> [
       {
         class = "chisel3.experimental.Trace$TraceAnnotation",
@@ -63,8 +63,8 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() {
-    %a = firrtl.wire {annotations = [
+  module @Foo() {
+    %a = wire {annotations = [
       {
         class = "chisel3.experimental.Trace$TraceAnnotation",
         chiselTarget = "~Foo|Foo>original"
@@ -79,13 +79,13 @@ firrtl.circuit "Foo" {
 
 // Test that the wire receives a symbol.
 //
-// CHECK: %a = firrtl.wire sym
+// CHECK: %a = wire sym
 
 // -----
 
 firrtl.circuit "Forceable" {
-  firrtl.module @Forceable() {
-    %w, %w_ref = firrtl.wire forceable {annotations = [
+  module @Forceable() {
+    %w, %w_ref = wire forceable {annotations = [
       {
         class = "chisel3.experimental.Trace$TraceAnnotation",
         chiselTarget = "~Forceable|Forceable>forced"
@@ -100,14 +100,14 @@ firrtl.circuit "Forceable" {
 
 // Test that the wire receives a symbol.
 //
-// CHECK-LABEL: firrtl.circuit "Forceable"
-// CHECK: %w, %w_ref = firrtl.wire sym
+// CHECK-LABEL: circuit "Forceable"
+// CHECK: %w, %w_ref = wire sym
 
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() {
-    %a = firrtl.wire {annotations = [
+  module @Foo() {
+    %a = wire {annotations = [
       {
         class = "chisel3.experimental.Trace$TraceAnnotation",
         chiselTarget = "~Foo|Foo>0",

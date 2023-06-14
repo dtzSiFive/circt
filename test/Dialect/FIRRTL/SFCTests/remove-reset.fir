@@ -13,8 +13,8 @@ circuit Example :
     output out : UInt<1>[2]
     wire bar : UInt<1>
     bar is invalid
-    ; CHECK: %foo0 = firrtl.reg %clock
-    ; CHECK: %foo1 = firrtl.reg %clock
+    ; CHECK: %foo0 = reg %clock
+    ; CHECK: %foo1 = reg %clock
     reg foo0 : UInt<1>, clock with : (reset => (arst, bar))
     reg foo1 : UInt<1>, clock with : (reset => (srst, bar))
     foo0 <= in
@@ -40,12 +40,12 @@ circuit Example1 :
     bar is invalid
     bar.a[1] <= UInt<1>(0)
 
-    ; CHECK: %foo0_a_0 = firrtl.reg %clock
-    ; CHECK: %foo0_a_1 = firrtl.regreset %clock, %arst,
-    ; CHECK: %foo0_b = firrtl.reg %clock
-    ; CHECK: %foo1_a_0 = firrtl.reg %clock
-    ; CHECK: %foo1_a_1 = firrtl.regreset %clock, %srst,
-    ; CHECK: %foo1_b = firrtl.reg %clock
+    ; CHECK: %foo0_a_0 = reg %clock
+    ; CHECK: %foo0_a_1 = regreset %clock, %arst,
+    ; CHECK: %foo0_b = reg %clock
+    ; CHECK: %foo1_a_0 = reg %clock
+    ; CHECK: %foo1_a_1 = regreset %clock, %srst,
+    ; CHECK: %foo1_b = reg %clock
     reg foo0 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (arst, bar))
     reg foo1 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (srst, bar))
     foo0 <= in
@@ -75,10 +75,10 @@ circuit Example2 :
     baz is invalid
     baz <= bar
 
-    ; CHECK: %foo0_a = firrtl.regreset %clock, %arst,
-    ; CHECK: %foo0_b = firrtl.reg %clock
-    ; CHECK: %foo1_a = firrtl.regreset %clock, %srst,
-    ; CHECK: %foo1_b = firrtl.reg %clock
+    ; CHECK: %foo0_a = regreset %clock, %arst,
+    ; CHECK: %foo0_b = reg %clock
+    ; CHECK: %foo1_a = regreset %clock, %srst,
+    ; CHECK: %foo1_b = reg %clock
     reg foo0 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (arst, baz))
     reg foo1 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (srst, baz))
     foo0 <= in
@@ -104,9 +104,9 @@ circuit Example3 :
     arst <= asAsyncReset(UInt<1>(0))
     srst <= UInt<1>(0)
 
-    ; CHECK: %foo0 = firrtl.reg %clock
-    ; CHECK: %foo1 = firrtl.reg %clock
-    ; CHECK: %foo2 = firrtl.reg %clock
+    ; CHECK: %foo0 = reg %clock
+    ; CHECK: %foo1 = reg %clock
+    ; CHECK: %foo2 = reg %clock
     reg foo0 : UInt<2>, clock with : (reset => (rst, UInt(3)))
     reg foo1 : UInt<2>, clock with : (reset => (arst, UInt(3)))
     reg foo2 : UInt<2>, clock with : (reset => (srst, UInt(3)))

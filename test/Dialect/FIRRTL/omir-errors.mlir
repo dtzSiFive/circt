@@ -10,8 +10,8 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     class = "freechips.rocketchip.objectmodel.OMIRAnnotation"
   }
 ]} {
-  firrtl.module @Foo() {
-    firrtl.skip
+  module @Foo() {
+    skip
   }
 }
 
@@ -32,8 +32,8 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {
-    firrtl.skip
+  module @Foo() {
+    skip
   }
 }
 
@@ -54,7 +54,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -81,7 +81,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -108,7 +108,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -135,7 +135,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -165,7 +165,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -193,7 +193,7 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }
 
 // -----
@@ -219,5 +219,5 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
     ]
   }
 ]} {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }

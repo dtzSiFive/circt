@@ -23,9 +23,9 @@ firrtl.circuit "test_mod" attributes {annotations = [
   // VERILOG-TOP-NEXT:    ExtInline foo
   // VERILOG-TOP-NEXT:    ExtPath gib
   // VERILOG-TOP-NEXT:  endmodule
-  firrtl.module @test_mod() {
-    firrtl.instance foo @ExtInline()
-    firrtl.instance gib @ExtPath()
+  module @test_mod() {
+    instance foo @ExtInline()
+    instance gib @ExtPath()
   }
 
   // VERILOG-FOO-LABEL: module ExtInline(); endmodule
@@ -34,7 +34,7 @@ firrtl.circuit "test_mod" attributes {annotations = [
   // VERILOG-FOO-NOT:   module ExtInline(); endmodule
   // VERILOG-HDR-LABEL: `define SOME_MACRO
   // VERILOG-HDR-NOT:   `define SOME_MACRO
-  firrtl.extmodule @ExtInline() attributes {annotations = [
+  extmodule @ExtInline() attributes {annotations = [
     // Inline file shall be emitted.
     {
       class = "firrtl.transforms.BlackBoxInlineAnno",
@@ -59,7 +59,7 @@ firrtl.circuit "test_mod" attributes {annotations = [
   // This "//" is checking that file info is not printed.
   // VERILOG-GIB-NOT:    //
   // VERILOG-GIB-NOT:   module ExtPath(); endmodule
-  firrtl.extmodule @ExtPath() attributes {annotations = [{
+  extmodule @ExtPath() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxPathAnno",
     path = "blackbox-path.v"
   }], defname = "ExtPath"}

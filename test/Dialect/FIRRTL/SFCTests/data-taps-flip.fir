@@ -4,10 +4,10 @@
 ; Test tapping a bundle with flips, tap sink is passive.
 
 ; CHECK-LABEL: module private @Child(
-; CHECK: firrtl.ref.send
+; CHECK: ref.send
 ; CHECK-SAME: !firrtl.bundle<a: uint<2>, b flip: uint<2>>
 ; CHECK-LABEL: module @Top(
-; CHECK: firrtl.ref.resolve
+; CHECK: ref.resolve
 ; CHECK-SAME: !firrtl.probe<bundle<a: uint<2>, b: uint<2>>>
 circuit Top : %[[
   {

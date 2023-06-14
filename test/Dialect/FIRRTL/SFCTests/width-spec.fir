@@ -4,7 +4,7 @@
 
 ; Literal width checks
 circuit Foo :
-  ; CHECK-LABEL: firrtl.module @Foo(
+  ; CHECK-LABEL: module @Foo(
   ; CHECK-SAME: out %si0: !firrtl.sint<3>
   ; CHECK-SAME: out %si1: !firrtl.sint<3>
   ; CHECK-SAME: out %si2: !firrtl.sint<2>

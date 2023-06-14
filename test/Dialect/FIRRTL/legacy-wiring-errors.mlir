@@ -10,8 +10,8 @@ firrtl.circuit "Foo" attributes {
       target = "Foo.Foo.out",
       pin = "foo_out"
     }]} {
-  firrtl.module @Foo(out %out: !firrtl.uint<1>) {
-      firrtl.skip
+  module @Foo(out %out: !firrtl.uint<1>) {
+      skip
   }
 }
 
@@ -27,8 +27,8 @@ firrtl.circuit "Foo" attributes {
       target = "Foo.Foo.in",
       pin = "foo_in"
     }]} {
-  firrtl.module @Foo(in %in: !firrtl.uint<1>) {
-      firrtl.skip
+  module @Foo(in %in: !firrtl.uint<1>) {
+      skip
   }
 }
 
@@ -37,7 +37,7 @@ firrtl.circuit "Foo" attributes {
 // Multiple SourceAnnotations for the same pin are forbidden
 //
 // expected-error @+2 {{Unable to apply annotation: {class = "firrtl.passes.wiring.SourceAnnotation", pin = "foo_out", target = "Foo.Foo.b"}}}
-// expected-error @+1 {{More than one firrtl.passes.wiring.SourceAnnotation defined for pin "foo_out"}}
+// expected-error @+1 {{More than one passes.wiring.SourceAnnotation defined for pin "foo_out"}}
 firrtl.circuit "Foo" attributes {
   rawAnnotations = [
     {
@@ -55,8 +55,8 @@ firrtl.circuit "Foo" attributes {
       target = "Foo.Foo.b",
       pin = "foo_out"
     }]} {
-  firrtl.module @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-      firrtl.skip
+  module @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+      skip
   }
 }
 
@@ -76,17 +76,17 @@ firrtl.circuit "Foo" attributes {
     pin = "xyz"
   }
   ]} {
-  firrtl.module private @Bar() {
+  module private @Bar() {
     // expected-error @below {{Wiring Problem source type '!firrtl.bundle<a: uint<1>, b: uint<2>>' does not match sink type '!firrtl.uint<1>'}}
-    %y = firrtl.wire interesting_name : !firrtl.bundle<a: uint<1>, b: uint<2>>
-    %invalid_reset = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: uint<2>>
-    firrtl.strictconnect %y, %invalid_reset : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %y = wire interesting_name : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %invalid_reset = invalidvalue : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    strictconnect %y, %invalid_reset : !firrtl.bundle<a: uint<1>, b: uint<2>>
   }
-  firrtl.module @Foo() {
-    firrtl.instance bar interesting_name @Bar()
+  module @Foo() {
+    instance bar interesting_name @Bar()
     // expected-note @below {{The sink is here.}}
-    %x = firrtl.wire interesting_name : !firrtl.uint<1>
-    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    firrtl.strictconnect %x, %invalid_ui1 : !firrtl.uint<1>
+    %x = wire interesting_name : !firrtl.uint<1>
+    %invalid_ui1 = invalidvalue : !firrtl.uint<1>
+    strictconnect %x, %invalid_ui1 : !firrtl.uint<1>
   }
 }

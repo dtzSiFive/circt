@@ -10,5 +10,5 @@ circuit Foo:
       write-latency => 1
       read-under-write => undefined
 ; CHECK-LABEL: module
-; CHECK: firrtl.mem
+; CHECK: mem
 ; CHECK-SAME: {depth = 2147483648 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32}

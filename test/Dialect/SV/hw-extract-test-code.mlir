@@ -32,7 +32,7 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assert>
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
   hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(%a : i1) attributes {"firrtl.extract.assert.extra"}
@@ -86,7 +86,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // Check that we don't extract assertions from a module with "firrtl.extract.do_not_extract" attribute.
 //
 // CHECK-NOT:  hw.module @ModuleInTestHarness_assert
-// CHECK-NOT:  firrtl.extract.do_not_extract
+// CHECK-NOT:  extract.do_not_extract
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @ModuleInTestHarness(%clock: i1) -> () attributes {"firrtl.extract.do_not_extract"} {
     sv.always posedge %clock  {

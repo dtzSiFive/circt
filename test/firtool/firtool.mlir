@@ -9,14 +9,14 @@
 // RUN: not diff %t %t.mlirbc
 
 firrtl.circuit "Top" {
-  firrtl.module @Top(in %in : !firrtl.uint<8>,
+  module @Top(in %in : !firrtl.uint<8>,
                      out %out : !firrtl.uint<8>) {
-    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
 
-// MLIR-LABEL: firrtl.module @Top(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-// MLIR-NEXT:    firrtl.strictconnect %out, %in : !firrtl.uint<8>
+// MLIR-LABEL: module @Top(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+// MLIR-NEXT:    strictconnect %out, %in : !firrtl.uint<8>
 // MLIR-NEXT:  }
 
 // VERILOG-LABEL: module Top(

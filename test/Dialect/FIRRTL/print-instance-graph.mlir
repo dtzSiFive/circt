@@ -14,16 +14,16 @@
 firrtl.circuit "Top" {
 
 firrtl.module @Top() {
-  firrtl.instance alligator @Alligator()
-  firrtl.instance cat @Cat()
+  instance alligator @Alligator()
+  instance cat @Cat()
 }
 
 firrtl.module @Alligator() {
-  firrtl.instance bear @Bear()
+  instance bear @Bear()
 }
 
 firrtl.module @Bear() {
-  firrtl.instance cat @Cat()
+  instance cat @Cat()
 }
 
 firrtl.module @Cat() { }

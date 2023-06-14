@@ -42,5 +42,5 @@
 // CHECK-NEXT: connect-source-operand-2-forwarder
 // CHECK-EMPTY:
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() {}
+  module @Foo() {}
 }

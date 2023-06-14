@@ -12,26 +12,26 @@ firrtl.memmodule @memmod () attributes {
 
 // Constant op supports different return types.
 firrtl.module @Constants() {
-  // CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
-  firrtl.constant 0 : !firrtl.uint<0>
-  // CHECK: %c0_si0 = firrtl.constant 0 : !firrtl.sint<0>
-  firrtl.constant 0 : !firrtl.sint<0>
-  // CHECK: %c4_ui8 = firrtl.constant 4 : !firrtl.uint<8>
-  firrtl.constant 4 : !firrtl.uint<8>
-  // CHECK: %c-4_si16 = firrtl.constant -4 : !firrtl.sint<16>
-  firrtl.constant -4 : !firrtl.sint<16>
-  // CHECK: %c1_clock = firrtl.specialconstant 1 : !firrtl.clock
-  firrtl.specialconstant 1 : !firrtl.clock
-  // CHECK: %c1_reset = firrtl.specialconstant 1 : !firrtl.reset
-  firrtl.specialconstant 1 : !firrtl.reset
-  // CHECK: %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
-  firrtl.specialconstant 1 : !firrtl.asyncreset
-  // CHECK: firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
-  firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
+  // CHECK: %c0_ui0 = constant 0 : !firrtl.uint<0>
+  constant 0 : !firrtl.uint<0>
+  // CHECK: %c0_si0 = constant 0 : !firrtl.sint<0>
+  constant 0 : !firrtl.sint<0>
+  // CHECK: %c4_ui8 = constant 4 : !firrtl.uint<8>
+  constant 4 : !firrtl.uint<8>
+  // CHECK: %c-4_si16 = constant -4 : !firrtl.sint<16>
+  constant -4 : !firrtl.sint<16>
+  // CHECK: %c1_clock = specialconstant 1 : !firrtl.clock
+  specialconstant 1 : !firrtl.clock
+  // CHECK: %c1_reset = specialconstant 1 : !firrtl.reset
+  specialconstant 1 : !firrtl.reset
+  // CHECK: %c1_asyncreset = specialconstant 1 : !firrtl.asyncreset
+  specialconstant 1 : !firrtl.asyncreset
+  // CHECK: constant 4 : !firrtl.uint<8> {name = "test"}
+  constant 4 : !firrtl.uint<8> {name = "test"}
 
-  firrtl.aggregateconstant [1, 2, 3] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
-  firrtl.aggregateconstant [1, 2, 3] : !firrtl.vector<uint<8>, 3>
-  firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
+  aggregateconstant [1, 2, 3] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<4>>
+  aggregateconstant [1, 2, 3] : !firrtl.vector<uint<8>, 3>
+  aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<8>, b: uint<5>>, 2>
 
 }
 
@@ -41,11 +41,11 @@ firrtl.module @Constants() {
 //  out <= in
 firrtl.module @MyModule(in %in : !firrtl.uint<8>,
                         out %out : !firrtl.uint<8>) {
-  firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
-// CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
-// CHECK-NEXT:    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-LABEL: module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+// CHECK-NEXT:    connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 
@@ -58,28 +58,28 @@ firrtl.module @MyModule(in %in : !firrtl.uint<8>,
 //    out <= add(b,d)
 
 firrtl.circuit "Top" {
-  firrtl.module @Top(out %out: !firrtl.uint,
+  module @Top(out %out: !firrtl.uint,
                      in %b: !firrtl.uint<32>,
                      in %c: !firrtl.analog<13>,
                      in %d: !firrtl.uint<16>) {
-    %3 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
+    %3 = add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
 
-    %4 = firrtl.invalidvalue : !firrtl.analog<13>
-    firrtl.attach %c, %4 : !firrtl.analog<13>, !firrtl.analog<13>
-    %5 = firrtl.add %3, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
+    %4 = invalidvalue : !firrtl.analog<13>
+    attach %c, %4 : !firrtl.analog<13>, !firrtl.analog<13>
+    %5 = add %3, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
 
-    firrtl.connect %out, %5 : !firrtl.uint, !firrtl.uint<34>
+    connect %out, %5 : !firrtl.uint, !firrtl.uint<34>
   }
 }
 
-// CHECK-LABEL: firrtl.circuit "Top" {
-// CHECK-NEXT:    firrtl.module @Top(out %out: !firrtl.uint,
+// CHECK-LABEL: circuit "Top" {
+// CHECK-NEXT:    module @Top(out %out: !firrtl.uint,
 // CHECK:                            in %b: !firrtl.uint<32>, in %c: !firrtl.analog<13>, in %d: !firrtl.uint<16>) {
-// CHECK-NEXT:      %0 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
-// CHECK-NEXT:      %invalid_analog13 = firrtl.invalidvalue : !firrtl.analog<13>
-// CHECK-NEXT:      firrtl.attach %c, %invalid_analog13 : !firrtl.analog<13>, !firrtl.analog<13>
-// CHECK-NEXT:      %1 = firrtl.add %0, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
-// CHECK-NEXT:      firrtl.connect %out, %1 : !firrtl.uint, !firrtl.uint<34>
+// CHECK-NEXT:      %0 = add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
+// CHECK-NEXT:      %invalid_analog13 = invalidvalue : !firrtl.analog<13>
+// CHECK-NEXT:      attach %c, %invalid_analog13 : !firrtl.analog<13>, !firrtl.analog<13>
+// CHECK-NEXT:      %1 = add %0, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
+// CHECK-NEXT:      connect %out, %1 : !firrtl.uint, !firrtl.uint<34>
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
@@ -87,20 +87,20 @@ firrtl.circuit "Top" {
 // Test some hard cases of name handling.
 firrtl.module @Mod2(in %in : !firrtl.uint<8>,
                     out %out : !firrtl.uint<8>) attributes {portNames = ["some_name", "out"]}{
-  firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
-// CHECK-LABEL: firrtl.module @Mod2(in %some_name: !firrtl.uint<8>,
+// CHECK-LABEL: module @Mod2(in %some_name: !firrtl.uint<8>,
 // CHECK:                           out %out: !firrtl.uint<8>)
-// CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:    connect %out, %some_name : !firrtl.uint<8>, !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 // Check that quotes port names are paresable and printed with quote only if needed.
-// CHECK: firrtl.extmodule @TrickyNames(in "777": !firrtl.uint, in abc: !firrtl.uint)
+// CHECK: extmodule @TrickyNames(in "777": !firrtl.uint, in abc: !firrtl.uint)
 firrtl.extmodule @TrickyNames(in "777": !firrtl.uint, in "abc": !firrtl.uint)
 
 // Modules may be completely empty.
-// CHECK-LABEL: firrtl.module @no_ports() {
+// CHECK-LABEL: module @no_ports() {
 firrtl.module @no_ports() {
 }
 
@@ -117,116 +117,116 @@ firrtl.module @ClockCast(in %clock: !firrtl.clock) {
 
 // CHECK-LABEL: @TestDshRL
 firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {
-  // CHECK: %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
-  %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
+  // CHECK: %0 = dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
+  %0 = dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
 
-  // CHECK: %1 = firrtl.dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
-  %1 = firrtl.dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK: %1 = dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
+  %1 = dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
 
-  // CHECK: %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
-  %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
+  // CHECK: %2 = dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
+  %2 = dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
 }
 
 // We allow implicit truncation of a register's reset value.
 // CHECK-LABEL: @RegResetTruncation
 firrtl.module @RegResetTruncation(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %value: !firrtl.bundle<a: uint<2>>, out %out: !firrtl.bundle<a: uint<1>>) {
-  %r2 = firrtl.regreset %clock, %reset, %value  : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
-  firrtl.connect %out, %r2 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+  %r2 = regreset %clock, %reset, %value  : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
+  connect %out, %r2 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 
 // CHECK-LABEL: @TestNodeName
 firrtl.module @TestNodeName(in %in1 : !firrtl.uint<8>) {
-  // CHECK: %n1 = firrtl.node %in1 : !firrtl.uint<8>
-  %n1 = firrtl.node %in1 : !firrtl.uint<8>
+  // CHECK: %n1 = node %in1 : !firrtl.uint<8>
+  %n1 = node %in1 : !firrtl.uint<8>
 
-  // CHECK: %n1_0 = firrtl.node %in1 {name = "n1"} : !firrtl.uint<8>
-  %n2 = firrtl.node %in1 {name = "n1"} : !firrtl.uint<8>
+  // CHECK: %n1_0 = node %in1 {name = "n1"} : !firrtl.uint<8>
+  %n2 = node %in1 {name = "n1"} : !firrtl.uint<8>
 }
 
 // Basic test for NLA operations.
 // CHECK: hw.hierpath private @nla [@Parent::@child, @Child]
 hw.hierpath private @nla [@Parent::@child, @Child]
 firrtl.module @Child() {
-  %w = firrtl.wire sym @w : !firrtl.uint<1>
+  %w = wire sym @w : !firrtl.uint<1>
 }
 firrtl.module @Parent() {
-  firrtl.instance child sym @child @Child()
+  instance child sym @child @Child()
 }
 
 // CHECK-LABEL: @VerbatimExpr
 firrtl.module @VerbatimExpr() {
-  // CHECK: %[[TMP:.+]] = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
-  // CHECK: %[[TMP2:.+]] = firrtl.verbatim.expr "$bits({{[{][{]0[}][}]}})"(%[[TMP]]) : (!firrtl.uint<42>) -> !firrtl.uint<32>
-  // CHECK: firrtl.add %[[TMP]], %[[TMP2]] : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
-  %0 = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
-  %1 = firrtl.verbatim.expr "$bits({{0}})"(%0) : (!firrtl.uint<42>) -> !firrtl.uint<32>
-  %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+  // CHECK: %[[TMP:.+]] = verbatim.expr "FOO" : () -> !firrtl.uint<42>
+  // CHECK: %[[TMP2:.+]] = verbatim.expr "$bits({{[{][{]0[}][}]}})"(%[[TMP]]) : (!firrtl.uint<42>) -> !firrtl.uint<32>
+  // CHECK: add %[[TMP]], %[[TMP2]] : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+  %0 = verbatim.expr "FOO" : () -> !firrtl.uint<42>
+  %1 = verbatim.expr "$bits({{0}})"(%0) : (!firrtl.uint<42>) -> !firrtl.uint<32>
+  %2 = add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
 }
 
 // CHECK-LABL: @LowerToBind
-// CHECK: firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
+// CHECK: instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
+  instance foo sym @s1 {lowerToBind} @InstanceLowerToBind()
 }
 
 // CHECK-LABEL: @ProbeTest
 firrtl.module @ProbeTest(in %in1 : !firrtl.uint<2>, in %in2 : !firrtl.uint<3>, out %out3: !firrtl.uint<3>) {
-  %w1 = firrtl.wire  : !firrtl.uint<4>
-  // CHECK: %[[TMP3:.+]] = firrtl.cat
-  %w2 = firrtl.cat %in1, %in1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
-  firrtl.connect %w1, %w2 : !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %out3, %in2 : !firrtl.uint<3>, !firrtl.uint<3>
-  %someNode = firrtl.node %in1 : !firrtl.uint<2>
-  // CHECK: firrtl.probe @foobar, %in1, %in2, %out3, %w1, %[[TMP3]], %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
-  firrtl.probe @foobar, %in1, %in2, %out3, %w1, %w2, %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
+  %w1 = wire  : !firrtl.uint<4>
+  // CHECK: %[[TMP3:.+]] = cat
+  %w2 = cat %in1, %in1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+  connect %w1, %w2 : !firrtl.uint<4>, !firrtl.uint<4>
+  connect %out3, %in2 : !firrtl.uint<3>, !firrtl.uint<3>
+  %someNode = node %in1 : !firrtl.uint<2>
+  // CHECK: probe @foobar, %in1, %in2, %out3, %w1, %[[TMP3]], %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
+  probe @foobar, %in1, %in2, %out3, %w1, %w2, %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
 }
 
-// CHECK-LABEL: firrtl.module @InnerSymAttr
+// CHECK-LABEL: module @InnerSymAttr
 firrtl.module @InnerSymAttr() {
-  %w = firrtl.wire sym [<@w,2,public>,<@x,1,private>,<@syh,4,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
-  // CHECK: %w = firrtl.wire sym [<@x,1,private>, <@w,2,public>, <@syh,4,public>]
-  %w1 = firrtl.wire sym [<@w1,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
-  // CHECK: %w1 = firrtl.wire sym @w1
-  %w2 = firrtl.wire sym [<@w2,0,private>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
-  // CHECK: %w2 = firrtl.wire sym [<@w2,0,private>]
-  %w3, %w3_ref = firrtl.wire sym [<@w3,2,public>,<@x2,1,private>,<@syh2,0,public>] forceable : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>>
-  // CHECK: %w3, %w3_ref = firrtl.wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
+  %w = wire sym [<@w,2,public>,<@x,1,private>,<@syh,4,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  // CHECK: %w = wire sym [<@x,1,private>, <@w,2,public>, <@syh,4,public>]
+  %w1 = wire sym [<@w1,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  // CHECK: %w1 = wire sym @w1
+  %w2 = wire sym [<@w2,0,private>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
+  // CHECK: %w2 = wire sym [<@w2,0,private>]
+  %w3, %w3_ref = wire sym [<@w3,2,public>,<@x2,1,private>,<@syh2,0,public>] forceable : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>>
+  // CHECK: %w3, %w3_ref = wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
 }
 
-// CHECK-LABEL: firrtl.module @EnumTest
+// CHECK-LABEL: module @EnumTest
 firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
                         out %out : !firrtl.uint<2>, out %tag : !firrtl.uint<1>) {
-  %v = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
-  // CHECK: = firrtl.subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
+  %v = subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
+  // CHECK: = subtag %in[b] : !firrtl.enum<a: uint<1>, b: uint<2>>
 
-  %t = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
-  // CHECK: = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
+  %t = tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
+  // CHECK: = tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
 
-  firrtl.strictconnect %out, %v : !firrtl.uint<2>
-  firrtl.strictconnect %tag, %t : !firrtl.uint<1>
+  strictconnect %out, %v : !firrtl.uint<2>
+  strictconnect %tag, %t : !firrtl.uint<1>
 
-  %p = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
-  // CHECK: = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
+  %p = istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
+  // CHECK: = istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
 
-  %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-  %some = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
-  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %c1_ui8 = constant 1 : !firrtl.uint<8>
+  %some = enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
+  // CHECK: = enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
 
-  firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
+  match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
     case a(%arg0) {
-      %w = firrtl.wire : !firrtl.uint<1>
+      %w = wire : !firrtl.uint<1>
     }
     case b(%arg0) {
-      %x = firrtl.wire : !firrtl.uint<1>
+      %x = wire : !firrtl.uint<1>
     }
   }
-  // CHECK: firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
+  // CHECK: match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
   // CHECK:   case a(%arg0) {
-  // CHECK:     %w = firrtl.wire : !firrtl.uint<1>
+  // CHECK:     %w = wire : !firrtl.uint<1>
   // CHECK:   }
   // CHECK:   case b(%arg0) {
-  // CHECK:     %x = firrtl.wire : !firrtl.uint<1>
+  // CHECK:     %x = wire : !firrtl.uint<1>
   // CHECK:   }
   // CHECK: }
 
@@ -235,19 +235,19 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
 // CHECK-LABEL: OpenAggTest
 // CHECK-SAME: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
 firrtl.module @OpenAggTest(in %in: !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>) {
-  %a = firrtl.opensubfield %in[a] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
-  %data = firrtl.subfield %a[data] : !firrtl.bundle<data: uint<1>>
-  %b = firrtl.opensubfield %in[b] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
-  %b_0 = firrtl.opensubindex %b[0] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
-  %b_1 = firrtl.opensubindex %b[1] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
-  %b_0_y = firrtl.opensubfield %b_0[y] : !firrtl.openbundle<x : uint<2>, y: probe<uint<2>>>
+  %a = opensubfield %in[a] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
+  %data = subfield %a[data] : !firrtl.bundle<data: uint<1>>
+  %b = opensubfield %in[b] : !firrtl.openbundle<a: bundle<data: uint<1>>, b: openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>>
+  %b_0 = opensubindex %b[0] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
+  %b_1 = opensubindex %b[1] : !firrtl.openvector<openbundle<x: uint<2>, y: probe<uint<2>>>, 2>
+  %b_0_y = opensubfield %b_0[y] : !firrtl.openbundle<x : uint<2>, y: probe<uint<2>>>
 }
 
 // CHECK-LABEL: StringTest
 // CHECK-SAME:  (in %in: !firrtl.string, out %out: !firrtl.string)
 firrtl.module @StringTest(in %in: !firrtl.string, out %out: !firrtl.string) {
-  firrtl.propassign %out, %in : !firrtl.string
-  // CHECK: %0 = firrtl.string "hello"
-  %0 = firrtl.string "hello"
+  propassign %out, %in : !firrtl.string
+  // CHECK: %0 = string "hello"
+  %0 = string "hello"
 }
 }
