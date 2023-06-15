@@ -2319,6 +2319,12 @@ void InferWidthsPass::runOnOperation() {
   // Update the types with the inferred widths.
   if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
     signalPassFailure();
+
+  // Hack: Drop width casts.
+  getOperation()->walk([&](UninferredWidthCastOp widthCast) {
+    assert(widthCast.use_empty());
+    widthCast->erase();
+  });
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createInferWidthsPass() {

@@ -932,7 +932,7 @@ def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameG
     "$input attr-dict `:` functional-type($input, $result)";
 }
 
-def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
+def UninferredWidthCastOp : FIRRTLOp<"widthCast", [HasCustomSSAName, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
     Cast between sized and unsized integer types.  This is used to enable
     strictconnects early in the pipeline by isolating all uninferred width
