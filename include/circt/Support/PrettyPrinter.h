@@ -70,7 +70,7 @@ public:
     IndentStyle style;
   };
   struct EndInfo : public TokenInfo {
-    // Nothing
+    uint64_t id; // opaque identifier of end.
   };
 
 private:
@@ -154,7 +154,10 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
   IndentStyle style() const { return getInfo().style; }
 };
 
-struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
+struct EndToken : public TokenBase<EndToken, Token::Kind::End> {
+  EndToken(uint64_t id = 0) { initialize(id); }
+  uint64_t id() const { return getInfo().id; }
+};
 
 //===----------------------------------------------------------------------===//
 // PrettyPrinter

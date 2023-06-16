@@ -283,6 +283,14 @@ void PrettyPrinter::print(const FormattedToken &f) {
       })
       .Case([&](const EndToken *) {
         assert(!printStack.empty() && "more ends than begins?");
+        // Report this end token has been reached.
+        // TODO: Kinda-maybe we could track line/col in PP but
+        // that will be wrong in presence of newlines we didn't insert
+        // and would use our char-oriented notion of columns at best,
+        // Might be better to report elsewhere and let them
+        // inspect a stream that does the same tracking/parsing.
+        llvm::errs() << "Tell: " << os.tell() << "\n";
+
         // Try to tolerate this when assertions are disabled.
         if (printStack.empty())
           return;
