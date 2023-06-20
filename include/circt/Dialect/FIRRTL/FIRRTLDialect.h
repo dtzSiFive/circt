@@ -18,6 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 
 // Pull in the dialect definition.
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h.inc"

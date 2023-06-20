@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLDIALECT_TD
 
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/Bytecode/BytecodeOpInterface.td"
 include "mlir/IR/OpBase.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
@@ -33,6 +34,7 @@ def FIRRTLDialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 0;
   let useDefaultAttributePrinterParser = 1;
+  let usePropertiesForAttributes = 1;
 
   let dependentDialects = [
     "circt::hw::HWDialect",
