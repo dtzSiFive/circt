@@ -33,7 +33,8 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 
 def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<HWInstanceLike>]> {
+    DeclareOpInterfaceMethods<HWInstanceLike>,
+    FirstAttrDerivedResultType]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -45,40 +46,43 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
-                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
+  let arguments = (ins TypeAttrOf<InstanceType>:$resultType,
+                       StrAttr:$name,
+                       NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        UnitAttr:$lowerToBind,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
 
-  let results = (outs Variadic<AnyType>:$results);
+  let results = (outs InstanceType:$result);
 
   let hasCustomAssemblyFormat = 1;
 
   let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "::mlir::StringRef":$moduleName,
+    OpBuilder<(ins "::mlir::StringRef":$moduleName,
+                   "::mlir::ArrayRef<InstanceElement>":$elements,
                    "::mlir::StringRef":$name,
                    "::circt::firrtl::NameKindEnum":$nameKind,
-                   "::mlir::ArrayRef<Direction>":$portDirections,
-                   "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "::mlir::StringRef":$moduleName,
+    /// Constructor for when you have the type of the instance in hand.
+    OpBuilder<(ins "::circt::firrtl::InstanceType":$resultType,
                    "::mlir::StringRef":$name,
                    "::circt::firrtl::NameKindEnum":$nameKind,
-                   "::mlir::ArrayRef<Direction>":$portDirections,
-                   "::mlir::ArrayRef<Attribute>":$portNames,
                    "ArrayRef<Attribute>":$annotations,
                    "ArrayRef<Attribute>":$portAnnotations,
                    "bool":$lowerToBind,
                    "hw::InnerSymAttr":$inner_sym)>,
-
-    /// Constructor when you have the target module in hand.
+    OpBuilder<(ins "InstanceType":$resultType,
+                   "StringAttr":$name,
+                   "NameKindEnumAttr":$nameKind,
+                   "ArrayAttr":$annotations,
+                   "ArrayAttr":$portAnnotations,
+                   "UnitAttr":$lowerToBind,
+                   "hw::InnerSymAttr":$inner_sym)>,
+    /// Constructor for when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
                    "mlir::StringRef":$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
@@ -89,22 +93,51 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
   ];
 
   let extraClassDeclaration = [{
+    FlatSymbolRefAttr getModuleNameAttr() {
+      return getResultType().getModuleNameAttr();
+    }
+
+    StringRef getModuleName() {
+      return getResultType().getModuleName();
+    }
+
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     FModuleLike getReferencedModule(SymbolTable& symtbl);
 
+    /// Get a description of each port (or property) that this instance has.
+    ArrayRef<InstanceElement> getElements() { return getType().getElements(); }
+
+    /// Get the number of ports (and properties) that this instance has.
+    size_t getNumElements() { return getType().getNumElements(); }
+
+    /// Get information about an element (port or property) of this instance.
+    const InstanceElement &getElement(size_t index) {
+      return getResultType().getElement(index);
+    }
+
     /// Return the port direction for the specified result number.
-    Direction getPortDirection(size_t resultNo) {
-      return direction::get(getPortDirections()[resultNo]);
+    Direction getPortDirection(size_t index) {
+      return getElement(index).direction;
     }
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo) {
-      return cast<StringAttr>(getPortNames()[resultNo]);
+    StringAttr getPortName(size_t index) {
+      return getElement(index).name;
     }
+
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
+
+    /// Get each result that aliases / refers to the port at the given index.
+    SmallVector<Value> getPortResults(size_t index);
+
+    /// Apply F to each InstanceSubOp that uses this instance, and the index of
+    /// that F should have the type:
+    /// `void(InstanceSubOp subOp, size_t portIndex)`
+    template <typename F>
+    auto eachSubOp(F &&fn);
 
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);

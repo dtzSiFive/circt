@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
@@ -21,6 +22,7 @@
 
 namespace circt {
 namespace firrtl {
+class FModuleLike;
 namespace detail {
 struct FIRRTLBaseTypeStorage;
 struct WidthTypeStorage;
@@ -29,6 +31,7 @@ struct VectorTypeStorage;
 struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct InstanceTypeStorage;
 } // namespace detail.
 
 class ClockType;
@@ -46,6 +49,7 @@ class RefType;
 class PropertyType;
 class StringType;
 class BigIntType;
+class InstanceType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -157,8 +161,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !llvm::isa<PropertyType, RefType, OpenBundleType, OpenVectorType>(
-               type);
+           !type.isa<RefType, PropertyType, InstanceType>();
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
@@ -317,6 +320,26 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
+// InstanceElement
+//===----------------------------------------------------------------------===//
+
+struct InstanceElement {
+  StringAttr name;
+  Type type;
+  Direction direction;
+
+  StringRef getName() const { return name.getValue(); }
+  bool isInput() const { return direction == Direction::In; }
+  bool isOutput() const { return direction == Direction::Out; }
+
+  bool operator==(const InstanceElement &rhs) const {
+    return name == rhs.name && type == rhs.type;
+  }
+
+  bool operator!=(const InstanceElement &rhs) const { return !(*this == rhs); }
+};
+
+//===----------------------------------------------------------------------===//
 // Type helpers
 //===----------------------------------------------------------------------===//
 
@@ -366,5 +389,5 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
 };
 
 } // namespace llvm
-
+  
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H

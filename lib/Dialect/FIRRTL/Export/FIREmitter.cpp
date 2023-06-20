@@ -617,9 +617,14 @@ void Emitter::emitStatement(InstanceOp op) {
   SmallString<16> portName(op.getName());
   portName.push_back('.');
   unsigned baseLen = portName.size();
-  for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
+  for (unsigned i = 0, e = op.getNumElements(); i < e; ++i) {
     portName.append(op.getPortNameStr(i));
-    addValueName(op.getResult(i), portName);
+    // TODO: This is n^2
+    for (auto *use : op->getUsers()) {
+      auto subOp = cast<InstanceSubOp>(use);
+      if (subOp.getIndex() == i)
+        addValueName(subOp, portName);
+    }
     portName.resize(baseLen);
   }
 }

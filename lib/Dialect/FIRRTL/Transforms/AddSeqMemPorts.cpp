@@ -206,8 +206,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
 
       // Add the extra ports to the instance operation.
       auto clone = inst.cloneAndInsertPorts(subExtraPorts);
-      inst.replaceAllUsesWith(
-          clone.getResults().drop_back(subExtraPorts.size()));
+      inst.replaceAllUsesWith(clone.getResult());
       instanceGraph->replaceInstance(inst, clone);
       inst->erase();
       inst = clone;
@@ -235,7 +234,9 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
           extraPorts.back().second.annotations.addDontTouch();
         // Record the instance result for now, so that we can connect it to the
         // parent module port after we actually add the ports.
-        values.push_back(inst.getResult(firstSubIndex + i));
+        auto portValue = builder.create<InstanceSubOp>(inst.getLoc(), inst,
+                                                       firstSubIndex + i);
+        values.push_back(portValue);
       }
 
       // We don't want to collect the instance paths or attach inner_syms to
@@ -396,8 +397,7 @@ void AddSeqMemPortsPass::runOnOperation() {
 
         // Add the extra ports to the instance operation.
         auto clone = inst.cloneAndInsertPorts(subExtraPorts);
-        inst.replaceAllUsesWith(
-            clone.getResults().drop_back(subExtraPorts.size()));
+        inst.replaceAllUsesWith(clone.getResult());
         instanceGraph->replaceInstance(inst, clone);
         inst->erase();
         inst = clone;
@@ -409,7 +409,8 @@ void AddSeqMemPortsPass::runOnOperation() {
           auto &[firstResult, portInfo] = subExtraPorts[i];
           if (portInfo.direction == Direction::Out)
             continue;
-          auto value = inst.getResult(firstResult + i);
+          auto value = builder.create<InstanceSubOp>(
+              inst.getLoc(), inst.getResult(), firstResult + i);
           auto type = value.getType();
           auto attr = getIntZerosAttr(type);
           auto zero = builder.create<ConstantOp>(portInfo.loc, type, attr);

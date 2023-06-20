@@ -1019,19 +1019,19 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       auto enclosingModule = useInst->getParentOfType<FModuleOp>();
       auto clonedInst = useInst.cloneAndInsertPorts(newPorts);
       state.instancePathCache.replaceInstance(useInst, clonedInst);
-      // When RAUW-ing, ignore the new ports that we added when replacing (they
-      // cannot have uses).
-      useInst->replaceAllUsesWith(
-          clonedInst.getResults().drop_back(newPorts.size()));
-      useInst->erase();
-      // Record information in the moduleModifications strucutre for the module
+      // New ports are added at the end, so old port indices are valid.
+      useInst->replaceAllUsesWith(clonedInst);
+      useInst.erase();
+      // Record information in the moduleModifications structure for the module
       // _where this is instantiated_.  This is done so that when that module is
       // visited later, there will be information available for it to find ports
       // it needs to wire up.  If there is already an existing connection, then
       // this is a U-turn.
+      ImplicitLocOpBuilder builder(clonedInst.getLoc(), clonedInst);
       for (auto [newPortIdx, problemIdx] : llvm::enumerate(problemIndices)) {
         auto &modifications = moduleModifications[enclosingModule];
-        auto newPort = clonedInst.getResult(newPortIdx + originalNumPorts);
+        auto newPort = builder.create<InstanceSubOp>(
+            clonedInst, newPortIdx + originalNumPorts);
         if (modifications.connectionMap.count(problemIdx)) {
           modifications.uturns.push_back({problemIdx, newPort});
           continue;

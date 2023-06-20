@@ -142,6 +142,14 @@ static ParseResult namedIntParam(StringRef name, FModuleLike mod,
   return failure();
 }
 
+static void replaceInstance(InstanceOp inst, ArrayRef<Value> values) {
+  inst.eachSubOp([&](auto sub) {
+    sub.replaceAllUsesWith(values[sub.getIndex()]);
+    sub.erase();
+  });
+  inst.erase();
+}
+
 static bool lowerCirctSizeof(InstanceGraph &ig, FModuleLike mod) {
   auto ports = mod.getPorts();
   if (hasNPorts("circt.sizeof", mod, 2) ||
@@ -155,10 +163,8 @@ static bool lowerCirctSizeof(InstanceGraph &ig, FModuleLike mod) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
-    inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
-    inst.getResult(1).replaceAllUsesWith(size);
-    inst.erase();
+    replaceInstance(inst, {inputWire, size});
   }
   return true;
 }
@@ -175,10 +181,8 @@ static bool lowerCirctIsX(InstanceGraph &ig, FModuleLike mod) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
-    inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<IsXIntrinsicOp>(inputWire);
-    inst.getResult(1).replaceAllUsesWith(size);
-    inst.erase();
+    replaceInstance(inst, {inputWire, size});
   }
   return true;
 }
@@ -197,8 +201,7 @@ static bool lowerCirctPlusArgTest(InstanceGraph &ig, FModuleLike mod) {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsTestIntrinsicOp>(
         cast<StringAttr>(param.getValue()));
-    inst.getResult(0).replaceAllUsesWith(newop);
-    inst.erase();
+    replaceInstance(inst, {newop});
   }
   return true;
 }
@@ -217,11 +220,12 @@ static bool lowerCirctPlusArgValue(InstanceGraph &ig, FModuleLike mod) {
   for (auto *use : ig.lookup(mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto foundType = inst.getElement(0).type;
+    auto valueType = inst.getElement(1).type;
+    Type types[] = {foundType, valueType};
     auto newop = builder.create<PlusArgsValueIntrinsicOp>(
-        inst.getResultTypes(), cast<StringAttr>(param.getValue()));
-    inst.getResult(0).replaceAllUsesWith(newop.getFound());
-    inst.getResult(1).replaceAllUsesWith(newop.getResult());
-    inst.erase();
+        types, cast<StringAttr>(param.getValue()));
+    replaceInstance(inst, {newop.getFound(), newop.getResult()});
   }
   return true;
 }
@@ -239,14 +243,12 @@ static bool lowerCirctClockGate(InstanceGraph &ig, FModuleLike mod) {
 
   for (auto *use : ig.lookup(mod)->uses()) {
     auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    auto type = inst.getType();
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-    auto en = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(in);
-    inst.getResult(1).replaceAllUsesWith(en);
+    auto in = builder.create<WireOp>(type.getElement(0).type).getResult();
+    auto en = builder.create<WireOp>(type.getElement(1).type).getResult();
     auto out = builder.create<ClockGateIntrinsicOp>(in, en, Value{});
-    inst.getResult(2).replaceAllUsesWith(out);
-    inst.erase();
+    replaceInstance(inst, {in, en, out});
   }
   return true;
 }

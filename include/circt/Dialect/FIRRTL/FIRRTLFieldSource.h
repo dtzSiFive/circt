@@ -66,6 +66,7 @@ private:
   void visitSubaccess(SubaccessOp sa);
   void visitMem(MemOp mem);
   void visitInst(InstanceOp inst);
+  void visitInstSub(InstanceSubOp op);
 
   void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
                         Flow flow);

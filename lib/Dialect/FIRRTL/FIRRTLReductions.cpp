@@ -363,20 +363,35 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
                << "Stubbing instance `" << instOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallDenseMap<Type, Value, 8> invalidCache;
-    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
-      auto result = instOp.getResult(i);
+
+    auto result = instOp.getResult();
+    auto type = result.getType();
+
+    // Build an invalid wire for each hardware port.
+    SmallVector<Value> values;
+    values.reserve(type.getNumElements());
+    for (const auto &[element, annos] :
+         llvm::zip(type.getElements(), instOp.getPortAnnotations())) {
+      if (!isa<firrtl::FIRRTLBaseType>(element.type))
+        return failure();
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
-                                        instOp.getPortNameStr(i));
-      auto wire =
-          builder
-              .create<firrtl::WireOp>(result.getType(), name,
-                                      firrtl::NameKindEnum::DroppableName,
-                                      instOp.getPortAnnotation(i), StringAttr{})
-              .getResult();
-      invalidateOutputs(builder, wire, invalidCache,
-                        instOp.getPortDirection(i) == firrtl::Direction::In);
-      result.replaceAllUsesWith(wire);
+                                        element.name.getValue());
+      auto wire = builder
+                      .create<firrtl::WireOp>(
+                          result.getType(), name,
+                          firrtl::NameKindEnum::DroppableName, annos)
+                      .getResult();
+      values.push_back(wire);
     }
+
+    // Replace each port access with it's corresponding invalid wire.
+    for (auto *user : result.getUsers()) {
+      auto subOp = cast<firrtl::InstanceSubOp>(user);
+      auto index = subOp.getIndex();
+      subOp.replaceAllUsesWith(values[index]);
+      subOp->erase();
+    }
+
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     nlaRemover.markNLAsInOperation(instOp);
@@ -655,26 +670,36 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
         instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp)));
   }
   LogicalResult rewrite(firrtl::InstanceOp instOp) override {
-    auto portInfo =
-        instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp))
-            .getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
-    SmallVector<Value> replacementWires;
-    for (firrtl::PortInfo info : portInfo) {
-      auto wire =
-          builder
-              .create<firrtl::WireOp>(
-                  info.type,
-                  (Twine(instOp.getName()) + "_" + info.getName()).str())
-              .getResult();
-      if (info.isOutput()) {
-        auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
-        builder.create<firrtl::ConnectOp>(wire, inv);
-      }
-      replacementWires.push_back(wire);
+    auto result = instOp.getResult();
+    auto type = result.getType();
+
+    // Build an invalid wire for each hardware port.
+    SmallVector<Value> values;
+    values.reserve(type.getNumElements());
+    for (const auto &[element, annos] :
+         llvm::zip(type.getElements(), instOp.getPortAnnotations())) {
+      if (!isa<firrtl::FIRRTLBaseType>(element.type))
+        return failure();
+      auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
+                                        element.name.getValue());
+      auto wire = builder
+                      .create<firrtl::WireOp>(
+                          result.getType(), name,
+                          firrtl::NameKindEnum::DroppableName, annos)
+                      .getResult();
+      values.push_back(wire);
     }
+
+    // Replace each port access with it's corresponding invalid wire.
+    for (auto *user : result.getUsers()) {
+      auto subOp = cast<firrtl::InstanceSubOp>(user);
+      auto index = subOp.getIndex();
+      subOp.replaceAllUsesWith(values[index]);
+      subOp->erase();
+    }
+
     nlaRemover.markNLAsInOperation(instOp);
-    instOp.replaceAllUsesWith(std::move(replacementWires));
     instOp->erase();
     return success();
   }
@@ -899,19 +924,27 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
                << "Inlining instance `" << instOp.getName() << "`\n");
     SmallVector<Value> argReplacements;
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
-    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
-      auto result = instOp.getResult(i);
+
+    auto instType = instOp.getType();
+
+    for (unsigned i = 0, e = instOp.getNumElements(); i != e; ++i) {
+      auto element = instType.getElement(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
-                                        instOp.getPortNameStr(i));
+                                        element.name.getValue());
       auto wire =
           builder
-              .create<firrtl::WireOp>(result.getType(), name,
+              .create<firrtl::WireOp>(element.type, name,
                                       firrtl::NameKindEnum::DroppableName,
-                                      instOp.getPortAnnotation(i), StringAttr{})
+                                      instOp.getPortAnnotation(i))
               .getResult();
-      result.replaceAllUsesWith(wire);
       argReplacements.push_back(wire);
     }
+  
+    for (auto *user : instOp->getUsers()) {
+      auto subOp = cast<firrtl::InstanceSubOp>(user);
+      subOp.replaceAllUsesWith(argReplacements[subOp.getIndex()]);
+    }
+
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
         instOp.getReferencedModule(symbols.getSymbolTable(tableOp))

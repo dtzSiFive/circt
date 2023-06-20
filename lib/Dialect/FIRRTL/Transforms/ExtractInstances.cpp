@@ -525,20 +525,21 @@ void ExtractInstancesPass::extractInstances() {
     // Add additional ports to the parent module as a replacement for the
     // instance port signals once the instance is extracted.
     unsigned numParentPorts = parent.getNumPorts();
-    unsigned numInstPorts = inst.getNumResults();
+    unsigned numInstPorts = inst.getNumElements();
 
     for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
       // Assemble the new port name as "<prefix>_<name>", where the prefix is
       // provided by the extraction annotation.
+
+      auto element = inst.getElement(portIdx);
       auto name = inst.getPortNameStr(portIdx);
       auto nameAttr = StringAttr::get(
           &getContext(),
           prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
 
-      PortInfo newPort{nameAttr,
-                       cast<FIRRTLType>(inst.getResult(portIdx).getType()),
-                       direction::flip(inst.getPortDirection(portIdx))};
-      newPort.loc = inst.getResult(portIdx).getLoc();
+      PortInfo newPort{nameAttr, cast<FIRRTLType>(element.type),
+                       direction::flip(element.direction)};
+      newPort.loc = inst.getLoc();
       newPorts.push_back({numParentPorts, newPort});
       LLVM_DEBUG(llvm::dbgs()
                  << "- Adding port " << newPort.direction << " "
@@ -549,9 +550,10 @@ void ExtractInstancesPass::extractInstances() {
 
     // Replace all uses of the existing instance ports with the newly-created
     // module ports.
-    for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
-      inst.getResult(portIdx).replaceAllUsesWith(
-          parent.getArgument(numParentPorts + portIdx));
+    for (auto *user : inst->getUsers()) {
+      auto subOp = cast<InstanceSubOp>(user);
+      auto index = subOp.getIndex();
+      subOp.replaceAllUsesWith(parent.getArgument(numParentPorts + index));
     }
     assert(inst.use_empty() && "instance ports should have been detached");
     DenseSet<hw::HierPathOp> instanceNLAs;
@@ -591,11 +593,22 @@ void ExtractInstancesPass::extractInstances() {
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();
       LLVM_DEBUG(llvm::dbgs() << "- Updating " << oldParentInst << "\n");
       auto newParentInst = oldParentInst.cloneAndInsertPorts(newPorts);
+      auto numNewParentPorts = newParentInst.getNumElements();
+
+      ImplicitLocOpBuilder builder(newParentInst->getLoc(), newParentInst);
+
+      // Create a value for each port in the new parent.
+      SmallVector<Value> newParentPorts(numNewParentPorts, nullptr);
+      for (unsigned i = 0; i < numNewParentPorts; ++i)
+        newParentPorts[i] = builder.create<InstanceSubOp>(newParentInst, i);
 
       // Migrate connections to existing ports.
-      for (unsigned portIdx = 0; portIdx < numParentPorts; ++portIdx)
-        oldParentInst.getResult(portIdx).replaceAllUsesWith(
-            newParentInst.getResult(portIdx));
+      for (auto *user : oldParentInst->getUsers()) {
+        auto subOp = cast<InstanceSubOp>(user);
+        auto index = subOp.getIndex();
+        subOp.replaceAllUsesWith(newParentPorts[index]);
+        subOp.erase();
+      }
 
       // Clone the existing instance and remove it from its current parent, such
       // that we can insert it at its extracted location.
@@ -612,13 +625,10 @@ void ExtractInstancesPass::extractInstances() {
               hw::InnerSymAttr::get(StringAttr::get(&getContext(), newName)));
       }
 
-      // Add the moved instance and hook it up to the added ports.
-      ImplicitLocOpBuilder builder(inst.getLoc(), newParentInst);
-      builder.setInsertionPointAfter(newParentInst);
       builder.insert(newInst);
       for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
-        auto dst = newInst.getResult(portIdx);
-        auto src = newParentInst.getResult(numParentPorts + portIdx);
+        auto dst = builder.create<InstanceSubOp>(newInst, portIdx).getResult();
+        auto src = newParentPorts[numParentPorts + portIdx];
         if (newPorts[portIdx].second.direction == Direction::In)
           std::swap(src, dst);
         builder.create<StrictConnectOp>(dst, src);
@@ -879,15 +889,15 @@ void ExtractInstancesPass::groupInstances() {
     for (auto inst : insts) {
       // Determine the ports for the wrapper.
       StringRef prefix(instPrefices[inst]);
-      unsigned portNum = inst.getNumResults();
+      unsigned portNum = inst.getNumElements();
       for (unsigned portIdx = 0; portIdx < portNum; ++portIdx) {
-        auto name = inst.getPortNameStr(portIdx);
+        auto &element = inst.getElement(portIdx);
+        auto name = element.name.getValue();
         auto nameAttr = builder.getStringAttr(
             prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
-        PortInfo port{nameAttr,
-                      cast<FIRRTLType>(inst.getResult(portIdx).getType()),
-                      inst.getPortDirection(portIdx)};
-        port.loc = inst.getResult(portIdx).getLoc();
+        PortInfo port{nameAttr, cast<FIRRTLType>(element.type),
+                      element.direction};
+        port.loc = inst.getLoc();
         ports.push_back(port);
       }
 
@@ -956,26 +966,36 @@ void ExtractInstancesPass::groupInstances() {
         ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
         wrapperInstName);
-    unsigned portIdx = 0;
-    for (auto inst : insts)
-      for (auto result : inst.getResults())
-        result.replaceAllUsesWith(wrapperInst.getResult(portIdx++));
+
+    // Update instance.sub ops accessing the "wrapped up" instances to access
+    // the wrapper instance, at the corrected port index.
+    auto offset = 0;
+    for (auto inst : insts) {
+      for (auto *user : inst->getUsers()) {
+        auto oldSubOp = cast<InstanceSubOp>(user);
+        oldSubOp.getInputMutable().assign(wrapperInst);
+        oldSubOp.setIndex(oldSubOp.getIndex() + offset);
+      }
+      offset += inst.getNumElements();
+    }
 
     // Move all instances into the wrapper module and wire them up to the
     // wrapper ports.
-    portIdx = 0;
+    offset = 0;
     builder.setInsertionPointToStart(wrapper.getBodyBlock());
     for (auto inst : insts) {
       inst->remove();
       builder.insert(inst);
-      for (auto result : inst.getResults()) {
-        Value dst = result;
-        Value src = wrapper.getArgument(portIdx);
-        if (ports[portIdx].direction == Direction::Out)
+      auto elements = inst.getElements();
+      for (unsigned i = 0, e = elements.size(); i < e; ++i) {
+        const auto &element = elements[i];
+        Value dst = builder.create<InstanceSubOp>(inst.getLoc(), inst, i);
+        Value src = wrapper.getArgument(i + offset);
+        if (element.direction == Direction::Out)
           std::swap(dst, src);
-        builder.create<StrictConnectOp>(result.getLoc(), dst, src);
-        ++portIdx;
+        builder.create<StrictConnectOp>(inst.getLoc(), dst, src);
       }
+      offset += elements.size();
     }
   }
 }

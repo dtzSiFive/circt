@@ -154,10 +154,10 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             // destination is also inferred. By merging the dataflow class of
             // destination with source, every value reachable from the
             // destination automatically infers a reaching RefSend.
-            // 2. If dataflow at source is unkown, then just record that both
+            // 2. If dataflow at source is unknown, then just record that both
             // source and destination will have the same dataflow information.
             // Later in the pass when the reaching RefSend is inferred at the
-            // leader of the dataflowClass, then we automatically infer the
+            // leader of the dataflowClass, we automatically infer the
             // dataflow at this connect and every value reachable from the
             // destination.
             dataFlowClasses->unionSets(connect.getSrc(), connect.getDest());
@@ -424,54 +424,76 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       // attribute which specifies the internal path into the extern module.
       // This string attribute will be used to generate the final xmr.
       auto internalPaths = extRefMod.getInternalPaths();
-      size_t pathsIndex = 0;
-      auto numPorts = inst.getNumResults();
+
+      auto numPorts = inst.getNumElements();
       SmallString<128> circuitRefPrefix;
 
-      /// Get the resolution string for this ref-type port.
-      auto getPath = [&](size_t portNo) {
+      size_t pathsIndex = 0;
+      SmallDenseMap<size_t, StringAttr> paths;
+      for (auto [index, element] : llvm::enumerate(inst.getElements())) {
+        if (!isa<RefType>(element.type))
+          continue;
+
+        setPortToRemove(inst, index, numPorts);
+        setPortToRemove(extRefMod, index, numPorts);
+
+        /// Get the resolution string for this ref-type port.
         // If there's an internalPaths array, grab the next element.
-        if (!internalPaths.empty())
-          return cast<StringAttr>(internalPaths[pathsIndex++]);
+        if (!internalPaths.empty()) {
+          paths[index] = cast<StringAttr>(internalPaths[pathsIndex++]);
+          continue;
+        }
 
         // Otherwise, we're using the ref ABI.  Generate the prefix string
         // and return the macro for the specified port.
         if (circuitRefPrefix.empty())
           getRefABIPrefix(extRefMod, circuitRefPrefix);
 
-        return getRefABIMacroForPort(extRefMod, portNo, circuitRefPrefix, true);
-      };
+        paths[index] =
+            getRefABIMacroForPort(extRefMod, index, circuitRefPrefix, true);
+      }
 
-      for (const auto &res : llvm::enumerate(inst.getResults())) {
-        if (!isa<RefType>(inst.getResult(res.index()).getType()))
-          continue;
+      inst.eachSubOp([&](auto subOp, auto i) {
+        if (!isa<RefType>(subOp.getType()))
+          return;
 
         auto inRef = getInnerRefTo(inst);
-        auto ind = addReachingSendsEntry(res.value(), inRef);
+        auto index = addReachingSendsEntry(subOp, inRef);
+        xmrPathSuffix[index] = paths[index];
+      });
 
-        xmrPathSuffix[ind] = getPath(res.index());
-        // The instance result and module port must be marked for removal.
-        setPortToRemove(inst, res.index(), numPorts);
-        setPortToRemove(extRefMod, res.index(), numPorts);
-      }
       return success();
     }
+
     auto refMod = dyn_cast<FModuleOp>(mod);
+    if (!refMod) {
+      // We have some other kind of module. Only FModule and FExtModule may have
+      // reference ports. Double check that the instance doesn't have any
+      // references, and leave.
+      for (const auto &element : inst.getElements())
+        if (isa<RefType>(element.type))
+          return inst.emitError("cannot lower references");
+      return success();
+    }
+
     bool multiplyInstantiated = !visitedModules.insert(refMod).second;
-    for (size_t portNum = 0, numPorts = inst.getNumResults();
+
+    // Reference ports must be removed.
+    for (size_t portNum = 0, numPorts = inst.getNumElements();
          portNum < numPorts; ++portNum) {
-      auto instanceResult = inst.getResult(portNum);
-      if (!isa<RefType>(instanceResult.getType()))
+      if (!isa<RefType>(inst.getElement(portNum).type))
         continue;
-      if (!refMod)
-        return inst.emitOpError("cannot lower ext modules with RefType ports");
-      // Reference ports must be removed.
       setPortToRemove(inst, portNum, numPorts);
+    }
+
+    inst.eachSubOp([&](InstanceSubOp instanceResult) {
+      auto portNum = instanceResult.getIndex();
+      if (!instanceResult.getType().isa<RefType>())
+        return;
       // Drop the dead-instance-ports.
       if (instanceResult.use_empty() ||
           isZeroWidth(cast<RefType>(instanceResult.getType()).getType()))
-        continue;
-      auto refModuleArg = refMod.getArgument(portNum);
+        auto refModuleArg = refMod.getArgument(portNum);
       if (inst.getPortDirection(portNum) == Direction::Out) {
         // For output instance ports, the dataflow is into this module.
         // Get the remote RefSendOp, that flows through the module ports.
@@ -496,7 +518,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             dataFlowClasses->getOrInsertLeaderValue(refModuleArg),
             dataFlowClasses->getOrInsertLeaderValue(instanceResult));
       }
-    }
+    });
+
     return success();
   }
 

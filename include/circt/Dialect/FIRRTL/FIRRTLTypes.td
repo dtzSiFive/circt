@@ -195,6 +195,13 @@ def PropertyType : FIRRTLDialectTypeHelper<
 def StringType : FIRRTLDialectTypeHelper<"StringType", "string type">,
   BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
 
+def InstanceType : FIRRTLDialectType<
+  CPred<"$_self.isa<InstanceType>()">,
+  "InstanceType",
+  "::circt::firrtl::InstanceType",
+  [{ An instance of a module }]
+>;
+
 def BigIntType : FIRRTLDialectTypeHelper<"BigIntType", "big integer type">,
   BuildableType<"::circt::firrtl::BigIntType::get($_builder.getContext())">;
 

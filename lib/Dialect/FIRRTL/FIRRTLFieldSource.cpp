@@ -49,6 +49,8 @@ void FieldSource::visitOp(Operation *op) {
     return visitMem(mem);
   if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInst(inst);
+  if (auto sub = dyn_cast<InstanceSubOp>(op))
+    return visitInstSub(sub);
 
   // Track all other definitions of aggregates.
   if (op->getNumResults()) {
@@ -93,8 +95,17 @@ void FieldSource::visitMem(MemOp mem) {
 }
 
 void FieldSource::visitInst(InstanceOp inst) {
-  for (auto r : inst.getResults())
-    makeNodeForValue(r, r, {}, foldFlow(r));
+  auto r = inst.getResult();
+  makeNodeForValue(r, r, {}, foldFlow(r));
+}
+
+void FieldSource::visitInstSub(InstanceSubOp op) {
+  auto value = op.getInput();
+  const auto *node = nodeForValue(value);
+  assert(node && "node should be in the map");
+  auto sv = node->path;
+  sv.push_back(op.getIndex());
+  makeNodeForValue(op.getResult(), node->src, sv, foldFlow(op));
 }
 
 const FieldSource::PathNode *FieldSource::nodeForValue(Value v) const {

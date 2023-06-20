@@ -343,6 +343,24 @@ public:
                 setValRefsTo(res, f);
             }
           })
+          .Case<InstanceSubOp>([&](InstanceSubOp sub) {
+            auto res = sub.getResult();
+            bool isValid = false;
+            auto fieldIndex = sub.getAccessedField().getFieldID();
+            SmallVector<FieldRef, 4> fields;
+            forallRefersTo(
+                sub.getInput(),
+                [&](FieldRef subBase) {
+                  isValid = true;
+                  fields.push_back(subBase.getSubField(fieldIndex));
+                  return success();
+                },
+                false);
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
+            }
+          })
           .Case<InstanceOp>(
               [&](InstanceOp ins) { handleInstanceOp(ins, worklist); })
           .Case<MemOp>([&](MemOp mem) {
@@ -360,15 +378,17 @@ public:
   }
 
   void handleInstanceOp(InstanceOp ins, SmallVector<Value> &worklist) {
-    for (auto port : ins.getResults()) {
-      if (auto type = dyn_cast<FIRRTLBaseType>(port.getType())) {
-        worklist.push_back(port);
-        if (!type.isGround())
-          setValRefsTo(port, FieldRef(port, 0));
-      } else if (auto type = dyn_cast<PropertyType>(port.getType())) {
-        worklist.push_back(port);
-      }
-    }
+    auto result = ins.getResult();
+    worklist.push_back(result);
+    setValRefsTo(result, FieldRef(result, 0));
+    // TODO: Need to handle InstanceSubOps!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // for (auto port : ins.getResults()) {
+    //   if (auto type = port.getType().dyn_cast<FIRRTLBaseType>()) {
+    //     worklist.push_back(port);
+    //     if (!type.isGround())
+    //       setValRefsTo(port, FieldRef(port, 0));
+    //   }
+    // }
   }
 
   void handlePorts(FieldRef ref, SmallVectorImpl<Value> &children) {
@@ -487,6 +507,12 @@ public:
     return success();
   }
 
+  /// Val is derived from (or directly aliases) the field called 'ref'.
+  /// Record that:
+  ///  - val refers to ref
+  ///  - ref is aliased by val
+  ///  - val also aliases by all other aliases of ref
+  ///    - and vice versa
   void setValRefsTo(Value val, FieldRef ref) {
     assert(val && ref && " Value and Ref cannot be null");
     valRefersTo[val].insert(ref);

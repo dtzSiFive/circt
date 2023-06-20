@@ -361,7 +361,7 @@ InstanceOp firrtl::addPortsToModule(
     instancePathcache.replaceInstance(useInst, clonedInst);
     if (targetCaches)
       targetCaches->replaceOp(useInst, clonedInst);
-    useInst->replaceAllUsesWith(clonedInst.getResults().drop_back());
+    useInst.replaceAllUsesWith(clonedInst.getResult());
     useInst->erase();
   }
   return clonedInstOnPath;
@@ -445,7 +445,7 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // Since the instance op generates the RefType output, no need of another
   // RefSendOp.  Store into an op to ensure we have stable reference,
   // so future tapping won't invalidate this Value.
-  sendVal = modInstance.getResults().back();
+  sendVal = builder.create<InstanceSubOp>(modInstance, modInstance.getNumElements() - 1);
   sendVal =
       builder
           .create<mlir::UnrealizedConversionCastOp>(sendVal.getType(), sendVal)
@@ -612,7 +612,8 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
                                                       lastInst->getBlock());
       builder.setInsertionPointAfter(lastInst);
       // Instance port cannot be used as an annotation target, so use a NodeOp.
-      auto node = builder.create<NodeOp>(lastInst.getResult(portNo));
+      auto port = builder.create<InstanceSubOp>(lastInst, portNo);
+      auto node = builder.create<NodeOp>(port);
       AnnotationSet::addDontTouch(node);
       srcTarget->ref = AnnoTarget(circt::firrtl::detail::AnnoTargetImpl(node));
     }
@@ -646,8 +647,12 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     auto sinkBuilder = ImplicitLocOpBuilder::atBlockEnd(wireModule.getLoc(),
                                                         targetOp->getBlock());
     auto wireType = cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
-    // Get type of sent value, if already a RefType, the base type.
+    // Get type of sent value, if already a RefType, the base type, otherwise
+    // error out.
     auto valType = getBaseType(cast<FIRRTLType>(sendVal.getType()));
+    if (!valType)
+      return mlir::emitError(sendVal.getLoc(), "uhhh");
+
     Value sink = getValueByFieldID(sinkBuilder, targetOp->getResult(0),
                                    wireTarget->fieldIdx);
 

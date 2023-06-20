@@ -305,13 +305,7 @@ public:
   }
 
   void visitDecl(InstanceOp op) {
-    // Track any instance inputs which need to be connected to for init
-    // coverage.
-    for (const auto &result : llvm::enumerate(op.getResults()))
-      if (op.getPortDirection(result.index()) == Direction::Out)
-        declareSinks(result.value(), Flow::Source);
-      else
-        declareSinks(result.value(), Flow::Sink);
+    declareSinks(op, Flow::Source);
   }
 
   void visitDecl(MemOp op) {

@@ -2362,17 +2362,17 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
            "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
 
 #ifndef NDEBUG
-    auto baseType = getBaseType(origType);
-    auto srcWidth = baseType.getPassiveType().getBitWidthOrSentinel();
-
-    // Caller should pass null value iff this was a zero bit value.
-    if (srcWidth != -1) {
-      if (result)
-        assert((srcWidth != 0) &&
-               "Lowering produced value for zero width source");
-      else
-        assert((srcWidth == 0) &&
-               "Lowering produced null value but source wasn't zero width");
+    if (auto baseType = getBaseType(origType)) {
+      auto srcWidth = baseType.getPassiveType().getBitWidthOrSentinel();
+      // Caller should pass null value iff this was a zero bit value.
+      if (srcWidth != -1) {
+        if (result)
+          assert((srcWidth != 0) &&
+                 "Lowering produced value for zero width source");
+        else
+          assert((srcWidth == 0) &&
+                 "Lowering produced null value but source wasn't zero width");
+      }
     }
 #endif
   } else {
@@ -3286,8 +3286,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     if (port.isOutput())
       continue;
 
-    auto portResult = oldInstance.getResult(portIndex);
-    assert(portResult && "invalid IR, couldn't find port");
+    auto portResults = oldInstance.getPortResults(portIndex);
+    if (portResults.size() > 1)
+      oldInstance->emitOpError() << "port " << portIndex << "aliased multiple times";
+    auto portResult = portResults[0];
 
     // Directly materialize inputs which are trivially assigned once through a
     // `StrictConnectOp`.
@@ -3371,9 +3373,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
       continue;
 
     Value resultVal = newInstance.getResult(resultNo);
+    for (auto oldPortResult : oldInstance.getPortResults(portIndex)) {
+      (void)setLowering(oldPortResult, resultVal);
+    }
 
-    auto oldPortResult = oldInstance.getResult(portIndex);
-    (void)setLowering(oldPortResult, resultVal);
     ++resultNo;
   }
   return success();

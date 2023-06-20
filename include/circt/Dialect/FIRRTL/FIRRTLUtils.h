@@ -24,7 +24,7 @@ namespace firrtl {
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
 void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs);
 
-/// Utiility for generating a constant attribute.
+/// Utility for generating a constant attribute.
 IntegerAttr getIntAttr(Type type, const APInt &value);
 
 /// Utility for generating a constant zero attribute.
@@ -40,34 +40,10 @@ PropAssignOp getPropertyAssignment(FIRRTLPropertyValue value);
 Value getDriverFromConnect(Value val);
 
 /// Return the value that drives another FIRRTL value within module scope.  This
-/// is parameterized by looking through or not through certain constructs.
-Value getValueSource(Value val, bool lookThroughWires, bool lookThroughNodes,
-                     bool lookThroughCasts);
-
-/// Return the value that drives another FIRRTL value within module scope.  This
 /// is parameterized by looking through or not through certain constructs.  This
 /// assumes a single driver and should only be run after `ExpandWhens`.
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
                             bool lookThroughNodes, bool lookThroughCasts);
-
-/// Return true if a value is module-scoped driven by a value of a specific
-/// type.
-template <typename A, typename... B>
-static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
-                                   bool lookThroughNodes,
-                                   bool lookThroughCasts) {
-  val = getModuleScopedDriver(val, lookThroughWires, lookThroughNodes,
-                              lookThroughCasts);
-
-  if (!val)
-    return false;
-
-  auto *op = val.getDefiningOp();
-  if (!op)
-    return false;
-
-  return isa<A, B...>(op);
-}
 
 /// Walk all the drivers of a value, passing in the connect operations drive the
 /// value. If the value is an aggregate it will find connects to subfields. If

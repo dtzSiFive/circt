@@ -1025,8 +1025,9 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
               }
               auto lastInst = xmrSrcTarget->instances.pop_back_val();
               builder.setInsertionPointAfter(lastInst);
-              return getValueByFieldID(builder, lastInst.getResult(portNo),
-                                       xmrSrcTarget->fieldIdx);
+              auto port = builder.create<InstanceSubOp>(lastInst.getLoc(),
+                                                        lastInst, portNo);
+              return getValueByFieldID(builder, port, xmrSrcTarget->fieldIdx);
             })
             // The target is a module port.  The source is the port _inside_
             // that module.

@@ -836,13 +836,16 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 
   // Establish a connection between the instance ports and module ports.
   auto dirs = module.getPortDirections();
-  for (const auto &it : llvm::enumerate(inst.getResults())) {
-    auto dir = module.getPortDirection(it.index());
-    Value dstPort = module.getArgument(it.index());
-    Value srcPort = it.value();
-    if (dir == Direction::Out)
+
+  for (auto *user : inst->getUsers()) {
+    auto subOp = cast<InstanceSubOp>(user);
+    auto index = subOp.getIndex();
+    auto element = inst.getElement(index);
+    Value dstPort = module.getArgument(index);
+    Value srcPort = subOp.getResult();
+    if (element.direction == Direction::Out)
       std::swap(dstPort, srcPort);
-    traceResets(dstPort, srcPort, it.value().getLoc());
+    traceResets(dstPort, srcPort, subOp.getLoc());
   }
 }
 
@@ -1149,9 +1152,11 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     auto module = cast<FExtModuleOp>(pair.first);
     auto instOp = cast<InstanceOp>(pair.second);
 
+    auto instType = instOp.getType();
     SmallVector<Attribute> types;
-    for (auto type : instOp.getResultTypes())
-      types.push_back(TypeAttr::get(type));
+    types.reserve(instType.getNumElements());
+    for (auto element : instType.getElements())
+      types.push_back(TypeAttr::get(element.type));
 
     module->setAttr(FModuleLike::getPortTypesAttrName(),
                     ArrayAttr::get(module->getContext(), types));
@@ -1721,16 +1726,24 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
           {{/*portIndex=*/0,
             {domain.newPortName, cast<FIRRTLBaseType>(actualReset.getType()),
              Direction::In}}});
-      instReset = newInstOp.getResult(0);
+      ImplicitLocOpBuilder builder(newInstOp.getLoc(), newInstOp);
+      instReset = builder.create<InstanceSubOp>(newInstOp, 0);
 
       // Update the uses over to the new instance and drop the old instance.
-      instOp.replaceAllUsesWith(newInstOp.getResults().drop_front());
+      for (auto *user : instOp->getUsers()) {
+        auto subOp = cast<InstanceSubOp>(user);
+        auto newSubOp = builder.create<InstanceSubOp>(newInstOp, subOp.getIndex() + 1);
+        subOp->replaceAllUsesWith(newSubOp);
+        subOp->erase();
+      }
+
       instanceGraph->replaceInstance(instOp, newInstOp);
       instOp->erase();
       instOp = newInstOp;
     } else if (domain.existingPort.has_value()) {
       auto idx = *domain.existingPort;
-      instReset = instOp.getResult(idx);
+      ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+      instReset = builder.create<InstanceSubOp>(instOp, idx);
       LLVM_DEBUG(llvm::dbgs() << "  - Using result #" << idx << " as reset\n");
     }
 

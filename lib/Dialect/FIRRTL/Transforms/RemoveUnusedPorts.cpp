@@ -143,33 +143,46 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   // Rewrite all uses.
   for (auto *use : instanceGraphNode->uses()) {
     auto instance = ::cast<InstanceOp>(*use->getInstance());
+
+    // Group the InstanceSubOps by the port index they refer to.
+    SmallVector<SmallVector<Value, 1>> portResults;
+    portResults.resize(instance.getNumElements());
+    instance.eachSubOp(
+        [&](auto sub) { portResults[sub.getIndex()].push_back(sub); });
+
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     unsigned outputPortIndex = 0;
     for (auto index : removalPortIndexes.set_bits()) {
-      auto result = instance.getResult(index);
-      assert(!ports[index].isInOut() && "don't expect inout ports");
-
+      auto &port = ports[index];
+      assert(!port.isInOut() && "don't expect inout ports");
+      auto &results = portResults[index];
       // If the port is input, replace the port with an unwritten wire
       // so that we can remove use-chains in SV dialect canonicalization.
-      if (ports[index].isInput()) {
-        WireOp wire = builder.create<WireOp>(result.getType());
+      if (port.isInput()) {
+        WireOp wire = builder.create<WireOp>(port.type);
 
         // Check that the input port is only written. Sometimes input ports are
         // used as temporary wires. In that case, we cannot erase connections.
-        bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
-          if (auto connect = dyn_cast<FConnectLike>(op))
-            return connect.getDest() == result;
-          return false;
+        bool onlyWritten = llvm::all_of(results, [&](auto result) {
+          llvm::all_of(result->getUsers(), [&](Operation *op) {
+            if (auto connect = dyn_cast<FConnectLike>(op))
+              return connect.getDest() == result;
+            return false;
+          });
         });
 
-        result.replaceUsesWithIf(wire.getResult(), [&](OpOperand &op) -> bool {
-          // Connects can be deleted directly.
-          if (onlyWritten && isa<FConnectLike>(op.getOwner())) {
-            op.getOwner()->erase();
-            return false;
+        if (onlyWritten) {
+          // connects driving this port can be deleted.
+          for (auto result : results) {
+            for (auto *user : result.getUsers()) {
+              assert(isa<FConnectLike>(user));
+              user->erase();
+            }
           }
-          return true;
-        });
+        } else {
+          for (auto result : results)
+            result.replaceAllUsesWith(wire.getResult());
+        }
 
         // If the wire doesn't have an user, just erase it.
         if (wire.use_empty())
@@ -185,9 +198,11 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
       if (portConstant)
         value = builder.create<ConstantOp>(*portConstant);
       else
-        value = builder.create<InvalidValueOp>(result.getType());
+        value = builder.create<InvalidValueOp>(port.type);
 
-      result.replaceAllUsesWith(value);
+      for (auto result : results) {
+        result.replaceAllUsesWith(value);
+      }
     }
 
     // Create a new instance op without unused ports.

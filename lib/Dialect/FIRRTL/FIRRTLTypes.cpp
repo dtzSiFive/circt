@@ -2342,6 +2342,178 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
 }
 
 //===----------------------------------------------------------------------===//
+// InstanceTypeStorage
+//===----------------------------------------------------------------------===//
+
+static uint64_t getMaxFieldID(Type type) {
+  if (auto t = dyn_cast<FIRRTLBaseType>(type))
+    return t.getMaxFieldID();
+
+  // fallback assumption for foreign types: no subfields.
+  return 0;
+}
+
+struct firrtl::detail::InstanceTypeStorage : public TypeStorage {
+  using KeyTy = FlatSymbolRefAttr;
+  using InstanceElement = InstanceElement;
+
+  static InstanceTypeStorage *construct(TypeStorageAllocator &allocator,
+                                        const KeyTy &key) {
+    auto *storage = allocator.allocate<InstanceTypeStorage>();
+    return new (storage) InstanceTypeStorage(key);
+  }
+
+  InstanceTypeStorage(FlatSymbolRefAttr moduleName)
+      : moduleName(moduleName), elements() {
+
+  }
+
+  bool initialized() const { return elements.data() != nullptr; }
+
+  LogicalResult mutate(TypeStorageAllocator &allocator,
+                       ArrayRef<InstanceElement> newElements) {
+    if (elements.data() != nullptr)
+      return success(elements == newElements);
+
+    elements = allocator.copyInto(newElements);
+
+    uint64_t fieldID = 0;
+    fieldIDs.reserve(elements.size());
+    for (auto &element : elements) {
+      auto type = element.type;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      fieldID += getMaxFieldID(type);
+    }
+    maxFieldID = fieldID;
+
+    return success();
+  }
+
+  FlatSymbolRefAttr getModuleName() const { return moduleName; }
+
+  ArrayRef<InstanceElement> getElements() const { return elements; }
+
+  bool operator==(KeyTy key) const { return moduleName == key; }
+
+  FlatSymbolRefAttr moduleName;
+  ArrayRef<InstanceElement> elements;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
+};
+
+//===----------------------------------------------------------------------===//
+// InstanceType
+//===----------------------------------------------------------------------===//
+
+InstanceType InstanceType::get(FlatSymbolRefAttr moduleName) {
+  return Base::get(moduleName.getContext(), moduleName);
+}
+
+InstanceType InstanceType::get(FlatSymbolRefAttr moduleName,
+                               ArrayRef<InstanceElement> elements) {
+  auto type = get(moduleName);
+  if (failed(type.initialize(elements)))
+    assert(0 && "failed to initialize type");
+  return type;
+}
+
+InstanceType InstanceType::get(StringAttr moduleName,
+                               ArrayRef<InstanceElement> elements) {
+  return get(FlatSymbolRefAttr::get(moduleName), elements);
+}
+
+bool InstanceType::initialized() const { return getImpl()->initialized(); }
+
+LogicalResult
+InstanceType::initialize(ArrayRef<InstanceElement> elements) {
+  return Base::mutate(elements);
+}
+
+FlatSymbolRefAttr InstanceType::getModuleNameAttr() const {
+  return getImpl()->moduleName;
+}
+
+StringRef InstanceType::getModuleName() const {
+  return getModuleNameAttr().getValue();
+}
+
+ArrayRef<InstanceElement> InstanceType::getElements() const {
+  return getImpl()->getElements();
+}
+
+const InstanceElement &InstanceType::getElement(IntegerAttr index) const {
+  return getElement(index.getValue().getZExtValue());
+}
+
+const InstanceElement &InstanceType::getElement(size_t index) const {
+  return getElements()[index];
+}
+
+uint64_t InstanceType::getFieldID(uint64_t index) const {
+  return getImpl()->fieldIDs[index];
+}
+
+LogicalResult
+InstanceType::verifyAgainstModule(function_ref<InFlightDiagnostic()> emitError,
+                                  FModuleLike module) const {
+  // This check is probably not required, but done for sanity.
+  auto name = getModuleNameAttr().getAttr();
+  auto expectedName = module.getModuleNameAttr();
+  if (name != expectedName)
+    return emitError() << "has wrong name, got" << name << ", expected "
+                       << expectedName;
+
+  auto elements = getElements();
+
+  auto n = elements.size();
+  auto expectedN = module.getNumPorts();
+  if (n != expectedN)
+    return emitError() << "has wrong number of ports, got " << n
+                       << ", expected " << expectedN;
+
+  for (unsigned i = 0; i < n; ++i) {
+    auto element = elements[i];
+
+    auto name = element.name;
+    auto expectedName = module.getPortName(i);
+    if (name != expectedName)
+      return emitError() << "port #" << i << " has wrong name, got '" << name
+                         << "', expected '" << expectedName << "'";
+
+    auto direction = element.direction;
+    auto expectedDirection = module.getPortDirection(i);
+    if (direction != expectedDirection)
+      return emitError() << "port #" << i << " has wrong direction, got "
+                         << direction::toString(direction) << ", expected "
+                         << direction::toString(expectedDirection);
+
+    auto type = element.type;
+    auto expectedType = module.getPortType(i);
+    if (type != expectedType)
+      return emitError() << "port #" << i << "has wrong type, got " << type
+                         << ", expected " << expectedType;
+  }
+
+  return success();
+}
+
+/// TODO: need to print annotations, too!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+void InstanceType::printModuleInterface(OpAsmPrinter &p) const {
+  // format:
+  p.printSymbolName(getModuleName());
+  p << "(";
+  bool first = true;
+  for (auto element : getElements()) {
+    if (!first)
+      p << ", ";
+    p << element.direction << " " << element.name << ": " << element.type;
+    first = false;
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//
 

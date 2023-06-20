@@ -215,14 +215,14 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
   // alive.
   if (!isa<FModuleOp>(op)) {
     auto module = dyn_cast<FModuleLike>(op);
-    for (auto resultNo : llvm::seq(0u, instance.getNumResults())) {
-      auto portVal = instance.getResult(resultNo);
+    for (auto *user : module->getUsers()) {
+      auto subOp = cast<InstanceSubOp>(user);
+      auto index = subOp.getIndex();
       // If this is an output to the extmodule, we can ignore it.
-      if (module.getPortDirection(resultNo) == Direction::Out)
+      if (instance.getElement(index).direction == Direction::Out)
         continue;
-
-      // Otherwise this is an inuput from it or an inout, mark it as alive.
-      markAlive(portVal);
+      // Otherwise this is an input from it or an inout, mark it as alive.
+      markAlive(subOp);
     }
     markAlive(instance);
 
@@ -230,19 +230,20 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
   }
 
   // Otherwise this is a defined module.
-  auto fModule = cast<FModuleOp>(op);
-  markBlockExecutable(fModule.getBodyBlock());
+  auto module = cast<FModuleOp>(op);
+  markBlockExecutable(module.getBodyBlock());
 
   // Ok, it is a normal internal module reference so populate
   // resultPortToInstanceResultMapping.
-  for (auto resultNo : llvm::seq(0u, instance.getNumResults())) {
-    auto instancePortVal = instance.getResult(resultNo).cast<mlir::OpResult>();
+  for (auto *user : instance->getUsers()) {
+    auto subOp = cast<InstanceSubOp>(user);
+    auto index = subOp.getIndex();
 
     // Otherwise we have a result from the instance.  We need to forward results
     // from the body to this instance result's SSA value, so remember it.
-    BlockArgument modulePortVal = fModule.getArgument(resultNo);
-
-    resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
+    BlockArgument modulePortVal = module.getArgument(index);
+    resultPortToInstanceResultMapping[modulePortVal].push_back(
+        subOp->getOpResult(0));
   }
 }
 
@@ -278,7 +279,8 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
 
 void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
   // This tracks constant values of output ports.
-  SmallVector<std::pair<unsigned, APSInt>> constantPortIndicesAndValues;
+
+  SmallDenseMap<unsigned, APSInt> portConstants;
   auto ports = module.getPorts();
   auto *instanceGraphNode = instanceGraph->lookup(module);
 
@@ -294,24 +296,24 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
     // Remember the index and constant value connected to an output port.
     if (auto connect = getSingleConnectUserOf(arg))
       if (auto constant = connect.getSrc().getDefiningOp<ConstantOp>())
-        constantPortIndicesAndValues.push_back({index, constant.getValue()});
+        portConstants[index] = constant.getValue();
   }
 
   // If there is no constant port, abort.
-  if (constantPortIndicesAndValues.empty())
+  if (portConstants.empty())
     return;
 
   // Rewrite all uses.
   for (auto *use : instanceGraphNode->uses()) {
     auto instance = cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
-    for (auto [index, constant] : constantPortIndicesAndValues) {
-      auto result = instance.getResult(index);
-      assert(ports[index].isOutput() && "must be an output port");
-
-      // Replace the port with the constant.
-      result.replaceAllUsesWith(builder.create<ConstantOp>(constant));
-    }
+    instance.eachSubOp([&](InstanceSubOp subOp) {
+      auto index = subOp.getIndex();
+      if (portConstants.count(index)) {
+        auto constant = portConstants[subOp.getIndex()];
+        subOp.replaceAllUsesWith(builder.create<ConstantOp>(constant));
+      }
+    });
   }
 }
 

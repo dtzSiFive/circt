@@ -194,12 +194,19 @@ void InjectDUTHierarchy::runOnOperation() {
       b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
       NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
       false, b.getStringAttr(dutNS.newName(wrapper.getModuleName())));
-  for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
-    Value lhs = dut.getArgument(pair.index());
-    Value rhs = pair.value();
-    if (dut.getPortDirection(pair.index()) == Direction::In)
-      std::swap(lhs, rhs);
-    emitConnect(b, b.getUnknownLoc(), lhs, rhs);
+  for (unsigned i = 0, e = wrapperInst.getNumElements(); i < e; ++i) {
+    auto subOp = b.create<InstanceSubOp>(b.getUnknownLoc(), wrapperInst, i);
+
+    Value dst = dut.getArgument(i);
+    Value src = subOp;
+    if (dut.getPortDirection(i) == Direction::In)
+      std::swap(dst, src);
+    
+    if (isa<PropertyType>(dst.getType())) {
+      b.create<PropAssignOp>(b.getUnknownLoc(), dst, src);
+    } else {
+      emitConnect(b, b.getUnknownLoc(), dst, src);
+    }
   }
 
   // Compute a set of paths that are used _inside_ the wrapper.

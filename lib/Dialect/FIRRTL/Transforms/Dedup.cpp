@@ -61,7 +61,6 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
 struct StructuralHasher {
   explicit StructuralHasher(MLIRContext *context) {
     portTypesAttr = StringAttr::get(context, "portTypes");
-    nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
@@ -204,7 +203,6 @@ struct Equivalence {
       : instanceGraph(instanceGraph) {
     noDedupClass = StringAttr::get(context, noDedupAnnoClass);
     portTypesAttr = StringAttr::get(context, "portTypes");
-    nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
@@ -750,11 +748,10 @@ private:
     // Replace all instances of the other module.
     auto *fromNode = instanceGraph[::cast<hw::HWModuleLike>(fromModule)];
     auto *toNode = instanceGraph[toModule];
-    auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
+    auto newInstanceType = InstanceType::get(toModule);
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
       auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
-      inst.setModuleNameAttr(toModuleRef);
-      inst.setPortNamesAttr(toModule.getPortNamesAttr());
+      inst.setResultType(newInstanceType);
       oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
     }
@@ -1205,23 +1202,24 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
       auto inst = cast<InstanceOp>(instRec->getInstance());
       ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
       builder.setInsertionPointAfter(inst);
-      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
-        auto result = inst.getResult(i);
-        auto newType = module.getPortType(i);
-        auto oldType = result.getType();
+      for (auto *user : inst->getUsers()) {
+        auto subOp = cast<InstanceSubOp>(user);
+        auto index = subOp.getIndex();
+        auto newType = module.getPortType(index);
+        auto oldType = subOp.getType();
         // If the type has not changed, we don't have to fix up anything.
         if (newType == oldType)
           continue;
         // If the type changed we transform it back to the old type with an
         // intermediate wire.
-        auto wire =
-            builder.create<WireOp>(oldType, inst.getPortName(i)).getResult();
-        result.replaceAllUsesWith(wire);
-        result.setType(newType);
-        if (inst.getPortDirection(i) == Direction::Out)
-          fixupConnect(builder, wire, result);
+        auto wire = builder.create<WireOp>(oldType, inst.getPortName(index))
+                        .getResult();
+        subOp.replaceAllUsesWith(wire);
+        subOp.getResult().setType(newType);
+        if (inst.getPortDirection(index) == Direction::Out)
+          fixupConnect(builder, wire, subOp);
         else
-          fixupConnect(builder, result, wire);
+          fixupConnect(builder, subOp, wire);
       }
     }
   }

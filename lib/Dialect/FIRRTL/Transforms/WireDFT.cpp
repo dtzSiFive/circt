@@ -369,7 +369,7 @@ void WireDFTPass::runOnOperation() {
     auto instance = cast<InstanceOp>(*instanceNode->getInstance());
     auto clone = instance.cloneAndInsertPorts({port});
     instanceGraph.replaceInstance(instance, clone);
-    instance->replaceAllUsesWith(clone.getResults().drop_back());
+    instance->replaceAllUsesWith(clone);
     instance->erase();
     return clone;
   };
@@ -420,82 +420,83 @@ void WireDFTPass::runOnOperation() {
       auto clone = insertPortIntoInstance(instanceNode, {portNo, portInfo});
 
       // Set up for the next iteration.
-      signal = clone.getResult(portNo);
+      signal = ImplicitLocOpBuilder(clone.getLoc(), clone)
+                   .create<InstanceSubOp>(clone, portNo);
       node = instanceNode->getParent();
-    }
 
-    // Record the signal in the LCA.
-    signals[node] = signal;
+      // Record the signal in the LCA.
+      signals[node] = signal;
 
-    // Drill the enable signal to each of the leaf clock gates. We do this
-    // searching upward in the hiearchy until we find a module with the signal.
-    // This is a recursive function due to lazyness.
-    portInfo = {portName, uint1Type, Direction::In, {}, loc};
-    std::function<Value(InstanceGraphNode *)> getSignal =
-        [&](InstanceGraphNode *node) -> Value {
-      // Mutable signal reference.
-      auto &signal = signals[node];
+      // Drill the enable signal to each of the leaf clock gates. We do this
+      // searching upward in the hiearchy until we find a module with the
+      // signal. This is a recursive function due to lazyness.
+      portInfo = {portName, uint1Type, Direction::In, {}, loc};
+      std::function<Value(InstanceGraphNode *)> getSignal =
+          [&](InstanceGraphNode *node) -> Value {
+        // Mutable signal reference.
+        auto &signal = signals[node];
 
-      // Early break if this module has already been wired.
-      if (signal)
-        return signal;
+        // Early break if this module has already been wired.
+        if (signal)
+          return signal;
 
-      // Add an input signal to this module.
-      auto module = cast<FModuleOp>(*node->getModule());
-      unsigned portNo = module.getNumPorts();
-      module.insertPorts({{portNo, portInfo}});
-      auto arg = module.getArgument(portNo);
+        // Add an input signal to this module.
+        auto module = cast<FModuleOp>(*node->getModule());
+        unsigned portNo = module.getNumPorts();
+        module.insertPorts({{portNo, portInfo}});
+        auto arg = module.getArgument(portNo);
 
-      // Record the new signal.
-      signal = arg;
+        // Record the new signal.
+        signal = arg;
 
-      // Attach the input signal to each instance of this module.
-      for (auto *instanceNode : node->uses()) {
-        // Add an input signal to this instance op.
-        auto clone = insertPortIntoInstance(instanceNode, {portNo, portInfo});
+        // Attach the input signal to each instance of this module.
+        for (auto *instanceNode : node->uses()) {
+          // Add an input signal to this instance op.
+          auto clone = insertPortIntoInstance(instanceNode, {portNo, portInfo});
 
-        // Wire the parent signal to the instance op.
-        auto *parent = instanceNode->getParent();
+          // Wire the parent signal to the instance op.
+          auto *parent = instanceNode->getParent();
+          auto module = cast<FModuleOp>(*parent->getModule());
+          auto signal = getSignal(parent);
+          auto builder = ImplicitLocOpBuilder::atBlockEnd(
+              module->getLoc(), module.getBodyBlock());
+          emitConnect(builder, clone.getResult(portNo), signal);
+        }
+
+        return arg;
+      };
+
+      // Wire the signal to each clock gate using the helper above.
+      for (auto *instance : targets) {
+        auto *parent = instance->getParent();
         auto module = cast<FModuleOp>(*parent->getModule());
-        auto signal = getSignal(parent);
         auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
                                                         module.getBodyBlock());
-        emitConnect(builder, clone.getResult(portNo), signal);
+        emitConnect(
+            builder,
+            cast<InstanceOp>(*instance->getInstance()).getResult(targetPortNo),
+            getSignal(parent));
       }
-
-      return arg;
+      return success();
     };
 
-    // Wire the signal to each clock gate using the helper above.
-    for (auto *instance : targets) {
-      auto *parent = instance->getParent();
-      auto module = cast<FModuleOp>(*parent->getModule());
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
-                                                      module.getBodyBlock());
-      emitConnect(
-          builder,
-          cast<InstanceOp>(*instance->getInstance()).getResult(targetPortNo),
-          getSignal(parent));
-    }
-    return success();
-  };
+    auto enablePortName = StringAttr::get(&getContext(), testEnPortName);
+    auto bypassPortName =
+        StringAttr::get(&getContext(), requiredClockDivBypassPortName);
+    if (failed(wireUp(enableSignal, enableModule, enablePortName, "enable",
+                      testEnPortNo, clockGates)))
+      return signalPassFailure();
+    if (needsClockDivBypassWiring &&
+        failed(wireUp(clockDivBypassSignal, clockDivBypassModule,
+                      bypassPortName, "clock divider bypass",
+                      clockDivBypassPortNo, clockGatesWithBypass)))
+      return signalPassFailure();
 
-  auto enablePortName = StringAttr::get(&getContext(), testEnPortName);
-  auto bypassPortName =
-      StringAttr::get(&getContext(), requiredClockDivBypassPortName);
-  if (failed(wireUp(enableSignal, enableModule, enablePortName, "enable",
-                    testEnPortNo, clockGates)))
-    return signalPassFailure();
-  if (needsClockDivBypassWiring &&
-      failed(wireUp(clockDivBypassSignal, clockDivBypassModule, bypassPortName,
-                    "clock divider bypass", clockDivBypassPortNo,
-                    clockGatesWithBypass)))
-    return signalPassFailure();
+    // And we're done!
+    markAnalysesPreserved<InstanceGraph>();
+  }
 
-  // And we're done!
-  markAnalysesPreserved<InstanceGraph>();
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createWireDFTPass() {
-  return std::make_unique<WireDFTPass>();
-}
+  std::unique_ptr<mlir::Pass>
+  circt::firrtl::createWireDFTPass() {
+    return std::make_unique<WireDFTPass>();
+  }

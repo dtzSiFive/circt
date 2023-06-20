@@ -395,10 +395,10 @@ public:
 /// instance results.
 static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
                               InstanceOp instance) {
-  for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i) {
-    auto result = instance.getResult(i);
-    auto wire = wires[i];
-    mapper.map(result, wire);
+  for (auto *user : instance->getUsers()) {
+    auto subOp = cast<InstanceSubOp>(user);
+    auto index = subOp.getIndex();
+    mapper.map(subOp, wires[index]);
   }
 }
 
@@ -1007,8 +1007,10 @@ void Inliner::flattenInstances(FModuleOp module) {
     auto nestedPrefix = (instance.getName() + "_").str();
     mapPortsToWires(nestedPrefix, b, mapper, beb, target, localSymbols,
                     moduleNamespace, wires, edges);
-    for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
-      instance.getResult(i).replaceAllUsesWith(wires[i]);
+    for (auto *user : instance->getUsers()) {
+      auto subOp = cast<InstanceSubOp>(user);
+      subOp.replaceAllUsesWith(wires[subOp.getIndex()]);
+    }
 
     // Recursively flatten the target module.
     flattenInto(nestedPrefix, b, mapper, beb, edges, target, localSymbols,
@@ -1207,8 +1209,10 @@ void Inliner::inlineInstances(FModuleOp parent) {
     auto nestedPrefix = (instance.getName() + "_").str();
     mapPortsToWires(nestedPrefix, b, mapper, beb, target, {}, moduleNamespace,
                     wires, edges);
-    for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
-      instance.getResult(i).replaceAllUsesWith(wires[i]);
+    for (auto *user : instance->getUsers()) {
+      auto subOp = cast<InstanceSubOp>(user);
+      subOp.replaceAllUsesWith(wires[subOp.getIndex()]);
+    }
 
     // Inline the module, it can be marked as flatten and inline.
     if (toBeFlattened) {

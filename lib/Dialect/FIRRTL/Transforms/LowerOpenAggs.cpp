@@ -413,8 +413,10 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
 LogicalResult Visitor::visitDecl(InstanceOp op) {
   // Rewrite ports same strategy as for modules.
 
-  SmallVector<PortMappingInfo, 16> portMappings(llvm::map_range(
-      op.getResultTypes(), [&](auto type) { return mapPortType(type); }));
+  auto type = op.getResultType();
+  SmallVector<PortMappingInfo, 16> portMappings(
+      llvm::map_range(type.getElements(),
+                      [&](auto element) { return mapPortType(element.type); }));
 
   /// Total number of types mapped to.
   size_t countWithErased = 0;
@@ -427,13 +429,17 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
   /// Ports to remove.
   BitVector portsToErase(countWithErased);
 
+  // Mapping from old-port index to new-port indices(0+).
+  SmallVector<SmallVector<size_t>> portMap;
+
   /// Go through each port mapping, gathering information about all new ports.
   LLVM_DEBUG(llvm::dbgs() << "Ports for " << op << ":\n");
   auto result = walkPortMappings(
       portMappings, /*includeErased=*/true,
       [&](auto index, auto &pmi, auto newIndex) -> LogicalResult {
-        LLVM_DEBUG(llvm::dbgs() << "\t" << op.getPortName(index) << " : "
-                                << op.getType(index) << " => " << pmi << "\n");
+        LLVM_DEBUG(llvm::dbgs()
+                   << "\t" << op.getPortName(index) << " : "
+                   << op.getElement(index).type << " => " << pmi << "\n");
         // Index for inserting new points next to this point.
         // (Immediately after current port's index).
         auto idxOfInsertPoint = index + 1;
@@ -492,31 +498,47 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   auto newInst = tempOp.erasePorts(builder, portsToErase);
 
+  // Update each InstanceSubOp to point to updated port index, fixing up
+  // it's users.
+  // Group subops by the port index they refer to.
+  SmallVector<SmallVector<InstanceSubOp, 1>> accesses(op.getNumElements(), {});
+  op.eachSubOp([&](auto sub) { accesses[sub.getIndex()].push_back(sub); });
+
   auto mappingResult = walkPortMappings(
       portMappings, /*includeErased=*/false,
       [&](auto index, PortMappingInfo &pmi, auto newIndex) {
+        // no work to do if the port was unused.
+        if (accesses[index].size() == 0)
+          return success();
+
         // Identity means index -> newIndex.
-        auto oldResult = op.getResult(index);
+        // Update the original subOps for this port in-place.
         if (pmi.identity) {
-          // (Just do the RAUW here instead of tracking the mapping for this
-          // too.)
-          assert(oldResult.getType() == newInst.getType(newIndex));
-          oldResult.replaceAllUsesWith(newInst.getResult(newIndex));
+          for (auto sub : accesses[index]) {
+            assert(sub.getType() == newInst.getElement(newIndex).type);
+            sub.getInputMutable().assign(newInst);
+            sub.setIndex(newIndex);
+          }
           return success();
         }
 
         // Create mappings for updating open aggregate users.
         auto newPortIndex = newIndex;
+        std::optional<Value> newHwResult;
         if (pmi.hwType)
-          hwOnlyAggMap[oldResult] = newInst.getResult(newPortIndex++);
-        else
-          hwOnlyAggMap[oldResult] = std::nullopt;
+          newHwResult = builder.create<InstanceSubOp>(newInst, newPortIndex++);
+        for (auto oldResult : accesses[index]) {
+          hwOnlyAggMap[oldResult] = newHwResult;
+          opsToErase.push_back(oldResult);
+        }
 
         for (auto &field : pmi.fields) {
-          auto ref = FieldRef(oldResult, field.fieldID);
-          auto newVal = newInst.getResult(newPortIndex++);
-          assert(newVal.getType() == field.type);
-          nonHWValues[ref] = newVal;
+          auto newVal = builder.create<InstanceSubOp>(newInst, newPortIndex++);
+          for (auto oldResult : accesses[index]) {
+            auto ref = FieldRef(oldResult, field.fieldID);
+            assert(newVal.getType() == field.type);
+            nonHWValues[ref] = newVal;
+          }
         }
         return success();
       });
