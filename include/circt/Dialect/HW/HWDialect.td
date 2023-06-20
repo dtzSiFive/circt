@@ -27,6 +27,7 @@ def HWDialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
+  let usePropertiesForAttributes = 1;
 
   let extraClassDeclaration = [{
     /// Register all HW types.
