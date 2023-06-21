@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_VERIF_VERIFOPS_H
 
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Verif/Verif.h.inc"
