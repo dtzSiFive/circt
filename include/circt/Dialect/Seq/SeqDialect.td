@@ -23,6 +23,7 @@ def SeqDialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
+  let usePropertiesForAttributes = 1;
   let cppNamespace = "::circt::seq";
 
   let extraClassDeclaration = [{
