@@ -319,6 +319,17 @@ public:
                 setValRefsTo(res, f);
             }
           })
+          .Case<InstanceSubOp>([&](InstanceSubOp sub) {
+            auto res = sub.getResult();
+            auto fieldID = sub.getAccessedField().getFieldID();
+            SmallVector<FieldRef, 4> fields;
+            forallRefersTo(sub.getInput(), [&](FieldRef subBase) {
+              fields.push_back(subBase.getSubField(fieldID));
+              return success();
+            });
+            for (auto f : fields)
+              setValRefsTo(res, f);
+          })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
             auto vecType = sub.getInput().getType();
             auto res = sub.getResult();
@@ -381,20 +392,12 @@ public:
     auto result = ins.getResult();
     worklist.push_back(result);
     setValRefsTo(result, FieldRef(result, 0));
-    // TODO: Need to handle InstanceSubOps!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // for (auto port : ins.getResults()) {
-    //   if (auto type = port.getType().dyn_cast<FIRRTLBaseType>()) {
-    //     worklist.push_back(port);
-    //     if (!type.isGround())
-    //       setValRefsTo(port, FieldRef(port, 0));
-    //   }
-    // }
   }
 
   void handlePorts(FieldRef ref, SmallVectorImpl<Value> &children) {
     if (auto inst = dyn_cast_or_null<InstanceOp>(ref.getDefiningOp())) {
-      auto res = cast<OpResult>(ref.getValue());
-      auto portNum = res.getResultNumber();
+      auto instType = inst.getType();
+      auto portNum = instType.getIndexForFieldID(ref.getFieldID());
       auto refMod =
           dyn_cast_or_null<FModuleOp>(*instanceGraph.getReferencedModule(inst));
       if (!refMod)
@@ -406,12 +409,8 @@ public:
       for (auto modOutPort : pathIter->second) {
         auto outPortNum =
             cast<BlockArgument>(modOutPort.getValue()).getArgNumber();
-        if (modOutPort.getFieldID() == 0) {
-          children.push_back(inst.getResult(outPortNum));
-          return;
-        }
-        FieldRef instanceOutPort(inst.getResult(outPortNum),
-                                 modOutPort.getFieldID());
+        FieldRef instanceOutPort(inst.getResult(),
+                                 instType.getFieldID(outPortNum));
         llvm::append_range(children, fieldToVals[instanceOutPort]);
       }
     } else if (auto mem = dyn_cast<MemOp>(ref.getDefiningOp())) {

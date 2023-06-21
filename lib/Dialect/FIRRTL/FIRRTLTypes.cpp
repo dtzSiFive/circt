@@ -2364,9 +2364,7 @@ struct firrtl::detail::InstanceTypeStorage : public TypeStorage {
   }
 
   InstanceTypeStorage(FlatSymbolRefAttr moduleName)
-      : moduleName(moduleName), elements() {
-
-  }
+      : moduleName(moduleName), elements() {}
 
   bool initialized() const { return elements.data() != nullptr; }
 
@@ -2375,19 +2373,18 @@ struct firrtl::detail::InstanceTypeStorage : public TypeStorage {
     if (elements.data() != nullptr)
       return success(elements == newElements);
 
-    elements = allocator.copyInto(newElements);
-
     uint64_t fieldID = 0;
-    fieldIDs.reserve(elements.size());
+    SmallVector<uint64_t> newFieldIDs;
+    newFieldIDs.reserve(elements.size());
     for (auto &element : elements) {
-      auto type = element.type;
       fieldID += 1;
-      fieldIDs.push_back(fieldID);
+      newFieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
-      fieldID += getMaxFieldID(type);
+      fieldID += getMaxFieldID(element.type);
     }
     maxFieldID = fieldID;
-
+    fieldIDs = allocator.copyInto(ArrayRef(newFieldIDs));
+    elements = allocator.copyInto(newElements);
     return success();
   }
 
@@ -2399,7 +2396,7 @@ struct firrtl::detail::InstanceTypeStorage : public TypeStorage {
 
   FlatSymbolRefAttr moduleName;
   ArrayRef<InstanceElement> elements;
-  SmallVector<uint64_t, 4> fieldIDs;
+  ArrayRef<uint64_t> fieldIDs;
   uint64_t maxFieldID;
 };
 
@@ -2426,8 +2423,7 @@ InstanceType InstanceType::get(StringAttr moduleName,
 
 bool InstanceType::initialized() const { return getImpl()->initialized(); }
 
-LogicalResult
-InstanceType::initialize(ArrayRef<InstanceElement> elements) {
+LogicalResult InstanceType::initialize(ArrayRef<InstanceElement> elements) {
   return Base::mutate(elements);
 }
 
@@ -2453,6 +2449,13 @@ const InstanceElement &InstanceType::getElement(size_t index) const {
 
 uint64_t InstanceType::getFieldID(uint64_t index) const {
   return getImpl()->fieldIDs[index];
+}
+
+uint64_t InstanceType::getIndexForFieldID(uint64_t fieldID) const {
+  assert(!getElements().empty() && "Instance must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
 }
 
 LogicalResult

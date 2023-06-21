@@ -577,8 +577,17 @@ def InstanceImpl : FIRRTLImplType<"Instance", [MutableTypeTrait],
     const InstanceElement &getElement(IntegerAttr index) const;
     const InstanceElement &getElement(size_t index) const;
 
-    /// TODO: Remove this? Will not work with recursive types.
+    /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+    /// to each field in a instance type in a recursive pre-order walk of all
+    /// fields, visiting all nested aggregate fields.  A field ID of 0 is used
+    /// to reference the bundle itself. The ID can be used to uniquely identify
+    /// any specific field in this bundle.
     uint64_t getFieldID(uint64_t index) const;
+
+    /// Find the element index corresponding to the desired fieldID.  If the
+    /// fieldID corresponds to a field in a nested aggregate, it will return the
+    /// index of the parent field.
+    uint64_t getIndexForFieldID(uint64_t fieldID) const;
 
     /// Verify this type against the given module.
     LogicalResult verifyAgainstModule(
