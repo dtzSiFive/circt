@@ -26,7 +26,6 @@ def SVDialect : Dialect {
 
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
-  let usePropertiesForAttributes = 1;
 
   let extraClassDeclaration = [{
     /// Register all SV types.
