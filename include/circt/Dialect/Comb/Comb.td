@@ -27,6 +27,7 @@ def CombDialect : Dialect {
     representation of combinational logic outside of a particular use-case.
   }];
   let hasConstantMaterializer = 1;
+  let usePropertiesForAttributes = 1;
   let cppNamespace = "::circt::comb";
 }
 
