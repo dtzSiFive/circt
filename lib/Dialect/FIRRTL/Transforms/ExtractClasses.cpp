@@ -165,14 +165,16 @@ void ExtractClassesPass::updateInstances(FModuleOp moduleOp) {
 
     // Clean up uses of property pins. This amounts to erasing property
     // assignments for now.
-    for (int propertyIndex : modulePortsToErase.set_bits()) {
-      for (Operation *user : llvm::make_early_inc_range(
-               oldInstance.getResult(propertyIndex).getUsers())) {
-        assert(isa<FConnectLike>(user) &&
-               "expected property pins to be used in property assignments");
-        user->erase();
+    oldInstance.eachSubOp([&](auto subOp) {
+      if (modulePortsToErase.test(subOp.getIndex())) {
+        for (Operation *user : llvm::make_early_inc_range(subOp->getUsers())) {
+          assert(isa<FConnectLike>(user) &&
+                 "expected property pins to be used in property assignments");
+          user->erase();
+        }
+        subOp->erase();
       }
-    }
+    });
 
     // Erase the original instance.
     node->erase();
