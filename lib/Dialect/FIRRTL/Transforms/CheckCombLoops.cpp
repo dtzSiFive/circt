@@ -179,31 +179,34 @@ public:
           // Add the Value to `children`, to which a path exists from `dfsVal`.
           for (auto dfsFromVal : aliasingValues) {
 
+            auto addChildIfFType = [&children](auto child) {
+              if (child && firrtl::type_isa<FIRRTLType>(child.getType()))
+                children.push_back(child);
+            };
             for (auto &use : dfsFromVal.getUses()) {
-              auto childVal =
-                  TypeSwitch<Operation *, Value>(use.getOwner())
-                      // Registers stop walk for comb loops.
-                      .Case<RegOp, RegResetOp>([](auto _) { return Value(); })
-                      // For non-register declarations, look at data result.
-                      .Case<Forceable>([](auto op) { return op.getDataRaw(); })
-                      // Handle connect ops specially.
-                      .Case<FConnectLike>([&](FConnectLike connect) -> Value {
-                        if (use.getOperandNumber() == 1) {
-                          auto dst = connect.getDest();
-                          if (handleConnects(dst, inputArgFields).succeeded())
-                            return dst;
-                        }
-                        return {};
-                      })
-                      // For everything else (e.g., expressions), if has single
-                      // result use that.
-                      .Default([](auto op) -> Value {
-                        if (op->getNumResults() == 1)
-                          return op->getResult(0);
-                        return {};
-                      });
-              if (childVal && type_isa<FIRRTLType>(childVal.getType()))
-                children.push_back(childVal);
+              TypeSwitch<Operation *>(use.getOwner())
+                  // Registers stop walk for comb loops.
+                  .Case<RegOp, RegResetOp>([](auto _) {})
+                  // For non-register declarations, look at data result.
+                  .Case<Forceable>([&](auto op) {
+                    addChildIfFType(op.getDataRaw());
+                    if (op.isForceable())
+                      addChildIfFType(op.getDataRef());
+                  })
+                  // Handle connect ops specially.
+                  .Case<FConnectLike>([&](FConnectLike connect) {
+                    if (use.getOperandNumber() == 1) {
+                      auto dst = connect.getDest();
+                      if (handleConnects(dst, inputArgFields).succeeded())
+                        addChildIfFType(dst);
+                    }
+                  })
+                  // For everything else (e.g., expressions), if has single
+                  // result use that.
+                  .Default([&](auto op) {
+                    if (op->getNumResults() == 1)
+                      addChildIfFType(op->getResult(0));
+                  });
             }
           }
           for (auto childVal : children) {
