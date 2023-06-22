@@ -249,8 +249,6 @@ public:
     // All the input ports are added to the worklist.
     for (BlockArgument arg : module.getArguments()) {
       auto argType = type_cast<FIRRTLType>(arg.getType());
-      if (type_isa<RefType>(argType))
-        continue;
       if (module.getPortDirection(arg.getArgNumber()) == Direction::In)
         worklist.push_back(arg);
       if (!argType.isGround())
