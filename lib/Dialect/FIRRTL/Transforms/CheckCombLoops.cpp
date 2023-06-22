@@ -365,6 +365,10 @@ public:
           setValRefsTo(port, FieldRef(port, 0));
       } else if (auto type = type_dyn_cast<PropertyType>(port.getType())) {
         worklist.push_back(port);
+      } else if (auto type = dyn_cast<RefType>(port.getType())) {
+        worklist.push_back(port);
+        if (!type.getType().isGround())
+          setValRefsTo(port, FieldRef(port, 0));
       }
     }
   }

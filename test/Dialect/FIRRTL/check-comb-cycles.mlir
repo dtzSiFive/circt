@@ -587,16 +587,16 @@ firrtl.circuit "CycleThroughForceable"   {
 
 // -----
 
-firrtl.circuit "Properties"   {
-  firrtl.module @Child(in %in: !firrtl.string, out %out: !firrtl.string) {
-    firrtl.propassign %out, %in : !firrtl.string
-  }
-  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: Properties.{child0.in <- child0.out <- child0.in}}}
-  firrtl.module @Properties() {
-    %in, %out = firrtl.instance child0 @Child(in in: !firrtl.string, out out: !firrtl.string)
-    firrtl.propassign %in, %out : !firrtl.string
+firrtl.circuit "CycleThroughForceableRef"   {
+  // expected-error @below {{sample path: CycleThroughForceableRef.{w <- ... <- n <- w}}}
+  firrtl.module @CycleThroughForceableRef() {
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    %n, %n_ref = firrtl.node %w forceable : !firrtl.uint<1>
+    %read = firrtl.ref.resolve %n_ref : !firrtl.rwprobe<uint<1>>
+    firrtl.strictconnect %w, %read : !firrtl.uint<1>
   }
 }
+
 
 // -----
 
@@ -604,7 +604,7 @@ firrtl.circuit "References"   {
   firrtl.module private @Child(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
     firrtl.ref.define %out, %in : !firrtl.probe<uint<1>>
   }
-  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: Properties.{child0.in <- child0.out <- child0.in}}}
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: References.{child0.in <- child0.out <- child0.in}}}
   firrtl.module @References() {
     %in, %out = firrtl.instance child0 @Child(in in: !firrtl.probe<uint<1>>, out out: !firrtl.probe<uint<1>>)
     firrtl.ref.define %in, %out : !firrtl.probe<uint<1>>
