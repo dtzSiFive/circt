@@ -321,23 +321,29 @@ public:
             }
           })
           .Case<RefSubOp>([&](RefSubOp sub) {
-            auto res = sub.getResult();
             bool isValid = false;
-            sub.getIndex();
-            auto index = sub.getAccessedField().getFieldID();
+            auto refInputType = sub.getInput().getType();
+            size_t fieldID =
+                TypeSwitch<FIRRTLBaseType, size_t>(refInputType.getType())
+                    .Case<FVectorType, BundleType>([&](auto type) {
+                      return type.getFieldID(sub.getIndex());
+                    });
+
             SmallVector<FieldRef, 4> fields;
             forallRefersTo(
                 sub.getInput(),
                 [&](FieldRef subBase) {
                   isValid = true;
-                  fields.push_back(subBase.getSubField(index));
+                  fields.push_back(subBase.getSubField(fieldID));
                   return success();
                 },
                 false);
-            if (isValid) {
-              for (auto f : fields)
-                setValRefsTo(res, f);
-            }
+            if (!isValid)
+              return;
+
+            auto res = sub.getResult();
+            for (auto f : fields)
+              setValRefsTo(res, f);
           })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
             auto vecType = sub.getInput().getType();
@@ -439,7 +445,7 @@ public:
     // especially across instances or when we trace through aliasing values.
     // We're about to exit, and can afford to do some slower work here.
     auto getName = [&](Value v) {
-      if (isa_and_nonnull<SubfieldOp, SubindexOp, SubaccessOp>(
+      if (isa_and_nonnull<SubfieldOp, SubindexOp, SubaccessOp, RefSubOp>(
               v.getDefiningOp())) {
         assert(!valRefersTo[v].empty());
         // Pick representative of the "alias set", not deterministic.
@@ -504,7 +510,7 @@ public:
     forallRefersTo(dst, pathsToOutPort);
 
     if (onlyFieldZero) {
-      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp, RefSubOp>(
+      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp>(
               dst.getDefiningOp()))
         return failure();
     }
