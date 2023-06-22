@@ -320,6 +320,25 @@ public:
                 setValRefsTo(res, f);
             }
           })
+          .Case<RefSubOp>([&](RefSubOp sub) {
+            auto res = sub.getResult();
+            bool isValid = false;
+            sub.getIndex();
+            auto index = sub.getAccessedField().getFieldID();
+            SmallVector<FieldRef, 4> fields;
+            forallRefersTo(
+                sub.getInput(),
+                [&](FieldRef subBase) {
+                  isValid = true;
+                  fields.push_back(subBase.getSubField(index));
+                  return success();
+                },
+                false);
+            if (isValid) {
+              for (auto f : fields)
+                setValRefsTo(res, f);
+            }
+          })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
             auto vecType = sub.getInput().getType();
             auto res = sub.getResult();
@@ -485,7 +504,7 @@ public:
     forallRefersTo(dst, pathsToOutPort);
 
     if (onlyFieldZero) {
-      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp>(
+      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp, RefSubOp>(
               dst.getDefiningOp()))
         return failure();
     }
