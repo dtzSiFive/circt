@@ -631,6 +631,22 @@ firrtl.circuit "RefSubLoop" {
 }
 
 // -----
+
+firrtl.circuit "Issue4691" {
+  firrtl.module private @Send(in %val: !firrtl.uint<2>, out %x: !firrtl.probe<uint<2>>) {
+    %ref_val = firrtl.ref.send %val : !firrtl.uint<2>
+    firrtl.ref.define %x, %ref_val : !firrtl.probe<uint<2>>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: Issue4691.{sub.val <- ... <- sub.x <- sub.val}}}
+  firrtl.module @Issue4691(out %x : !firrtl.uint<2>) {
+    %sub_val, %sub_x = firrtl.instance sub @Send(in val: !firrtl.uint<2>, out x: !firrtl.probe<uint<2>>)
+    %res = firrtl.ref.resolve %sub_x : !firrtl.probe<uint<2>>
+    firrtl.connect %sub_val, %res : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.strictconnect %x, %sub_val : !firrtl.uint<2>
+  }
+}
+
+// -----
 // Incorrect visit of instance op results was resulting in missed cycles.
 
 firrtl.circuit "Bug5442" {
