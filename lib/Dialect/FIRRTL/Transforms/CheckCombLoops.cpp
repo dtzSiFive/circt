@@ -254,6 +254,9 @@ public:
       auto argType = type_cast<FIRRTLType>(arg.getType());
       if (module.getPortDirection(arg.getArgNumber()) == Direction::In)
         worklist.push_back(arg);
+      if (auto refType = dyn_cast<RefType>(argType);
+          refType && !refType.getType().isGround())
+        setValRefsTo(arg, FieldRef(arg, 0));
       if (!argType.isGround())
         setValRefsTo(arg, FieldRef(arg, 0));
     }
@@ -263,11 +266,38 @@ public:
       TypeSwitch<Operation *>(&op)
           // Wire is added to the worklist
           .Case<WireOp>([&](WireOp wire) {
-            worklist.push_back(wire.getResult());
-            auto ty = type_dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
-            if (ty && !ty.isGround())
-              setValRefsTo(wire.getResult(), FieldRef(wire.getResult(), 0));
+            worklist.push_back(wire.getData());
+            if (wire.isForceable())
+              worklist.push_back(wire.getRef());
+            if (!wire.getDataType().isGround()) {
+              setValRefsTo(wire.getData(), FieldRef(wire.getData(), 0));
+              if (wire.isForceable()) {
+                // ??
+                setValRefsTo(wire.getRef(), FieldRef(wire.getRef(), 0));
+               // setValRefsTo(wire.getRef(), FieldRef(wire.getData(), 0));
+               // setValRefsTo(wire.getData(), FieldRef(wire.getRef(), 0));
+              }
+            }
           })
+          //.Case<NodeOp>([&](NodeOp node) {
+          //  worklist.push_back(node.getData());
+          //  if (node.isForceable()) {
+          //    worklist.push_back(node.getRef());
+          //    // oof
+          //    setValRefsTo(node.getRef(), FieldRef(node.getData(), 0));
+          //    // setValRefsTo(node.getRef(), FieldRef(node.getRef(), 0));
+          //    setValRefsTo(node.getData(), FieldRef(node.getRef(), 0));
+          //    //setValRefsTo(node.getData(), FieldRef(node.getRef(), 0));
+          //  }
+          //  if (!node.getDataType().isGround()) {
+          //    setValRefsTo(node.getData(), FieldRef(node.getData(), 0));
+          //    if (node.isForceable()) {
+          //      setValRefsTo(node.getRef(), FieldRef(node.getRef(), 0));
+          //      setValRefsTo(node.getRef(), FieldRef(node.getData(), 0));
+          //      setValRefsTo(node.getData(), FieldRef(node.getRef(), 0));
+          //    }
+          //  }
+          //})
           // All sub elements are added to the worklist.
           .Case<SubfieldOp>([&](SubfieldOp sub) {
             auto res = sub.getResult();
@@ -510,7 +540,7 @@ public:
     forallRefersTo(dst, pathsToOutPort);
 
     if (onlyFieldZero) {
-      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp>(
+      if (isa<RegOp, RegResetOp, SubfieldOp, SubaccessOp, SubindexOp, RefSubOp>(
               dst.getDefiningOp()))
         return failure();
     }
