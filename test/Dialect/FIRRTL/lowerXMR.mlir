@@ -650,7 +650,7 @@ firrtl.circuit "ReadForceable" {
     %x = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<2>>
     // CHECK-NOT: firrtl.ref.resolve
     firrtl.strictconnect %o, %x : !firrtl.uint<2>
-    // CHECK:      %w, %w_ref = firrtl.wire sym @[[wSym]] forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    // CHECK:      %w = firrtl.wire sym @[[wSym]] : !firrtl.uint<2>
     // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref @xmrPath : !hw.inout<i2>
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i2> to !firrtl.uint<2>
     // CHECK:      firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
@@ -669,7 +669,7 @@ firrtl.circuit "RefCast" {
     %w_ro = firrtl.ref.cast %w_ref : (!firrtl.rwprobe<uint<2>>) -> !firrtl.probe<uint<2>>
     %x = firrtl.ref.resolve %w_ro : !firrtl.probe<uint<2>>
     firrtl.strictconnect %o, %x : !firrtl.uint<2>
-    // CHECK-NEXT: %w, %w_ref = firrtl.wire sym @[[wSym]] forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    // CHECK-NEXT: %w = firrtl.wire sym @[[wSym]] : !firrtl.uint<2>
     // CHECK-NEXT: %[[#xmr:]] = sv.xmr.ref @xmrPath : !hw.inout<i2>
     // CHECK-NEXT: %[[#cast:]] = builtin.unrealized_conversion_cast %[[#xmr]] : !hw.inout<i2> to !firrtl.uint<2>
     // CHECK-NEXT: firrtl.strictconnect %o, %[[#cast]] : !firrtl.uint<2>
@@ -683,7 +683,7 @@ firrtl.circuit "ForceRelease" {
   // CHECK: hw.hierpath private @[[XMRPATH:.+]] [@ForceRelease::@[[INST_SYM:.+]], @RefMe::@[[TARGET_SYM:.+]]]
   // CHECK: firrtl.module private @RefMe() {
   firrtl.module private @RefMe(out %p: !firrtl.rwprobe<uint<4>>) {
-    // CHECK-NEXT: %x, %x_ref = firrtl.wire sym @[[TARGET_SYM]] forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    // CHECK-NEXT: %x = firrtl.wire sym @[[TARGET_SYM]] : !firrtl.uint<4>
     %x, %x_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
     // CHECK-NEXT: }
     firrtl.ref.define %p, %x_ref : !firrtl.rwprobe<uint<4>>
@@ -891,6 +891,20 @@ firrtl.circuit "RWProbe_field" {
     firrtl.ref.define %rw, %0 : !firrtl.rwprobe<bundle<a: uint<1>>>
     %1 = firrtl.ref.sub %0[0] : !firrtl.rwprobe<bundle<a: uint<1>>>
     firrtl.ref.define %rw_narrow, %1 : !firrtl.rwprobe<uint<1>>
+  }
+}
+
+// -----
+// Check dropping force/etc. ops that target zero-width references.
+
+// CHECK-LABEL: circuit "DropForceOp"
+// CHECK-NOT: force
+firrtl.circuit "DropForceOp" {
+  firrtl.module @DropForceOp() {
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<0>, !firrtl.rwprobe<uint<0>>
+    firrtl.ref.force_initial %c1_ui1, %x_ref, %c0_ui0 : !firrtl.uint<1>, !firrtl.uint<0>
   }
 }
 
