@@ -471,7 +471,7 @@ firrtl.circuit "NLAFlatteningChildRoot" {
 //   1) An inlined symbol is uniqued.
 //   2) An inlined symbol that participates in an NLA is uniqued
 //
-// CHECK-LABEL: CollidingSymbols
+// CHECK-LABEL: CollidingSymbols"
 firrtl.circuit "CollidingSymbols" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@CollidingSymbols::@[[FoobarSym:[_a-zA-Z0-9]+]], @Bar]
   hw.hierpath private @nla1 [@CollidingSymbols::@foo, @Foo::@bar, @Bar]
@@ -489,6 +489,32 @@ firrtl.circuit "CollidingSymbols" {
     firrtl.instance foo sym @foo @Foo()
     %collision_b = firrtl.wire sym @b : !firrtl.uint<1>
     %collision_bar = firrtl.wire sym @bar : !firrtl.uint<1>
+  }
+}
+
+// Test that field-specific symbols are uniqued due to collisions.
+//
+//   1) An inlined symbol is uniqued.
+//   2) An inlined symbol that participates in an NLA is uniqued
+//
+// CHECK-LABEL: CollidingSymbolsFields"
+firrtl.circuit "CollidingSymbolsFields" {
+  // CHECK-NEXT: hw.hierpath private @nla1 [@CollidingSymbolsFields::@[[FoobarSym:[_a-zA-Z0-9]+]], @Bar]
+  hw.hierpath private @nla1 [@CollidingSymbolsFields::@foo, @Foo::@bar, @Bar]
+  firrtl.module @Bar() attributes {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]} {}
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %b = firrtl.wire sym [<@b,1,pubic>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.instance bar sym @bar @Bar()
+  }
+  // CHECK:      firrtl.module @CollidingSymbolsFields
+  // CHECK-NEXT:   firrtl.wire sym @[[inlinedSymbol:[_a-zA-Z0-9]+]]
+  // CHECK-NEXT:   firrtl.instance foo_bar sym @[[FoobarSym]]
+  // CHECK-NOT:    firrtl.wire sym @[[inlinedSymbol]]
+  // CHECK-NOT:    firrtl.wire sym @[[FoobarSym]]
+  firrtl.module @CollidingSymbolsFields() {
+    firrtl.instance foo sym @foo @Foo()
+    %collision_b = firrtl.wire sym @b : !firrtl.uint<1>
+    %collision_bar = firrtl.wire sym [<@bar,1,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   }
 }
 
