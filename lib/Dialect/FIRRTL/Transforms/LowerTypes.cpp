@@ -562,11 +562,9 @@ TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
   for (auto prop : sym) {
     assert(prop);
     const auto fieldID = prop.getFieldID();
-    // XXX: This is wrong, assign these in single pass and any leftover produce error.
     if (fieldID < field.fieldID ||
         fieldID - field.fieldID > field.type.getMaxFieldID())
-      return mlir::emitError(errorLoc)
-             << "can't lower inner symbol, more details TODO";
+      continue;
     props.push_back(hw::InnerSymPropertiesAttr::get(
         ctxt, prop.getName(), prop.getFieldID() - field.fieldID,
         prop.getSymVisibility()));
@@ -634,8 +632,17 @@ bool TypeLoweringVisitor::lowerProducer(
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
 
   hw::InnerSymAttr oldSym;
-  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
+  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
     oldSym = symOp.getInnerSymAttr();
+    if (oldSym) {
+      if (auto rootSymName = oldSym.getSymName()) {
+        mlir::emitError(op->getLoc(),
+                        "unable to lower aggregate due to symbol tracking it");
+        encounteredError = true;
+        return false;
+      }
+    }
+  }
 
   for (auto field : fieldTypes) {
     if (!loweredName.empty()) {
@@ -766,12 +773,11 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 
   // TODO: Get Port-specific loc?
   auto errorLoc = newValue ? newValue.getLoc() : module->getLoc();
-  //if (oldArg.sym) {
-  //  mlir::emitError(errorLoc)
-  //      << "has a symbol, but no symbols may exist on aggregates "
-  //         "passed through LowerTypes";
-  //  encounteredError = true;
-  //}
+  if (oldArg.sym && oldArg.sym.getSymName()) {
+    mlir::emitError(errorLoc)
+        << "has a symbol on aggregate that must be lowered";
+    encounteredError = true;
+  }
   auto newSym = filterSymbols(context, oldArg.sym, srcType, field, errorLoc);
   if (failed(newSym)) {
     mlir::emitError(errorLoc) << " failure lowering argument inner symbol";
