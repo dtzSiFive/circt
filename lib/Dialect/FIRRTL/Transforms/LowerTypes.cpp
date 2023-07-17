@@ -550,6 +550,8 @@ TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
                                    FlatBundleFieldEntry field, Location errorLoc) {
   if (!sym)
     return hw::InnerSymAttr{};
+  assert(!sym.getSymName());
+  // TODO: errorLoc should be used OR drop it.
 
   // TODO: Split into per-field props once, don't re-filter repeatedly.
   // Annotations probably could work this way too.
