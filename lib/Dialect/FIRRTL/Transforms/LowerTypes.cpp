@@ -571,39 +571,6 @@ TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
   }
 
   return hw::InnerSymAttr::get(ctxt, props);
-
-#if 0
-  SmallVector<Attribute> retval;
-  if (!annotations || annotations.empty())
-    return ArrayAttr::get(ctxt, retval);
-  for (auto opAttr : annotations) {
-    Annotation anno(opAttr);
-    auto fieldID = anno.getFieldID();
-    anno.removeMember("circt.fieldID");
-
-    // If no fieldID set, or points to root, forward the annotation without the
-    // fieldID field (which was removed above).
-    if (fieldID == 0) {
-      retval.push_back(anno.getAttr());
-      continue;
-    }
-    // Check whether the annotation falls into the range of the current field.
-
-    if (fieldID < field.fieldID ||
-        fieldID > field.fieldID + field.type.getMaxFieldID())
-      continue;
-
-    // Add fieldID back if non-zero relative to this field.
-    if (auto newFieldID = fieldID - field.fieldID) {
-      // If the target is a subfield/subindex of the current field, create a
-      // new annotation with the correct circt.fieldID.
-      anno.setMember("circt.fieldID", builder->getI32IntegerAttr(newFieldID));
-    }
-
-    retval.push_back(anno.getAttr());
-  }
-  return ArrayAttr::get(ctxt, retval);
-#endif
 }
 
 bool TypeLoweringVisitor::lowerProducer(
