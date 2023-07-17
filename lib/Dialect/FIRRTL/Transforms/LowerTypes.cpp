@@ -404,8 +404,10 @@ private:
   /// modifying as needed to adjust fieldID's relative to to \field.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
                               FIRRTLType srcType, FlatBundleFieldEntry field);
+
   /// Partition a symbol across the specified fields.  Fails if any symbols
-  /// cannot be assigned to a field, such as when inner symbol on root.
+  /// cannot be assigned to a field, such as inner symbol on root.
+  /// Expects fields to be in ascending fieldID order.
   LogicalResult partitionSymbols(hw::InnerSymAttr sym,
                                  ArrayRef<FlatBundleFieldEntry> fields,
                                  SmallVectorImpl<hw::InnerSymAttr> &newSyms,
@@ -547,6 +549,8 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
 LogicalResult TypeLoweringVisitor::partitionSymbols(
     hw::InnerSymAttr sym, ArrayRef<FlatBundleFieldEntry> fields,
     SmallVectorImpl<hw::InnerSymAttr> &newSyms, Location errorLoc) {
+
+  // No symbol, nothing to partition.
   if (!sym)
     return success();
 
@@ -597,6 +601,7 @@ LogicalResult TypeLoweringVisitor::partitionSymbols(
           context, propIt->getName(), relFieldID, propIt->getSymVisibility()));
     } while (++propIt != propEnd);
 
+    // If symbols target this field or its children, set the inner sym attr.
     if (!propsForField.empty())
       newSym = hw::InnerSymAttr::get(context, propsForField);
 
