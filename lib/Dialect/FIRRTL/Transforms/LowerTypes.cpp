@@ -550,6 +550,9 @@ hw::InnerSymAttr TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt,
                                                     FlatBundleFieldEntry field) {
   if (!sym)
     return hw::InnerSymAttr{};
+  // This originally returned error but current code does not handle errors
+  // very well (sets flag and continues on), so for now check preconditions
+  // early in callers and assert this wasn't missed.
   assert(!sym.getSymName());
 
   // TODO: Split into per-field props once, don't re-filter repeatedly.
@@ -734,6 +737,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
+  // Check assumption that should be handled by caller. :(
   assert(!oldArg.sym || !oldArg.sym.getSymName());
   auto newSym = filterSymbols(context, oldArg.sym, srcType, field);
 
