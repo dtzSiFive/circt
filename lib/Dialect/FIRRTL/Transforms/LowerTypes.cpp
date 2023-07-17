@@ -642,14 +642,14 @@ bool TypeLoweringVisitor::lowerProducer(
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
   if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
-    if (failed(
-            partitionSymbols(symOp.getInnerSymAttr(), fieldTypes, fieldSyms, symOp.getLoc()))) {
+    if (failed(partitionSymbols(symOp.getInnerSymAttr(), fieldTypes, fieldSyms,
+                                symOp.getLoc()))) {
       encounteredError = true;
       return false;
     }
   }
 
-  for (const auto & [field, sym] : llvm::zip(fieldTypes, fieldSyms)) {
+  for (const auto &[field, sym] : llvm::zip(fieldTypes, fieldSyms)) {
     if (!loweredName.empty()) {
       loweredName.resize(baseNameLen);
       loweredName += field.suffix;
@@ -684,7 +684,7 @@ bool TypeLoweringVisitor::lowerProducer(
 
   processUsers(op->getResult(0), lowered);
   return true;
-  }
+}
 
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   for (auto *user : llvm::make_early_inc_range(val.getUsers())) {
@@ -758,7 +758,8 @@ void TypeLoweringVisitor::lowerModule(FModuleLike op) {
 std::pair<Value, PortInfo>
 TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
-                            FlatBundleFieldEntry field, PortInfo &oldArg, hw::InnerSymAttr newSym) {
+                            FlatBundleFieldEntry field, PortInfo &oldArg,
+                            hw::InnerSymAttr newSym) {
   Value newValue;
   FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
   if (auto mod = llvm::dyn_cast<FModuleOp>(module)) {
@@ -794,16 +795,17 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
     return false;
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
-  if (failed(partitionSymbols(newArgs[argIndex].sym, fieldTypes, fieldSyms, newArgs[argIndex].loc))) {
+  if (failed(partitionSymbols(newArgs[argIndex].sym, fieldTypes, fieldSyms,
+                              newArgs[argIndex].loc))) {
     encounteredError = true;
     return false;
   }
 
-  for (const auto & [idx, field, fieldSym] : llvm::enumerate(fieldTypes, fieldSyms)) {
-    auto newValue = addArg(module, 1 + argIndex + idx, argsRemoved,
-                           srcType, field, newArgs[argIndex], fieldSym);
-    newArgs.insert(newArgs.begin() + 1 + argIndex + idx,
-                   newValue.second);
+  for (const auto &[idx, field, fieldSym] :
+       llvm::enumerate(fieldTypes, fieldSyms)) {
+    auto newValue = addArg(module, 1 + argIndex + idx, argsRemoved, srcType,
+                           field, newArgs[argIndex], fieldSym);
+    newArgs.insert(newArgs.begin() + 1 + argIndex + idx, newValue.second);
     // Lower any other arguments by copying them to keep the relative order.
     lowering.push_back(newValue.first);
   }
