@@ -405,6 +405,13 @@ private:
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
                               FIRRTLType srcType, FlatBundleFieldEntry field);
 
+  /// Filter out and return \p symbols that target includes \field,
+  /// modifying as needed to adjust fieldID's relative to to \field.
+  FailureOr<hw::InnerSymAttr> filterSymbols(MLIRContext *ctxt,
+                                            hw::InnerSymAttr sym,
+                                            FIRRTLType srcType,
+                                            FlatBundleFieldEntry field);
+
   PreserveAggregate::PreserveMode
   getPreservationModeForModule(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
@@ -536,6 +543,48 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
     retval.push_back(anno.getAttr());
   }
   return ArrayAttr::get(ctxt, retval);
+}
+
+FailureOr<hw::InnerSymAttr>
+TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
+                                   FIRRTLType srcType,
+                                   FlatBundleFieldEntry field) {
+  if (!sym) return hw::InnerSymAttr{};
+
+return failure();
+
+#if 0
+  SmallVector<Attribute> retval;
+  if (!annotations || annotations.empty())
+    return ArrayAttr::get(ctxt, retval);
+  for (auto opAttr : annotations) {
+    Annotation anno(opAttr);
+    auto fieldID = anno.getFieldID();
+    anno.removeMember("circt.fieldID");
+
+    // If no fieldID set, or points to root, forward the annotation without the
+    // fieldID field (which was removed above).
+    if (fieldID == 0) {
+      retval.push_back(anno.getAttr());
+      continue;
+    }
+    // Check whether the annotation falls into the range of the current field.
+
+    if (fieldID < field.fieldID ||
+        fieldID > field.fieldID + field.type.getMaxFieldID())
+      continue;
+
+    // Add fieldID back if non-zero relative to this field.
+    if (auto newFieldID = fieldID - field.fieldID) {
+      // If the target is a subfield/subindex of the current field, create a
+      // new annotation with the correct circt.fieldID.
+      anno.setMember("circt.fieldID", builder->getI32IntegerAttr(newFieldID));
+    }
+
+    retval.push_back(anno.getAttr());
+  }
+  return ArrayAttr::get(ctxt, retval);
+#endif
 }
 
 bool TypeLoweringVisitor::lowerProducer(
@@ -687,6 +736,12 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
            "passed through LowerTypes";
     encounteredError = true;
   }
+  auto newSym = filterSymbols(context, oldArg.sym, srcType, field);
+  if (failed(newSym)) {
+    mlir::emitError(newValue ? newValue.getLoc() : module->getLoc())
+        << " failure lowering argument inner symbol";
+    encounteredError = true;
+  }
 
   // Populate the new arg attributes.
   auto newAnnotations = filterAnnotations(
@@ -697,7 +752,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   return std::make_pair(newValue, PortInfo{name,
                                            fieldType,
                                            direction,
-                                           {},
+                                           *newSym,
                                            oldArg.loc,
                                            AnnotationSet(newAnnotations)});
 }
