@@ -765,6 +765,15 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
+  if (auto oldSym = newArgs[argIndex].sym) {
+    if (auto rootSymName = oldSym.getSymName()) {
+      mlir::emitError(newArgs[argIndex].loc,
+                      "unable to lower aggregate due to symbol tracking it");
+      encounteredError = true;
+      return false;
+    }
+  }
+
   // TODO: Error handling/plumbing.
   for (const auto &field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(), argsRemoved,
