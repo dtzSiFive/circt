@@ -407,10 +407,9 @@ private:
 
   /// Filter out and return \p symbols that target includes \field,
   /// modifying as needed to adjust fieldID's relative to to \field.
-  FailureOr<hw::InnerSymAttr> filterSymbols(MLIRContext *ctxt,
-                                            hw::InnerSymAttr sym,
-                                            FIRRTLType srcType,
-                                            FlatBundleFieldEntry field);
+  FailureOr<hw::InnerSymAttr>
+  filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym, FIRRTLType srcType,
+                FlatBundleFieldEntry field, Location errorLoc);
 
   PreserveAggregate::PreserveMode
   getPreservationModeForModule(FModuleLike moduleLike);
@@ -548,10 +547,30 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
 FailureOr<hw::InnerSymAttr>
 TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
                                    FIRRTLType srcType,
-                                   FlatBundleFieldEntry field) {
-  if (!sym) return hw::InnerSymAttr{};
+                                   FlatBundleFieldEntry field, Location errorLoc) {
+  if (!sym)
+    return hw::InnerSymAttr{};
 
-return failure();
+  // TODO: Split into per-field props once, don't re-filter repeatedly.
+  // Annotations probably could work this way too.
+
+  SmallVector<hw::InnerSymPropertiesAttr> props;
+  // Ideally this could use an IST::walkSymbols-like method,
+  // but InnerSymAttr::walkSymbols only provides the string while we need fieldID.
+  for (auto prop : sym) {
+    assert(prop);
+    const auto fieldID = prop.getFieldID();
+    // XXX: This is wrong, assign these in single pass and any leftover produce error.
+    if (fieldID < field.fieldID ||
+        fieldID - field.fieldID > field.type.getMaxFieldID())
+      return mlir::emitError(errorLoc)
+             << "can't lower inner symbol, more details TODO";
+    props.push_back(hw::InnerSymPropertiesAttr::get(
+        ctxt, prop.getName(), prop.getFieldID() - field.fieldID,
+        prop.getSymVisibility()));
+  }
+
+  return hw::InnerSymAttr::get(ctxt, props);
 
 #if 0
   SmallVector<Attribute> retval;
@@ -602,14 +621,6 @@ bool TypeLoweringVisitor::lowerProducer(
   if (!peelType(srcFType, fieldTypes, aggregatePreservationMode))
     return false;
 
-  // If an aggregate value has a symbol, emit errors.
-  if (op->hasAttr(cache.innerSymAttr)) {
-    op->emitError() << "has a symbol, but no symbols may exist on aggregates "
-                       "passed through LowerTypes";
-    encounteredError = true;
-    return false;
-  }
-
   SmallVector<Value> lowered;
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
@@ -619,6 +630,10 @@ bool TypeLoweringVisitor::lowerProducer(
     loweredName = nameAttr.getValue();
   auto baseNameLen = loweredName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
+
+  hw::InnerSymAttr oldSym;
+  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
+    oldSym = symOp.getInnerSymAttr();
 
   for (auto field : fieldTypes) {
     if (!loweredName.empty()) {
@@ -631,6 +646,23 @@ bool TypeLoweringVisitor::lowerProducer(
     ArrayAttr loweredAttrs =
         filterAnnotations(context, oldAnno, srcFType, field);
     auto newVal = clone(field, loweredAttrs);
+
+    auto newSym = filterSymbols(context, oldSym, srcFType, field, op->getLoc());
+    if (failed(newSym)) {
+      op->emitError("error lowering inner symbol");
+      encounteredError = true;
+      return false;
+    }
+
+    // Splitting up something with symbols on it should lower to ops
+    // that also can have symbols on them.
+    if (*newSym) {
+      auto newSymOp = newVal.getDefiningOp<hw::InnerSymbolOpInterface>();
+      assert(
+          newSymOp &&
+          "op with inner symbol lowered to op that cannot take inner symbol");
+      newSymOp.setInnerSymbolAttr(*newSym);
+    }
 
     // Carry over the name, if present.
     if (auto *newOp = newVal.getDefiningOp()) {
@@ -730,17 +762,19 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
-  if (oldArg.sym) {
-    mlir::emitError(newValue ? newValue.getLoc() : module->getLoc())
-        << "has a symbol, but no symbols may exist on aggregates "
-           "passed through LowerTypes";
-    encounteredError = true;
-  }
-  auto newSym = filterSymbols(context, oldArg.sym, srcType, field);
+  // TODO: Get Port-specific loc?
+  auto errorLoc = newValue ? newValue.getLoc() : module->getLoc();
+  //if (oldArg.sym) {
+  //  mlir::emitError(errorLoc)
+  //      << "has a symbol, but no symbols may exist on aggregates "
+  //         "passed through LowerTypes";
+  //  encounteredError = true;
+  //}
+  auto newSym = filterSymbols(context, oldArg.sym, srcType, field, errorLoc);
   if (failed(newSym)) {
-    mlir::emitError(newValue ? newValue.getLoc() : module->getLoc())
-        << " failure lowering argument inner symbol";
+    mlir::emitError(errorLoc) << " failure lowering argument inner symbol";
     encounteredError = true;
+    newSym = hw::InnerSymAttr{};
   }
 
   // Populate the new arg attributes.
@@ -769,6 +803,7 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
+  // TODO: Error handling/plumbing.
   for (const auto &field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(), argsRemoved,
                            srcType, field.value(), newArgs[argIndex]);
