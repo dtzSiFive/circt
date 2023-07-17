@@ -400,8 +400,8 @@ private:
       llvm::function_ref<Value(const FlatBundleFieldEntry &, ArrayAttr)> clone,
       Type srcType = {});
 
-  /// Copy annotations from \p annotations to \p loweredAttrs, except
-  /// annotations with "target" key, that do not match the field suffix.
+  /// Filter out and return \p annotations that target includes \field,
+  /// modifying as needed to adjust fieldID's relative to to \field.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
                               FIRRTLType srcType, FlatBundleFieldEntry field);
 
