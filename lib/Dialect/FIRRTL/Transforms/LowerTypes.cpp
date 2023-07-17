@@ -407,9 +407,9 @@ private:
 
   /// Filter out and return \p symbols that target includes \field,
   /// modifying as needed to adjust fieldID's relative to to \field.
-  FailureOr<hw::InnerSymAttr>
-  filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym, FIRRTLType srcType,
-                FlatBundleFieldEntry field, Location errorLoc);
+  hw::InnerSymAttr filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
+                                 FIRRTLType srcType,
+                                 FlatBundleFieldEntry field);
 
   PreserveAggregate::PreserveMode
   getPreservationModeForModule(FModuleLike moduleLike);
@@ -544,14 +544,13 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   return ArrayAttr::get(ctxt, retval);
 }
 
-FailureOr<hw::InnerSymAttr>
-TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
-                                   FIRRTLType srcType,
-                                   FlatBundleFieldEntry field, Location errorLoc) {
+hw::InnerSymAttr TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt,
+                                                    hw::InnerSymAttr sym,
+                                                    FIRRTLType srcType,
+                                                    FlatBundleFieldEntry field) {
   if (!sym)
     return hw::InnerSymAttr{};
   assert(!sym.getSymName());
-  // TODO: errorLoc should be used OR drop it.
 
   // TODO: Split into per-field props once, don't re-filter repeatedly.
   // Annotations probably could work this way too.
@@ -565,9 +564,9 @@ TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
     if (fieldID < field.fieldID ||
         fieldID - field.fieldID > field.type.getMaxFieldID())
       continue;
-    props.push_back(hw::InnerSymPropertiesAttr::get(
-        ctxt, prop.getName(), prop.getFieldID() - field.fieldID,
-        prop.getSymVisibility()));
+    props.push_back(hw::InnerSymPropertiesAttr::get(ctxt, prop.getName(),
+                                                    fieldID - field.fieldID,
+                                                    prop.getSymVisibility()));
   }
 
   return hw::InnerSymAttr::get(ctxt, props);
@@ -598,16 +597,16 @@ bool TypeLoweringVisitor::lowerProducer(
   auto baseNameLen = loweredName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
 
+  // Get inner symbol list, if applicable and present.
   hw::InnerSymAttr oldSym;
-  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
     oldSym = symOp.getInnerSymAttr();
-    if (oldSym) {
-      if (auto rootSymName = oldSym.getSymName()) {
-        mlir::emitError(op->getLoc(),
-                        "unable to lower aggregate due to symbol tracking it");
-        encounteredError = true;
-        return false;
-      }
+  if (oldSym) {
+    if (auto rootSymName = oldSym.getSymName()) {
+      mlir::emitError(op->getLoc(),
+                      "unable to lower aggregate due to symbol tracking it");
+      encounteredError = true;
+      return false;
     }
   }
 
@@ -623,21 +622,17 @@ bool TypeLoweringVisitor::lowerProducer(
         filterAnnotations(context, oldAnno, srcFType, field);
     auto newVal = clone(field, loweredAttrs);
 
-    auto newSym = filterSymbols(context, oldSym, srcFType, field, op->getLoc());
-    if (failed(newSym)) {
-      op->emitError("error lowering inner symbol");
-      encounteredError = true;
-      return false;
-    }
+    auto newSym = filterSymbols(context, oldSym, srcFType, field);
 
-    // Splitting up something with symbols on it should lower to ops
-    // that also can have symbols on them.
-    if (*newSym) {
+    // If inner symbols on this field, add to new op.
+    if (newSym) {
+      // Splitting up something with symbols on it should lower to ops
+      // that also can have symbols on them.
       auto newSymOp = newVal.getDefiningOp<hw::InnerSymbolOpInterface>();
       assert(
           newSymOp &&
           "op with inner symbol lowered to op that cannot take inner symbol");
-      newSymOp.setInnerSymbolAttr(*newSym);
+      newSymOp.setInnerSymbolAttr(newSym);
     }
 
     // Carry over the name, if present.
@@ -745,12 +740,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
         << "has a symbol on aggregate that must be lowered";
     encounteredError = true;
   }
-  auto newSym = filterSymbols(context, oldArg.sym, srcType, field, errorLoc);
-  if (failed(newSym)) {
-    mlir::emitError(errorLoc) << " failure lowering argument inner symbol";
-    encounteredError = true;
-    newSym = hw::InnerSymAttr{};
-  }
+  auto newSym = filterSymbols(context, oldArg.sym, srcType, field);
 
   // Populate the new arg attributes.
   auto newAnnotations = filterAnnotations(
@@ -758,12 +748,9 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
-  return std::make_pair(newValue, PortInfo{name,
-                                           fieldType,
-                                           direction,
-                                           *newSym,
-                                           oldArg.loc,
-                                           AnnotationSet(newAnnotations)});
+  return std::make_pair(newValue,
+                        PortInfo{name, fieldType, direction, newSym, oldArg.loc,
+                                 AnnotationSet(newAnnotations)});
 }
 
 // Lower arguments with bundle type by flattening them.
