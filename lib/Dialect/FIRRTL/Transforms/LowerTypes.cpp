@@ -622,6 +622,7 @@ bool TypeLoweringVisitor::lowerProducer(
         filterAnnotations(context, oldAnno, srcFType, field);
     auto newVal = clone(field, loweredAttrs);
 
+    // Filter symbols on this field, if any.
     auto newSym = filterSymbols(context, oldSym, srcFType, field);
 
     // If inner symbols on this field, add to new op.
@@ -733,13 +734,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
-  // TODO: Get Port-specific loc?
-  auto errorLoc = newValue ? newValue.getLoc() : module->getLoc();
-  if (oldArg.sym && oldArg.sym.getSymName()) {
-    mlir::emitError(errorLoc)
-        << "has a symbol on aggregate that must be lowered";
-    encounteredError = true;
-  }
+  assert(!oldArg.sym || !oldArg.sym.getSymName());
   auto newSym = filterSymbols(context, oldArg.sym, srcType, field);
 
   // Populate the new arg attributes.
