@@ -349,7 +349,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
                                     unsigned insertPtOffset, FIRRTLType srcType,
                                     FlatBundleFieldEntry field,
-                                    PortInfo &oldArg);
+                                    PortInfo &oldArg, hw::InnerSymAttr newSym);
 
   // Helpers to manage state.
   bool visitDecl(FExtModuleOp op);
@@ -404,12 +404,12 @@ private:
   /// modifying as needed to adjust fieldID's relative to to \field.
   ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
                               FIRRTLType srcType, FlatBundleFieldEntry field);
-
-  /// Filter out and return \p symbols that target includes \field,
-  /// modifying as needed to adjust fieldID's relative to to \field.
-  hw::InnerSymAttr filterSymbols(MLIRContext *ctxt, hw::InnerSymAttr sym,
-                                 FIRRTLType srcType,
-                                 FlatBundleFieldEntry field);
+  /// Partition a symbol across the specified fields.  Fails if any symbols
+  /// cannot be assigned to a field, such as when inner symbol on root.
+  LogicalResult partitionSymbols(hw::InnerSymAttr sym,
+                                 ArrayRef<FlatBundleFieldEntry> fields,
+                                 SmallVectorImpl<hw::InnerSymAttr> &newSyms,
+                                 Location errorLoc);
 
   PreserveAggregate::PreserveMode
   getPreservationModeForModule(FModuleLike moduleLike);
@@ -544,35 +544,75 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
   return ArrayAttr::get(ctxt, retval);
 }
 
-hw::InnerSymAttr TypeLoweringVisitor::filterSymbols(MLIRContext *ctxt,
-                                                    hw::InnerSymAttr sym,
-                                                    FIRRTLType srcType,
-                                                    FlatBundleFieldEntry field) {
+LogicalResult TypeLoweringVisitor::partitionSymbols(
+    hw::InnerSymAttr sym, ArrayRef<FlatBundleFieldEntry> fields,
+    SmallVectorImpl<hw::InnerSymAttr> &newSyms, Location errorLoc) {
   if (!sym)
-    return hw::InnerSymAttr{};
-  // This originally returned error but current code does not handle errors
-  // very well (sets flag and continues on), so for now check preconditions
-  // early in callers and assert this wasn't missed.
-  assert(!sym.getSymName());
+    return success();
 
-  // TODO: Split into per-field props once, don't re-filter repeatedly.
-  // Annotations probably could work this way too.
+  auto *context = sym.getContext();
 
-  SmallVector<hw::InnerSymPropertiesAttr> props;
-  // Ideally this could use an IST::walkSymbols-like method,
-  // but InnerSymAttr::walkSymbols only provides the string while we need fieldID.
-  for (auto prop : sym) {
-    assert(prop);
-    const auto fieldID = prop.getFieldID();
-    if (fieldID < field.fieldID ||
-        fieldID - field.fieldID > field.type.getMaxFieldID())
-      continue;
-    props.push_back(hw::InnerSymPropertiesAttr::get(ctxt, prop.getName(),
-                                                    fieldID - field.fieldID,
-                                                    prop.getSymVisibility()));
+  // Helper for getting max fieldID from const FIRRTLBaseType's.
+  auto getMaxFieldID = [](const FIRRTLBaseType type) {
+    return FIRRTLBaseType(type).getMaxFieldID();
+  };
+
+  newSyms.resize(fields.size());
+
+  // Sort inner symbols by fieldID if not already sorted.
+  auto props = llvm::to_vector(sym);
+  if (props.empty())
+    return success();
+  llvm::stable_sort(props, [&](const auto &L, const auto &R) {
+    return L.getFieldID() < R.getFieldID();
+  });
+
+  // Double-check fields are in increasing order.
+  assert(llvm::is_sorted(fields, [&](const auto &L, const auto &R) {
+    return L.fieldID < R.fieldID &&
+           (R.fieldID - L.fieldID) > getMaxFieldID(L.type);
+  }));
+
+  // Walk fields, gather symbols that target each and assign with
+  // fieldID's updated to be relative.
+  // If any symbols target fieldID's not covered by these ranges,
+  // they cannot be preserved and generate an error.
+  auto propIt = props.begin(), propEnd = props.end();
+  for (auto [field, newSym] : llvm::zip(fields, newSyms)) {
+    // Error if inner symbol target is before this.
+    if (propIt->getFieldID() < field.fieldID)
+      return mlir::emitError(errorLoc)
+             << "unable to lower due to symbol " << propIt->getName()
+             << " with target not preserved by lowering";
+    // Consume inner_syms on this field.
+    SmallVector<hw::InnerSymPropertiesAttr> propsForField;
+    do {
+      assert(propIt->getFieldID() >= field.fieldID);
+      auto relFieldID = propIt->getFieldID() - field.fieldID;
+      // If skips this field, we're done.
+      if (relFieldID > getMaxFieldID(field.type))
+        break;
+      // Otherwise, add to list and continue.
+      propsForField.push_back(hw::InnerSymPropertiesAttr::get(
+          context, propIt->getName(), relFieldID, propIt->getSymVisibility()));
+    } while (++propIt != propEnd);
+
+    if (!propsForField.empty())
+      newSym = hw::InnerSymAttr::get(context, propsForField);
+
+    // If all symbols are consumed, we're done.
+    if (propIt == propEnd)
+      return success();
   }
 
-  return hw::InnerSymAttr::get(ctxt, props);
+  // Report diagnostic on first non-consumed symbol.
+  if (propIt != propEnd) {
+    return mlir::emitError(errorLoc)
+           << "unable to lower due to symbol " << propIt->getName()
+           << " with target not preserved by lowering";
+  }
+
+  return success();
 }
 
 bool TypeLoweringVisitor::lowerProducer(
@@ -600,20 +640,16 @@ bool TypeLoweringVisitor::lowerProducer(
   auto baseNameLen = loweredName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
 
-  // Get inner symbol list, if applicable and present.
-  hw::InnerSymAttr oldSym;
-  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
-    oldSym = symOp.getInnerSymAttr();
-  if (oldSym) {
-    if (auto rootSymName = oldSym.getSymName()) {
-      mlir::emitError(op->getLoc(),
-                      "unable to lower aggregate due to symbol tracking it");
+  SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
+  if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+    if (failed(
+            partitionSymbols(symOp.getInnerSymAttr(), fieldTypes, fieldSyms, symOp.getLoc()))) {
       encounteredError = true;
       return false;
     }
   }
 
-  for (auto field : fieldTypes) {
+  for (const auto & [field, sym] : llvm::zip(fieldTypes, fieldSyms)) {
     if (!loweredName.empty()) {
       loweredName.resize(baseNameLen);
       loweredName += field.suffix;
@@ -625,18 +661,15 @@ bool TypeLoweringVisitor::lowerProducer(
         filterAnnotations(context, oldAnno, srcFType, field);
     auto newVal = clone(field, loweredAttrs);
 
-    // Filter symbols on this field, if any.
-    auto newSym = filterSymbols(context, oldSym, srcFType, field);
-
     // If inner symbols on this field, add to new op.
-    if (newSym) {
+    if (sym) {
       // Splitting up something with symbols on it should lower to ops
       // that also can have symbols on them.
       auto newSymOp = newVal.getDefiningOp<hw::InnerSymbolOpInterface>();
       assert(
           newSymOp &&
           "op with inner symbol lowered to op that cannot take inner symbol");
-      newSymOp.setInnerSymbolAttr(newSym);
+      newSymOp.setInnerSymbolAttr(sym);
     }
 
     // Carry over the name, if present.
@@ -651,7 +684,7 @@ bool TypeLoweringVisitor::lowerProducer(
 
   processUsers(op->getResult(0), lowered);
   return true;
-}
+  }
 
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   for (auto *user : llvm::make_early_inc_range(val.getUsers())) {
@@ -725,7 +758,7 @@ void TypeLoweringVisitor::lowerModule(FModuleLike op) {
 std::pair<Value, PortInfo>
 TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
-                            FlatBundleFieldEntry field, PortInfo &oldArg) {
+                            FlatBundleFieldEntry field, PortInfo &oldArg, hw::InnerSymAttr newSym) {
   Value newValue;
   FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
   if (auto mod = llvm::dyn_cast<FModuleOp>(module)) {
@@ -736,10 +769,6 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
-
-  // Check assumption that should be handled by caller. :(
-  assert(!oldArg.sym || !oldArg.sym.getSymName());
-  auto newSym = filterSymbols(context, oldArg.sym, srcType, field);
 
   // Populate the new arg attributes.
   auto newAnnotations = filterAnnotations(
@@ -764,20 +793,16 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
-  if (auto oldSym = newArgs[argIndex].sym) {
-    if (auto rootSymName = oldSym.getSymName()) {
-      mlir::emitError(newArgs[argIndex].loc,
-                      "unable to lower aggregate due to symbol tracking it");
-      encounteredError = true;
-      return false;
-    }
+  SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
+  if (failed(partitionSymbols(newArgs[argIndex].sym, fieldTypes, fieldSyms, newArgs[argIndex].loc))) {
+    encounteredError = true;
+    return false;
   }
 
-  // TODO: Error handling/plumbing.
-  for (const auto &field : llvm::enumerate(fieldTypes)) {
-    auto newValue = addArg(module, 1 + argIndex + field.index(), argsRemoved,
-                           srcType, field.value(), newArgs[argIndex]);
-    newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
+  for (const auto & [idx, field, fieldSym] : llvm::enumerate(fieldTypes, fieldSyms)) {
+    auto newValue = addArg(module, 1 + argIndex + idx, argsRemoved,
+                           srcType, field, newArgs[argIndex], fieldSym);
+    newArgs.insert(newArgs.begin() + 1 + argIndex + idx,
                    newValue.second);
     // Lower any other arguments by copying them to keep the relative order.
     lowering.push_back(newValue.first);
