@@ -4728,6 +4728,19 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
       loc, "ref.sub op requires a RefType of vector or bundle base type");
 }
 
+FIRRTLType RWProbeOp::inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      std::optional<Location> loc) {
+  auto type = getAttr<TypeAttr>(attrs, "type");
+  auto baseType = type_dyn_cast<FIRRTLBaseType>(type.getValue());
+  if (!baseType)
+    return emitInferRetTypeError(loc, "must be base type, not ", baseType);
+  auto forceableType = firrtl::detail::getForceableResultType(true, baseType);
+  if (!forceableType)
+    return emitInferRetTypeError(loc, "cannot force type ", type);
+  return forceableType;
+}
+
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
