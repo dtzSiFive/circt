@@ -2939,7 +2939,8 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Not public port (verifier)
 
   // Check probe expression is base-type.
-  if (!type_isa<FIRRTLBaseType>(staticRef.getType()))
+  auto targetType = type_dyn_cast<FIRRTLBaseType>(staticRef.getType());
+  if (!targetType)
     return emitError(startTok.getLoc(),
                      "expected base-type expression in 'rwprobe', got ")
            << staticRef.getType();
@@ -2955,10 +2956,8 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     auto sym = getInnerRefTo(
         hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
         [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
-    result = builder.create<RWProbeOp>(
-        sym, type_cast<FIRRTLBaseType>(staticRef.getType()));
+    result = builder.create<RWProbeOp>(sym, targetType);
     return success();
-    // return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
   }
 
   auto *definingOp = target.getDefiningOp();
