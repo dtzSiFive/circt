@@ -1156,6 +1156,21 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 }
 
+def RWProbeOp : FIRRTLExprOp<"rwprobe"> {
+  let summary = "FIRRTL RWProbe";
+  let description = [{
+    Obtain a read+forceable rwprobe to the local component by symbol.
+    ```
+      %result = firrtl.rwprobe @mod::@sym : !firrtl.rwprobe<t>
+    ```
+    }];
+
+  let arguments = (ins InnerRefAttr:$innerRef);
+  let results = (outs RefType:$result);
+
+  let assemblyFormat = "$innerRef `:` type($result)";
+}
+
 //===----------------------------------------------------------------------===//
 // LTL Dialect Sequence and Property Intrinsics
 //===----------------------------------------------------------------------===//
