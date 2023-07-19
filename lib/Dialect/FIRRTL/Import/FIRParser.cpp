@@ -2952,11 +2952,11 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     // :( :( :(
     auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
     ModuleNamespace ns(mod);
-    auto sym = getOrAddInnerSym(
-        hw::InnerSymTarget(arg.getArgNumber(), mod),
-        [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
-    builder.create<RWProbeOp>(sym,
-                              type_cast<FIRRTLBaseType>(staticRef.getType()));
+    auto sym =
+        getInnerRefTo(hw::InnerSymTarget(arg.getArgNumber(), mod),
+                      [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
+    result = builder.create<RWProbeOp>(
+        sym, type_cast<FIRRTLBaseType>(staticRef.getType()));
     return success();
     // return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
   }
