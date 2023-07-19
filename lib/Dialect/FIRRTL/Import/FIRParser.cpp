@@ -2952,9 +2952,9 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     // :( :( :(
     auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
     ModuleNamespace ns(mod);
-    auto sym =
-        getInnerRefTo(hw::InnerSymTarget(arg.getArgNumber(), mod),
-                      [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
+    auto sym = getInnerRefTo(
+        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
+        [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
     result = builder.create<RWProbeOp>(
         sym, type_cast<FIRRTLBaseType>(staticRef.getType()));
     return success();
