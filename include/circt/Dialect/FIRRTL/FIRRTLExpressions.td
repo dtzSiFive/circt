@@ -1162,11 +1162,11 @@ def RWProbeOp : FIRRTLExprOp<"ref.rwprobe"> {
     Create a RWProbe for the target.
     Target must be local.
     ```
-      %result = firrtl.rwprobe @mod::@sym : !firrtl.rwprobe<t>
+      %result = firrtl.rwprobe @sym : !firrtl.rwprobe<t>
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target, TypeAttrOf<FIRRTLBaseType>:$type);
+  let arguments = (ins InnerSymAttr:$target, TypeAttrOf<FIRRTLBaseType>:$type);
   let results = (outs RefType:$result);
   let assemblyFormat = "$target attr-dict `:` $type";
 }
