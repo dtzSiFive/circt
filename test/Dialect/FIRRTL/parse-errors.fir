@@ -626,14 +626,6 @@ circuit RWProbeConst:
 
 ;// -----
 
-circuit RWProbePort:
-  module RWProbePort:
-    input in : UInt<1>[2]
-    output p : RWProbe<UInt<1>>
-    define p = rwprobe(in[1]) ; expected-error {{rwprobe of port not yet supported}}
-
-;// -----
-
 FIRRTL version 2.0.0
 circuit PartialConnect_v2p0p0:
   module PartialConnect_v2p0p0:
