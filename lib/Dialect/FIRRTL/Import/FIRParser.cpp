@@ -2948,9 +2948,18 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   auto fieldRef = getFieldRefFromValue(staticRef);
   auto target = fieldRef.getValue();
 
-  // TODO: Support for non-public ports.
-  if (isa<BlockArgument>(target))
-    return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  if (auto arg = dyn_cast<BlockArgument>(target)) {
+    // :( :( :(
+    auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    ModuleNamespace ns(mod);
+    auto sym = getOrAddInnerSym(
+        hw::InnerSymTarget(arg.getArgNumber(), mod),
+        [&](FModuleOp mod) -> ModuleNamespace & { return ns; });
+    builder.create<RWProbeOp>(sym,
+                              type_cast<FIRRTLBaseType>(staticRef.getType()));
+    return success();
+    // return emitError(startTok.getLoc(), "rwprobe of port not yet supported");
+  }
 
   auto *definingOp = target.getDefiningOp();
   if (!definingOp)
