@@ -4663,6 +4663,10 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
@@ -4723,6 +4727,67 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
   return emitInferRetTypeError(
       loc, "ref.sub op requires a RefType of vector or bundle base type");
 }
+
+FIRRTLType RWProbeOp::inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      std::optional<Location> loc) {
+  auto typeAttr = getAttr<TypeAttr>(attrs, "type");
+  auto type = typeAttr.getValue();
+  auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
+  if (!baseType)
+    return emitInferRetTypeError(loc, "must be base type, not ", type);
+  if (baseType.hasUninferredWidth() || baseType.hasUninferredReset())
+    return emitInferRetTypeError(loc, "must not have uninferred width or reset in type ",
+                                 baseType);
+  auto forceableType = firrtl::detail::getForceableResultType(true, baseType);
+  if (!forceableType)
+    return emitInferRetTypeError(loc, "cannot force type ", type);
+  return forceableType;
+}
+
+LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto targetRef = getTarget();
+  if (!targetRef)
+    return emitOpError("invalid target reference");
+  if (targetRef.getModule() != (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
+    return emitOpError() << "rwprobe target is not in same module";
+
+  auto target = ns.lookup(targetRef);
+  if (!target)
+    return emitOpError() << "unable to resolve target " << target << "\n";
+
+  auto getFinalType = [&](auto type, auto fieldID, Location loc) -> FailureOr<Type> {
+    auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type);
+    if (fieldIDType)
+      return fieldIDType.getFinalTypeByFieldID(fieldID);
+    if (fieldID != 0) {
+      auto diag = emitOpError() << "target does not support fieldID";
+      return diag.attachNote(loc) << "target";
+    }
+    return type;
+  };
+  auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
+    auto fType = getFinalType(type, target.getField(), loc);
+    if (failed(fType))
+      return failure();
+    if (*fType != getType())
+      return emitOpError("target resolves to ")
+             << *fType << " instead of expected " << getType();
+    return success();
+  };
+  if (target.isPort()) {
+    auto mod = cast<FModuleLike>(target.getOp());
+    return checkFinalType(mod.getPortType(target.getPort()),
+                          mod.getPortLocation(target.getPort()));
+  } else {
+    hw::InnerSymbolOpInterface symOp =
+        cast<hw::InnerSymbolOpInterface>(target.getOp());
+    if (!symOp.getTargetResult())
+      return emitOpError("target does not resolve to a result");
+    return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
+  }
+}
+
 
 //===----------------------------------------------------------------------===//
 // Optional Group Operations
