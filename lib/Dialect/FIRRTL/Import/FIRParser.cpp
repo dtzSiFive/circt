@@ -3660,11 +3660,9 @@ ParseResult FIRStmtParser::parseNode() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  bool forceable =
-      !!firrtl::detail::getForceableResultType(true, initializer.getType());
   auto result =
       builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
-                             annotations, sym, forceable);
+                             annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -3693,9 +3691,8 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
-                                       annotations, sym, forceable);
+                                       annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -3788,17 +3785,16 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   if (resetSignal)
     result = builder
                  .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
                                      NameKindEnum::InterestingName, annotations,
-                                     sym, forceable)
+                                     sym)
                  .getResult();
   else
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
-                                annotations, sym, forceable)
+                                annotations, sym)
                  .getResult();
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3829,12 +3825,11 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   auto result = builder
                     .create<RegResetOp>(type, clock, resetSignal, resetValue,
                                         id, NameKindEnum::InterestingName,
                                         getConstants().emptyArrayAttr,
-                                        StringAttr{}, forceable)
+                                        StringAttr{})
                     .getResult();
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
@@ -4546,12 +4541,6 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
     if (failed(result))
       return result;
   }
-
-  // Demote any forceable operations that aren't being forced.
-  deferredModule.moduleOp.walk([](Forceable fop) {
-    if (fop.isForceable() && fop.getDataRef().use_empty())
-      firrtl::detail::replaceWithNewForceability(fop, false);
-  });
 
   return success();
 }
