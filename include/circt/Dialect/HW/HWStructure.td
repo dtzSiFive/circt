@@ -107,6 +107,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 }
 
 def HWDesignOp : HWOp<"design", [
+    AffiineScope,
     IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol,
     OpAsmOpInterface
   ] # GraphRegionNoTerminator.traits> {
