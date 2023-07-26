@@ -41,6 +41,7 @@ class FuncDialect;
 namespace circt {
 namespace hw {
 class HWModuleLike;
+class HWDesignOp;
 class HWDialect;
 } // namespace hw
 

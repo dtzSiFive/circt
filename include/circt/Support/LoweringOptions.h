@@ -17,9 +17,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 
-namespace mlir {
-class ModuleOp;
-}
+namespace circt::hw {
+  class HWDesignOp;
+} // end namespace circt::hw
 
 namespace circt {
 
