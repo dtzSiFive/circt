@@ -3384,6 +3384,19 @@ ModulePortInfo HWTestModuleOp::getPortList() {
 }
 
 //===----------------------------------------------------------------------===//
+// HWDesignOp
+//===----------------------------------------------------------------------===/
+
+void HWDesignOp::build(OpBuilder &builder, OperationState &state, std::optional<StringRef> name) {
+  state.addRegion()->emplaceBlock();
+  if (name) {
+    state.attributes.push_back(builder.getNamedAttr(
+        mlir::SymbolTable::getSymbolAttrName(), builder.getStringAttr(*name)));
+  }
+}
+
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
