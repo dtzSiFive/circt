@@ -85,7 +85,7 @@ def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
 
   let constructor = "createTestApplyLoweringOptionPass()";
   let dependentDialects = [
-    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
+    "circt::sv::SVDialect", "circt::comb::CombDialect", "::circt::hw::HWDialect"
   ];
   let options = [
     Option<"options", "options", "std::string", "", "Lowering Options">

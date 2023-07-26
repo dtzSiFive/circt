@@ -16,7 +16,7 @@
 include "mlir/Pass/PassBase.td"
 include "mlir/Rewrite/PassUtil.td"
 
-def FlattenMemRef : Pass<"flatten-memref", "::hw::HWDesignOp"> {
+def FlattenMemRef : Pass<"flatten-memref", "::circt::hw::HWDesignOp"> {
   let summary = "Flatten memrefs";
   let description = [{
     Flattens multidimensional memories and accesses to them into
