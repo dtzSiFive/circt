@@ -118,7 +118,7 @@ void TestSchedulingAnalysisPass::runOnOperation() {
 
 namespace {
 struct InferTopModulePass
-    : public PassWrapper<InferTopModulePass, OperationPass<hw::DesignOp>> {
+    : public PassWrapper<InferTopModulePass, OperationPass<hw::HWDesignOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InferTopModulePass)
 
   void runOnOperation() override;

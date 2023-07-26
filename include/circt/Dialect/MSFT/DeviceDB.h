@@ -64,8 +64,8 @@ private:
 class PlacementDB {
 public:
   /// Create a placement db containing all the placements in 'topMod'.
-  PlacementDB(hw::DesignOp topMod);
-  PlacementDB(hw::DesignOp topMod, const PrimitiveDB &seed);
+  PlacementDB(hw::HWDesignOp topMod);
+  PlacementDB(hw::HWDesignOp topMod, const PrimitiveDB &seed);
 
   /// Contains the order to iterate in each dimension for walkPlacements. The
   /// dimensions are visited with columns first, then rows, then numbers within
@@ -127,7 +127,7 @@ private:
   };
 
   MLIRContext *ctxt;
-  hw::DesignOp topMod;
+  hw::HWDesignOp topMod;
 
   using DimDevType = DenseMap<PrimitiveType, PlacementCell>;
   using DimNumMap = DenseMap<size_t, DimDevType>;

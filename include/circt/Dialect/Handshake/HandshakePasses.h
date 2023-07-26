@@ -23,9 +23,9 @@ namespace circt {
 namespace handshake {
 class FuncOp;
 
-std::unique_ptr<mlir::OperationPass<hw::DesignOp>>
+std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
 createHandshakeDotPrintPass();
-std::unique_ptr<mlir::OperationPass<hw::DesignOp>>
+std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
 createHandshakeOpCountPass();
 std::unique_ptr<mlir::Pass> createHandshakeMaterializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createHandshakeDematerializeForksSinksPass();

@@ -42,7 +42,7 @@ struct Evaluator {
   instantiate(StringAttr className, ArrayRef<ObjectValue> actualParams);
 
   /// Get the Module this Evaluator is built from.
-  hw::DesignOp getModule();
+  hw::HWDesignOp getModule();
 
 private:
   /// Evaluate a Value in a Class body according to the small expression grammar

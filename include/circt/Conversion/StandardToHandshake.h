@@ -285,10 +285,10 @@ LogicalResult postDataflowConvert(Operation *op);
 
 } // namespace handshake
 
-std::unique_ptr<mlir::OperationPass<hw::DesignOp>>
+std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
 createHandshakeAnalysisPass();
 
-std::unique_ptr<mlir::OperationPass<hw::DesignOp>>
+std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
 createStandardToHandshakePass(bool sourceConstants = false,
                               bool disableTaskPipelining = false);
 

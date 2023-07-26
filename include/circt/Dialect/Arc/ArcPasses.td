@@ -11,7 +11,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def AddTaps : Pass<"arc-add-taps", "hw::DesignOp"> {
+def AddTaps : Pass<"arc-add-taps", "hw::HWDesignOp"> {
   let summary = "Add taps to ports and wires such that they remain observable";
   let constructor = "circt::arc::createAddTapsPass()";
   let dependentDialects = ["arc::ArcDialect"];
@@ -29,7 +29,7 @@ def AllocateState : Pass<"arc-allocate-state", "arc::ModelOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
-def ArcCanonicalizer : Pass<"arc-canonicalizer", "hw::DesignOp"> {
+def ArcCanonicalizer : Pass<"arc-canonicalizer", "hw::HWDesignOp"> {
   let summary = "Simulation centric canonicalizations";
   let constructor = "createArcCanonicalizerPass()";
   let dependentDialects = ["hw::HWDialect",
@@ -41,7 +41,7 @@ def ArcCanonicalizer : Pass<"arc-canonicalizer", "hw::DesignOp"> {
   ];
 }
 
-def Dedup : Pass<"arc-dedup", "hw::DesignOp"> {
+def Dedup : Pass<"arc-dedup", "hw::HWDesignOp"> {
   let summary = "Deduplicate identical arc definitions";
   let description = [{
     This pass deduplicates identical arc definitions. If two arcs differ only by
@@ -58,13 +58,13 @@ def Dedup : Pass<"arc-dedup", "hw::DesignOp"> {
 }
 
 def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
-                                 "hw::DesignOp"> {
+                                 "hw::HWDesignOp"> {
   let summary = "Group reset and enable conditions of lowered states";
   let constructor = "circt::arc::createGroupResetsAndEnablesPass()";
   let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
 }
 
-def InferMemories : Pass<"arc-infer-memories", "hw::DesignOp"> {
+def InferMemories : Pass<"arc-infer-memories", "hw::HWDesignOp"> {
   let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
   let constructor = "circt::arc::createInferMemoriesPass()";
   let dependentDialects = [
@@ -76,7 +76,7 @@ def InferMemories : Pass<"arc-infer-memories", "hw::DesignOp"> {
   ];
 }
 
-def InlineArcs : Pass<"arc-inline" , "hw::DesignOp"> {
+def InlineArcs : Pass<"arc-inline" , "hw::HWDesignOp"> {
   let summary = "Inline very small arcs";
   let constructor = "circt::arc::createInlineArcsPass()";
   let statistics = [
@@ -94,7 +94,7 @@ def InlineArcs : Pass<"arc-inline" , "hw::DesignOp"> {
   ];
 }
 
-def InlineModules : Pass<"arc-inline-modules", "hw::DesignOp"> {
+def InlineModules : Pass<"arc-inline-modules", "hw::HWDesignOp"> {
   let summary = "Eagerly inline private modules";
   let description = [{
     This pass eagerly inlines private HW modules into their instantiation sites.
@@ -109,19 +109,19 @@ def InlineModules : Pass<"arc-inline-modules", "hw::DesignOp"> {
 }
 
 def InferStateProperties : Pass<"arc-infer-state-properties",
-                                "hw::DesignOp"> {
+                                "hw::HWDesignOp"> {
   let summary = "Add resets and enables explicitly to the state operations";
   let constructor = "circt::arc::createInferStatePropertiesPass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
 }
 
-def IsolateClocks : Pass<"arc-isolate-clocks", "hw::DesignOp"> {
+def IsolateClocks : Pass<"arc-isolate-clocks", "hw::HWDesignOp"> {
   let summary = "Group clocked operations into clock domains";
   let constructor = "circt::arc::createIsolateClocksPass()";
   let dependentDialects = ["arc::ArcDialect"];
 }
 
-def LatencyRetiming : Pass<"arc-latency-retiming", "hw::DesignOp"> {
+def LatencyRetiming : Pass<"arc-latency-retiming", "hw::HWDesignOp"> {
   let summary = "Push latencies through the design";
   let constructor = "circt::arc::createLatencyRetimingPass()";
   let dependentDialects = ["arc::ArcDialect"];
@@ -134,13 +134,13 @@ def LatencyRetiming : Pass<"arc-latency-retiming", "hw::DesignOp"> {
   ];
 }
 
-def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "hw::DesignOp"> {
+def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "hw::HWDesignOp"> {
   let summary = "Insert temporaries such that state reads don't see writes";
   let constructor = "circt::arc::createLegalizeStateUpdatePass()";
   let dependentDialects = ["arc::ArcDialect"];
 }
 
-def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "hw::DesignOp"> {
+def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "hw::HWDesignOp"> {
   let summary = "Lower clock trees into functions";
   let constructor = "circt::arc::createLowerClocksToFuncsPass()";
   let dependentDialects = ["mlir::func::FuncDialect"];
@@ -152,7 +152,7 @@ def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
 }
 
-def LowerState : Pass<"arc-lower-state", "hw::DesignOp"> {
+def LowerState : Pass<"arc-lower-state", "hw::HWDesignOp"> {
   let summary = "Split state into read and write ops grouped by clock tree";
   let constructor = "circt::arc::createLowerStatePass()";
   let dependentDialects = [
@@ -161,19 +161,19 @@ def LowerState : Pass<"arc-lower-state", "hw::DesignOp"> {
   ];
 }
 
-def MakeTables : Pass<"arc-make-tables", "hw::DesignOp"> {
+def MakeTables : Pass<"arc-make-tables", "hw::HWDesignOp"> {
   let summary = "Transform appropriate arc logic into lookup tables";
   let constructor = "circt::arc::createMakeTablesPass()";
   let dependentDialects = ["arc::ArcDialect"];
 }
 
-def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "hw::DesignOp"> {
+def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "hw::HWDesignOp"> {
   let summary = "Convert muxes with large independent fan-ins to if-statements";
   let constructor = "circt::arc::createMuxToControlFlowPass()";
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
-def PrintStateInfo : Pass<"arc-print-state-info", "hw::DesignOp"> {
+def PrintStateInfo : Pass<"arc-print-state-info", "hw::HWDesignOp"> {
   let summary = "Print the state storage layout in JSON format";
   let constructor = "circt::arc::createPrintStateInfoPass()";
   let options = [
@@ -182,7 +182,7 @@ def PrintStateInfo : Pass<"arc-print-state-info", "hw::DesignOp"> {
   ];
 }
 
-def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "hw::DesignOp"> {
+def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "hw::HWDesignOp"> {
   let summary = "Convert variadic ops into distributed binary ops";
   let constructor = "circt::arc::createSimplifyVariadicOpsPass()";
   let statistics = [
@@ -197,13 +197,13 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "hw::DesignOp"> {
   ];
 }
 
-def SplitLoops : Pass<"arc-split-loops", "hw::DesignOp"> {
+def SplitLoops : Pass<"arc-split-loops", "hw::HWDesignOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
   let dependentDialects = ["arc::ArcDialect"];
 }
 
-def StripSV : Pass<"arc-strip-sv", "hw::DesignOp"> {
+def StripSV : Pass<"arc-strip-sv", "hw::HWDesignOp"> {
   let summary = "Remove SV wire, reg, and assigns";
   let constructor = "circt::arc::createStripSVPass()";
   let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",

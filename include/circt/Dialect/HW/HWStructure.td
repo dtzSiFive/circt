@@ -33,7 +33,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       FunctionOpInterface, Symbol,
-      OpAsmOpInterface, HasParent<"hw::DesignOp">]> {
+      OpAsmOpInterface, HasParent<"hw::HWDesignOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
 
@@ -435,7 +435,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
 }
 
 def HWGeneratorSchemaOp : HWOp<"generator.schema",
-      [Symbol, HasParent<"hw::DesignOp">]> {
+      [Symbol, HasParent<"hw::HWDesignOp">]> {
   let summary = "HW Generator Schema declaration";
   let description = [{
     The "hw.generator.schema" operation declares a kind of generated module by

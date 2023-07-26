@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerSeqToSV: Pass<"lower-seq-to-sv", "hw::DesignOp"> {
+def LowerSeqToSV: Pass<"lower-seq-to-sv", "hw::HWDesignOp"> {
   let summary = "Lower sequential ops to SV.";
   let constructor = "circt::seq::createSeqLowerToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
@@ -25,7 +25,7 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv", "hw::DesignOp"> {
   ];
 }
 
-def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "hw::DesignOp"> {
+def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "hw::HWDesignOp"> {
   let summary = "Prep the module with macro definitions for firrtl registers.";
   let constructor = "circt::seq::createLowerSeqFIRRTLInitToSV()";
   let dependentDialects = ["circt::sv::SVDialect"];
@@ -59,7 +59,7 @@ def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
-def ExternalizeClockGate: Pass<"externalize-clock-gate", "hw::DesignOp"> {
+def ExternalizeClockGate: Pass<"externalize-clock-gate", "hw::HWDesignOp"> {
   let summary = "Convert seq.clock_gate ops into hw.module.extern instances";
   let constructor = "circt::seq::createExternalizeClockGatePass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
@@ -83,7 +83,7 @@ def ExternalizeClockGate: Pass<"externalize-clock-gate", "hw::DesignOp"> {
   ];
 }
 
-def LowerFirMem : Pass<"lower-seq-firmem", "hw::DesignOp"> {
+def LowerFirMem : Pass<"lower-seq-firmem", "hw::HWDesignOp"> {
   let summary = "Lower seq.firmem ops to instances of hw.module.generated ops";
   let constructor = "circt::seq::createLowerFirMemPass()";
   let dependentDialects = ["circt::hw::HWDialect"];

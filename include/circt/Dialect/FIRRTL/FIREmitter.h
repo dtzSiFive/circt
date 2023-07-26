@@ -21,7 +21,7 @@ namespace firrtl {
 
 struct FIRVersion;
 
-mlir::LogicalResult exportFIRFile(hw::DesignOp module, llvm::raw_ostream &os,
+mlir::LogicalResult exportFIRFile(hw::HWDesignOp module, llvm::raw_ostream &os,
                                   std::optional<size_t> targetLineLength,
                                   FIRVersion version);
 

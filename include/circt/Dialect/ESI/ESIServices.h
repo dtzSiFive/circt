@@ -53,7 +53,7 @@ private:
   bool failIfNotFound;
 };
 
-std::unique_ptr<mlir::OperationPass<hw::DesignOp>>
+std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
 createESIConnectServicesPass();
 
 } // namespace esi

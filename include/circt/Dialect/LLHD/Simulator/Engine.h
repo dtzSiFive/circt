@@ -38,7 +38,7 @@ public:
   /// as the mlir::ExecutionEngine with the given module.
   Engine(
       llvm::raw_ostream &out, ModuleOp module,
-      llvm::function_ref<mlir::LogicalResult(hw::DesignOp)> mlirTransformer,
+      llvm::function_ref<mlir::LogicalResult(hw::HWDesignOp)> mlirTransformer,
       llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
       std::string root, TraceMode tm, ArrayRef<StringRef> sharedLibPaths);
 

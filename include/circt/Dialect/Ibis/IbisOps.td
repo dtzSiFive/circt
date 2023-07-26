@@ -28,9 +28,9 @@ def HasCustomSSAName :
 
 def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
-    SymbolTable, SingleBlock,
-    NoTerminator, ScopeOpInterface,
-    HasParent<"hw::DesignOp">]> {
+    Symbol, SymbolTable, SingleBlock,
+    NoTerminator, NoRegionArguments,
+    HasParent<"hw::HWDesignOp">]> {
 
   let summary = "Ibis class";
   let description = [{

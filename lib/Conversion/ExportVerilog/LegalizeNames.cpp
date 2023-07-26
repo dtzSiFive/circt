@@ -96,7 +96,7 @@ class GlobalNameResolver {
 public:
   /// Construct a GlobalNameResolver and perform name legalization of the
   /// module/interfaces, port/parameter and declaration names.
-  GlobalNameResolver(hw::DesignOp topLevel, const LoweringOptions &options);
+  GlobalNameResolver(hw::HWDesignOp topLevel, const LoweringOptions &options);
 
   GlobalNameTable takeGlobalNameTable() { return std::move(globalNameTable); }
 
@@ -108,7 +108,7 @@ private:
   void legalizeInterfaceNames(InterfaceOp interface);
 
   // Gathers prefixes of enum types by inspecting typescopes in the module.
-  void gatherEnumPrefixes(hw::DesignOp topLevel);
+  void gatherEnumPrefixes(hw::HWDesignOp topLevel);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNameResolver;
@@ -203,7 +203,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
 
 /// Construct a GlobalNameResolver and do the initial scan to populate and
 /// unique the module/interfaces and port/parameter names.
-GlobalNameResolver::GlobalNameResolver(hw::DesignOp topLevel,
+GlobalNameResolver::GlobalNameResolver(hw::HWDesignOp topLevel,
                                        const LoweringOptions &options) {
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
@@ -247,7 +247,7 @@ GlobalNameResolver::GlobalNameResolver(hw::DesignOp topLevel,
 }
 
 // Gathers prefixes of enum types by investigating typescopes in the module.
-void GlobalNameResolver::gatherEnumPrefixes(hw::DesignOp topLevel) {
+void GlobalNameResolver::gatherEnumPrefixes(hw::HWDesignOp topLevel) {
   auto *ctx = topLevel.getContext();
   for (auto typeScope : topLevel.getOps<hw::TypeScopeOp>()) {
     for (auto typeDecl : typeScope.getOps<hw::TypedeclOp>()) {

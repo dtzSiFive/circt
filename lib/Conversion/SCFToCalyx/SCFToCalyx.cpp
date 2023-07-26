@@ -1501,7 +1501,7 @@ public:
       : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {}
   void runOnOperation() override;
 
-  LogicalResult setTopLevelFunction(hw::DesignOp moduleOp,
+  LogicalResult setTopLevelFunction(hw::HWDesignOp moduleOp,
                                     std::string &topLevelFunction) {
     if (!topLevelFunctionOpt.empty()) {
       if (SymbolTable::lookupSymbolIn(moduleOp, topLevelFunctionOpt) ==
@@ -1540,9 +1540,9 @@ public:
   LogicalResult labelEntryPoint(StringRef topLevelFunction) {
     // Program legalization - the partial conversion driver will not run
     // unless some pattern is provided - provide a dummy pattern.
-    struct DummyPattern : public OpRewritePattern<hw::DesignOp> {
+    struct DummyPattern : public OpRewritePattern<hw::HWDesignOp> {
       using OpRewritePattern::OpRewritePattern;
-      LogicalResult matchAndRewrite(hw::DesignOp,
+      LogicalResult matchAndRewrite(hw::HWDesignOp,
                                     PatternRewriter &) const override {
         return failure();
       }

@@ -26,7 +26,7 @@ class ModuleOp;
 namespace circt {
 namespace calyx {
 
-mlir::LogicalResult exportCalyx(hw::DesignOp module, llvm::raw_ostream &os);
+mlir::LogicalResult exportCalyx(hw::HWDesignOp module, llvm::raw_ostream &os);
 
 void registerToCalyxTranslation();
 

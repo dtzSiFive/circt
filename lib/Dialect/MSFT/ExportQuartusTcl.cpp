@@ -31,7 +31,7 @@ using namespace circt;
 using namespace hw;
 using namespace msft;
 
-TclEmitter::TclEmitter(hw::DesignOp topLevel)
+TclEmitter::TclEmitter(hw::HWDesignOp topLevel)
     : topLevel(topLevel), populated(false) {}
 
 LogicalResult TclEmitter::populate() {

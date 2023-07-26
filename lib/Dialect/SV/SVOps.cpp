@@ -1804,7 +1804,7 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto module = (*this)->getParentOfType<hw::DesignOp>();
+  auto module = (*this)->getParentOfType<hw::HWDesignOp>();
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
       symbolTable.lookupSymbolIn(module, getInstance().getModule()));
   if (!hwModule)
