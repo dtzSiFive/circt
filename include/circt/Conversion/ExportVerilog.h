@@ -16,6 +16,10 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
+namespace circt::hw {
+class HWDesignOp;
+} // end namespace circt::hw
+
 namespace circt {
 
 std::unique_ptr<mlir::Pass>

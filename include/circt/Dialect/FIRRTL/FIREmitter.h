@@ -16,12 +16,16 @@
 
 #include "circt/Support/LLVM.h"
 
+namespace circt::hw {
+class HWDesignOp;
+} // end namespace circt::hw
+
 namespace circt {
 namespace firrtl {
 
 struct FIRVersion;
 
-mlir::LogicalResult exportFIRFile(hw::HWDesignOp module, llvm::raw_ostream &os,
+mlir::LogicalResult exportFIRFile(::circt::hw::HWDesignOp module, llvm::raw_ostream &os,
                                   std::optional<size_t> targetLineLength,
                                   FIRVersion version);
 

@@ -22,10 +22,13 @@
 #include <memory>
 
 namespace mlir {
-class ModuleOp;
 template <typename T>
 class OperationPass;
 } // namespace mlir
+
+namespace circt::hw {
+class HWDesignOp;
+} // end namespace circt::hw
 
 namespace circt {
 
