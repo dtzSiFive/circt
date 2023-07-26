@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def HandshakeDotPrint : Pass<"handshake-print-dot", "hw::HWDesignOp"> {
+def HandshakeDotPrint : Pass<"handshake-print-dot", "::circt::hw::HWDesignOp"> {
   let summary = "Print .dot graph of a handshake function.";
   let description = [{
     This pass analyses a handshake.func operation and prints a .dot graph of the
@@ -26,7 +26,7 @@ def HandshakeDotPrint : Pass<"handshake-print-dot", "hw::HWDesignOp"> {
   let constructor = "circt::handshake::createHandshakeDotPrintPass()";
 }
 
-def HandshakeOpCount : Pass<"handshake-op-count", "hw::HWDesignOp"> {
+def HandshakeOpCount : Pass<"handshake-op-count", "::circt::hw::HWDesignOp"> {
   let summary = "Count the number of operations (resources) in a handshake function.";
   let description = [{
     This pass analyses a handshake.func operation and prints the number of
@@ -62,7 +62,7 @@ def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp
   let constructor = "circt::handshake::createHandshakeRemoveBuffersPass()";
 }
 
-def HandshakeLowerExtmemToHW : Pass<"handshake-lower-extmem-to-hw", "hw::HWDesignOp"> {
+def HandshakeLowerExtmemToHW : Pass<"handshake-lower-extmem-to-hw", "::circt::hw::HWDesignOp"> {
   let summary = "Lowers handshake.extmem and memref inputs to ports.";
   let description = [{
     Lowers handshake.extmem and memref inputs to a hardware-targeting

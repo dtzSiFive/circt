@@ -38,7 +38,7 @@ def UndefinedOp : CalyxOp<"undef", [
 }
 
 def ComponentOp : CalyxOp<"component", [
-    HasParent<"hw::HWDesignOp">,
+    HasParent<"::circt::hw::HWDesignOp">,
     RegionKindInterface,
     SymbolTable, /* contains Cell names. */
     Symbol,
@@ -152,7 +152,7 @@ def ComponentOp : CalyxOp<"component", [
 }
 
 def CombComponentOp : CalyxOp<"comb_component", [
-    HasParent<"hw::HWDesignOp">,
+    HasParent<"::circt::hw::HWDesignOp">,
     SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionOpInterface,

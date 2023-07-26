@@ -30,7 +30,7 @@ def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
     Symbol, SymbolTable, SingleBlock,
     NoTerminator, NoRegionArguments,
-    HasParent<"hw::HWDesignOp">]> {
+    HasParent<"::circt::hw::HWDesignOp">]> {
 
   let summary = "Ibis class";
   let description = [{

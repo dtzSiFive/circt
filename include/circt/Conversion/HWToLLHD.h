@@ -23,7 +23,7 @@ class ModuleOp;
 } // namespace mlir
 
 namespace circt {
-std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
+std::unique_ptr<mlir::OperationPass<::circt::hw::HWDesignOp>>
 createConvertHWToLLHDPass();
 } // namespace circt
 

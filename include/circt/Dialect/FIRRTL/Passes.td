@@ -117,7 +117,7 @@ def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> 
   ];
 }
 
-def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "hw::HWDesignOp"> {
+def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "::circt::hw::HWDesignOp"> {
   let summary = "Intermodule dead code elimination";
   let description = [{
     This pass performs inter-module liveness analysis and deletes dead code
@@ -169,7 +169,7 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
   ];
 }
 
-def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "hw::HWDesignOp"> {
+def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "::circt::hw::HWDesignOp"> {
   let summary = "Emit metadata of the FIRRTL modules";
   let description = [{
     This pass handles the emission of several different kinds of metadata.
@@ -655,7 +655,7 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
-def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "hw::HWDesignOp"> {
+def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "::circt::hw::HWDesignOp"> {
   let summary = "Eliminate dead inner symbols";
   let description = [{
     This pass deletes all inner symbols which have no uses. This is necessary to
@@ -691,7 +691,7 @@ def DropConst : Pass<"firrtl-drop-const", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createDropConstPass()";
 }
 
-def FinalizeIR : Pass<"firrtl-finalize-ir", "hw::HWDesignOp"> {
+def FinalizeIR : Pass<"firrtl-finalize-ir", "::circt::hw::HWDesignOp"> {
   let summary = "Perform final IR mutations after ExportVerilog";
   let description = [{
     This pass finalizes the IR after it has been exported with ExportVerilog,
@@ -702,7 +702,7 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "hw::HWDesignOp"> {
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
-def ExtractClasses : Pass<"firrtl-extract-classes", "hw::HWDesignOp"> {
+def ExtractClasses : Pass<"firrtl-extract-classes", "::circt::hw::HWDesignOp"> {
   let summary = "Extract OM classes from FIRRTL modules with properties";
   let description = [{
     This pass walks all FIRRTL modules and creates OM classes from their non-RTL

@@ -22,7 +22,7 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 
 def ESIPureModuleOp : ESI_Op<"pure_module",
       [Symbol, NoTerminator, RegionKindInterface, NoRegionArguments,
-       SingleBlock, HasParent<"hw::HWDesignOp">,
+       SingleBlock, HasParent<"::circt::hw::HWDesignOp">,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "ESI pure module";
   let description = [{
