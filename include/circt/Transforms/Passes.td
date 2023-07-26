@@ -25,7 +25,7 @@ def FlattenMemRef : Pass<"flatten-memref", "::circt::hw::HWDesignOp"> {
   let dependentDialects = ["mlir::memref::MemRefDialect"];
 }
 
-def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::hw::HWDesignOp"> {
+def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::circt::hw::HWDesignOp"> {
   let summary = "Flatten memref calls";
   let description = [{
     Flattens calls to functions which have multidimensional memrefs as arguments.
@@ -38,7 +38,7 @@ def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::hw::HWDesignOp"> {
   let dependentDialects = ["mlir::memref::MemRefDialect"];
 }
 
-def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::hw::HWDesignOp"> {
+def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::circt::hw::HWDesignOp"> {
   let summary = "Selectively strip debug info from all operations";
 
   let description = [{

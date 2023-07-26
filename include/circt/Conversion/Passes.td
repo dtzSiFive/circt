@@ -580,7 +580,7 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
   let constructor = "circt::createHandshakeRemoveBlockPass()";
 }
 
-def InsertMergeBlocks : Pass<"insert-merge-blocks", "::hw::HWDesignOp"> {
+def InsertMergeBlocks : Pass<"insert-merge-blocks", "::circt::hw::HWDesignOp"> {
   let summary = "Insert explicit merge blocks";
   let description = [{
     This pass inserts additional merge blocks for each block with more than
@@ -598,7 +598,7 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::hw::HWDesignOp"> {
   let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
 }
 
-def MaximizeSSA : Pass<"maximize-ssa", "::hw::HWDesignOp"> {
+def MaximizeSSA : Pass<"maximize-ssa", "::circt::hw::HWDesignOp"> {
   let summary = "Convert every function in the module into maximal SSA form";
   let description = [{
     Convert the region within every function into maximal SSA form. This
