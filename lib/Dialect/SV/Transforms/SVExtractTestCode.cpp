@@ -234,7 +234,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
               .str())));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
-      &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
+      &op->getParentOfType<hw::DesignOp>()->getRegion(0).front());
 
   auto bindOp = b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(),
                                      inst.getInnerSymAttr().getSymName());

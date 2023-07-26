@@ -556,7 +556,7 @@ LogicalResult AggregateConstantOpConversion::matchAndRewrite(
     auto ipSave = rewriter.saveInsertionPoint();
 
     Operation *parent = op->getParentOp();
-    while (!isa<mlir::ModuleOp>(parent->getParentOp())) {
+    while (!isa<hw::DesignOp>(parent->getParentOp())) {
       parent = parent->getParentOp();
     }
 

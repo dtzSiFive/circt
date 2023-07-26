@@ -70,7 +70,7 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
   });
 }
 
-LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
+LogicalResult PassCommon::verifyInstances(hw::DesignOp mod) {
   WalkResult r = mod.walk([&](InstanceOp inst) {
     Operation *modOp = topLevelSyms.getDefinition(inst.getModuleNameAttr());
     if (!isAnyModule(modOp))

@@ -22,7 +22,7 @@ using namespace circt::llhd::sim;
 
 Engine::Engine(
     llvm::raw_ostream &out, ModuleOp module,
-    llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
+    llvm::function_ref<mlir::LogicalResult(hw::DesignOp)> mlirTransformer,
     llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
     std::string root, TraceMode tm, ArrayRef<StringRef> sharedLibPaths)
     : out(out), root(root), traceMode(tm) {

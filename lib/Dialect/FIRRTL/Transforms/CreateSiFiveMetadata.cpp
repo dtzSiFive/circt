@@ -38,7 +38,7 @@ using circt::hw::InstancePath;
 namespace {
 
 struct ObjectModelIR {
-  ObjectModelIR(mlir::ModuleOp moduleOp) : moduleOp(moduleOp) {}
+  ObjectModelIR(hw::DesignOp moduleOp) : moduleOp(moduleOp) {}
   void createMemorySchema() {
     auto *context = moduleOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
@@ -152,7 +152,7 @@ struct ObjectModelIR {
     builderOM.create<om::ClassFieldOp>(
         builderOM.getStringAttr("mem_" + mem.getName()), object);
   }
-  mlir::ModuleOp moduleOp;
+  hw::DesignOp moduleOp;
   om::ClassOp memorySchemaClass;
   om::ClassOp memoryMetadataClass;
   om::ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
@@ -607,7 +607,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   circuitOp = *cIter++;
 
   assert(cIter == circuits.end() &&
-         "cannot handle more than one CircuitOp in a mlir::ModuleOp");
+         "cannot handle more than one CircuitOp in a hw::DesignOp");
 
   auto *body = circuitOp.getBodyBlock();
 

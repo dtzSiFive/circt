@@ -52,7 +52,7 @@ private:
 
 /// A sample reduction pattern that maps `hw.module` to `hw.module.extern`.
 struct ModuleExternalizer : public OpReduction<HWModuleOp> {
-  void beforeReduction(mlir::ModuleOp op) override {
+  void beforeReduction(hw::DesignOp op) override {
     instanceGraph = std::make_unique<InstanceGraph>(op);
     moduleSizes.clear();
   }

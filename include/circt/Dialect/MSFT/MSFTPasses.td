@@ -8,7 +8,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
+def LowerToHW: Pass<"lower-msft-to-hw", "hw::DesignOp"> {
   let summary = "Lower MSFT ops to hw ops";
   let constructor = "circt::msft::createLowerToHWPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
@@ -18,7 +18,7 @@ def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
   ];
 }
 
-def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
+def ExportTcl: Pass<"msft-export-tcl", "hw::DesignOp"> {
   let summary = "Create tcl ops";
   let constructor = "circt::msft::createExportTclPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
@@ -31,31 +31,31 @@ def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
   ];
 }
 
-def Partition: Pass<"msft-partition", "mlir::ModuleOp"> {
+def Partition: Pass<"msft-partition", "hw::DesignOp"> {
   let summary = "Move the entities targeted for a design partition";
   let constructor = "circt::msft::createPartitionPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
-def WireCleanup: Pass<"msft-wire-cleanup", "mlir::ModuleOp"> {
+def WireCleanup: Pass<"msft-wire-cleanup", "hw::DesignOp"> {
   let summary = "Cleanup unnecessary ports and wires";
   let constructor = "circt::msft::createWireCleanupPass()";
   let dependentDialects = [];
 }
 
-def LowerInstances: Pass<"msft-lower-instances", "mlir::ModuleOp"> {
+def LowerInstances: Pass<"msft-lower-instances", "hw::DesignOp"> {
   let summary = "Lower dynamic instances";
   let constructor = "circt::msft::createLowerInstancesPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
-def LowerConstructs: Pass<"msft-lower-constructs", "mlir::ModuleOp"> {
+def LowerConstructs: Pass<"msft-lower-constructs", "hw::DesignOp"> {
   let summary = "Lower high-level constructs";
   let constructor = "circt::msft::createLowerConstructsPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
-def DiscoverAppIDs: Pass<"msft-discover-appids", "mlir::ModuleOp"> {
+def DiscoverAppIDs: Pass<"msft-discover-appids", "hw::DesignOp"> {
   let summary = "Discover the appids in a module hierarchy";
   let constructor = "circt::msft::createDiscoverAppIDsPass()";
 }

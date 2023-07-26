@@ -843,7 +843,7 @@ public:
         pp(os, options.emittedLineLength) {
     pp.setListener(&saver);
   }
-  /// This is the root mlir::ModuleOp that holds the whole design being emitted.
+  /// This is the root hw::DesignOp that holds the whole design being emitted.
   ModuleOp designOp;
 
   const SharedEmitterState &shared;

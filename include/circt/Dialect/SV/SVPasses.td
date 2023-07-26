@@ -59,7 +59,7 @@ def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
 }
 
 def HWStubExternalModules : Pass<"hw-stub-external-modules",
-                                  "mlir::ModuleOp"> {
+                                  "hw::DesignOp"> {
   let summary = "transform external hw modules to empty hw modules";
   let description = [{
       This pass creates empty module bodies for external modules.  This is
@@ -161,7 +161,7 @@ def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
 }
 
 def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
-                                   "mlir::ModuleOp"> {
+                                   "hw::DesignOp"> {
   let summary = "Export module and instance hierarchy information";
   let description = [{
     This pass exports the module and instance hierarchy tree for each module
@@ -174,7 +174,7 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
 }
 
 def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",
-                             "mlir::ModuleOp"> {
+                             "hw::DesignOp"> {
   let summary = "Raises usages of inout ports into explicit input and output ports";
   let description = [{
     This pass raises usages of inout ports into explicit in- and output ports.

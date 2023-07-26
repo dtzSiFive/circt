@@ -37,7 +37,7 @@ struct SVTraceIVerilogPass
 } // end anonymous namespace
 
 void SVTraceIVerilogPass::runOnOperation() {
-  mlir::ModuleOp mod = getOperation();
+  hw::DesignOp mod = getOperation();
 
   if (topOnly) {
     auto &graph = getAnalysis<InstanceGraph>();

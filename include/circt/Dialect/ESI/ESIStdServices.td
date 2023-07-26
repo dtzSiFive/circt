@@ -10,7 +10,7 @@ include "circt/Dialect/ESI/ESIServices.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
-          [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
+          [SingleBlock, NoTerminator, HasParent<"::hw::DesignOp">,
           Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "Random access memory service";
   let description = [{

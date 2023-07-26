@@ -19,7 +19,7 @@ namespace circt {
 // This class prints logs before and after of pass executions when its pass
 // operation is in `LoggedOpTypes`. Note that `runBeforePass` and `runAfterPass`
 // are not thread safe so `LoggedOpTypes` must be a set of operations whose
-// passes are ran sequentially (e.g. mlir::ModuleOp, firrtl::CircuitOp).
+// passes are ran sequentially (e.g. hw::DesignOp, firrtl::CircuitOp).
 template <class... LoggedOpTypes>
 class VerbosePassInstrumentation : public mlir::PassInstrumentation {
   // This stores start time points of passes.

@@ -28,7 +28,7 @@ class MSFTModuleOp;
 /// ops -- this helper class provides that caching.
 class TclEmitter {
 public:
-  TclEmitter(mlir::ModuleOp topLevel);
+  TclEmitter(hw::DesignOp topLevel);
   LogicalResult emit(Operation *hwMod, StringRef outputFile);
 
   Operation *getDefinition(FlatSymbolRefAttr);
@@ -36,7 +36,7 @@ public:
   void usedRef(hw::GlobalRefOp ref) { refsUsed.insert(ref); }
 
 private:
-  mlir::ModuleOp topLevel;
+  hw::DesignOp topLevel;
 
   bool populated;
   hw::HWSymbolCache topLevelSymbols;

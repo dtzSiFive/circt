@@ -218,13 +218,13 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
 }
 
 template <typename T>
-static bool hasUnconvertedOps(mlir::ModuleOp module) {
+static bool hasUnconvertedOps(hw::DesignOp module) {
   return llvm::any_of(module.getBody()->getOps<T>(),
                       [](T op) { return !isLegalFuncLikeOp(op); });
 }
 
 template <typename T>
-static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
+static DenseMap<Operation *, IOTypes> populateIOMap(hw::DesignOp module) {
   DenseMap<Operation *, IOTypes> ioMap;
   for (auto op : module.getOps<T>())
     ioMap[op] = {op.getArgumentTypes(), op.getResultTypes()};
@@ -293,7 +293,7 @@ updateBlockLocations(FunctionOpInterface op, StringRef attrName,
 }
 
 template <typename T>
-static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
+static DenseMap<Operation *, IOInfo> populateIOInfoMap(hw::DesignOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
   for (auto op : module.getOps<T>()) {
     IOInfo ioInfo;

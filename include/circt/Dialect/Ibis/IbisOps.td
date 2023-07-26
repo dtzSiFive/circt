@@ -30,7 +30,7 @@ def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
     SymbolTable, SingleBlock,
     NoTerminator, ScopeOpInterface,
-    HasParent<"mlir::ModuleOp">]> {
+    HasParent<"hw::DesignOp">]> {
 
   let summary = "Ibis class";
   let description = [{

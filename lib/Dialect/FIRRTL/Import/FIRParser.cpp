@@ -4737,7 +4737,7 @@ DoneParsing:
 //===----------------------------------------------------------------------===//
 
 // Parse the specified .fir file into the specified MLIR context.
-mlir::OwningOpRef<mlir::ModuleOp>
+mlir::OwningOpRef<hw::DesignOp>
 circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                              mlir::TimingScope &ts, FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
@@ -4756,7 +4756,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
   context->loadDialect<FIRRTLDialect, hw::HWDialect>();
 
   // This is the result module we are parsing into.
-  mlir::OwningOpRef<mlir::ModuleOp> module(ModuleOp::create(
+  mlir::OwningOpRef<hw::DesignOp> module(ModuleOp::create(
       FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0)));
   SharedParserConstants state(context, options);

@@ -59,7 +59,7 @@ bool Tester::isInteresting(StringRef testCase) const {
 }
 
 /// Create a new test case for the given `module`.
-TestCase Tester::get(mlir::ModuleOp module) const {
+TestCase Tester::get(hw::DesignOp module) const {
   return TestCase(*this, module);
 }
 

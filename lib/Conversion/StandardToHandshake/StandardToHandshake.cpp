@@ -1747,7 +1747,7 @@ struct StandardToHandshakePass
 
 } // namespace
 
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+std::unique_ptr<mlir::OperationPass<hw::DesignOp>>
 circt::createStandardToHandshakePass(bool sourceConstants,
                                      bool disableTaskPipelining) {
   return std::make_unique<StandardToHandshakePass>(sourceConstants,

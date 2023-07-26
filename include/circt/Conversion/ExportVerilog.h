@@ -33,13 +33,13 @@ createExportSplitVerilogPass(llvm::StringRef directory = "./");
 
 /// Export a module containing HW, and SV dialect code. Requires that the SV
 /// dialect is loaded in to the context.
-mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
+mlir::LogicalResult exportVerilog(hw::DesignOp module, llvm::raw_ostream &os);
 
 /// Export a module containing HW, and SV dialect code, as one file per SV
 /// module. Requires that the SV dialect is loaded in to the context.
 ///
 /// Files are created in the directory indicated by \p dirname.
-mlir::LogicalResult exportSplitVerilog(mlir::ModuleOp module,
+mlir::LogicalResult exportSplitVerilog(hw::DesignOp module,
                                        llvm::StringRef dirname);
 
 } // namespace circt

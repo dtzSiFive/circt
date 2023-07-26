@@ -117,7 +117,7 @@ struct NLARemover {
 
   /// Remove all marked annotations. Call this after applying a reduction in
   /// order to validate the IR.
-  void remove(mlir::ModuleOp module) {
+  void remove(hw::DesignOp module) {
     unsigned numRemoved = 0;
     (void)numRemoved;
     for (Operation &rootOp : *module.getBody()) {
@@ -177,12 +177,12 @@ struct NLARemover {
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
 struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
-  void beforeReduction(mlir::ModuleOp op) override {
+  void beforeReduction(hw::DesignOp op) override {
     nlaRemover.clear();
     symbols.clear();
     moduleSizes.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(hw::DesignOp op) override { nlaRemover.remove(op); }
 
   uint64_t match(firrtl::FModuleOp module) override {
     return moduleSizes.getModuleSize(module, symbols);
@@ -319,14 +319,14 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidated wires. This often shortcuts a long iterative process of connect
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
-  void beforeReduction(mlir::ModuleOp op) override {
+  void beforeReduction(hw::DesignOp op) override {
     erasedInsts.clear();
     erasedModules.clear();
     symbols.clear();
     nlaRemover.clear();
     moduleSizes.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override {
+  void afterReduction(hw::DesignOp op) override {
     // Look into deleted modules to find additional instances that are no longer
     // instantiated anywhere.
     SmallVector<Operation *> worklist;
@@ -410,8 +410,8 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
 /// wires.
 struct MemoryStubber : public OpReduction<firrtl::MemOp> {
-  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void beforeReduction(hw::DesignOp op) override { nlaRemover.clear(); }
+  void afterReduction(hw::DesignOp op) override { nlaRemover.remove(op); }
   LogicalResult rewrite(firrtl::MemOp memOp) override {
     LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
@@ -593,8 +593,8 @@ struct ConnectInvalidator : public Reduction {
 /// A sample reduction pattern that removes FIRRTL annotations from ports and
 /// operations.
 struct AnnotationRemover : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void beforeReduction(hw::DesignOp op) override { nlaRemover.clear(); }
+  void afterReduction(hw::DesignOp op) override { nlaRemover.remove(op); }
   uint64_t match(Operation *op) override {
     return op->hasAttr("annotations") || op->hasAttr("portAnnotations");
   }
@@ -649,11 +649,11 @@ struct RootPortPruner : public OpReduction<firrtl::FModuleOp> {
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
-  void beforeReduction(mlir::ModuleOp op) override {
+  void beforeReduction(hw::DesignOp op) override {
     symbols.clear();
     nlaRemover.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(hw::DesignOp op) override { nlaRemover.remove(op); }
 
   uint64_t match(firrtl::InstanceOp instOp) override {
     return isa<firrtl::FExtModuleOp>(
@@ -692,8 +692,8 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
 
 /// A sample reduction pattern that pushes connected values through wires.
 struct ConnectForwarder : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { opsToErase.clear(); }
-  void afterReduction(mlir::ModuleOp op) override {
+  void beforeReduction(hw::DesignOp op) override { opsToErase.clear(); }
+  void afterReduction(hw::DesignOp op) override {
     for (auto *op : opsToErase)
       op->dropAllReferences();
     for (auto *op : opsToErase)
@@ -821,8 +821,8 @@ struct ConnectSourceOperandForwarder : public Reduction {
 /// all subaccesses with new independent wires. This can disentangle large
 /// unused wires that are otherwise difficult to collect due to the subaccesses.
 struct DetachSubaccesses : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { opsToErase.clear(); }
-  void afterReduction(mlir::ModuleOp op) override {
+  void beforeReduction(hw::DesignOp op) override { opsToErase.clear(); }
+  void afterReduction(hw::DesignOp op) override {
     for (auto *op : opsToErase)
       op->dropAllReferences();
     for (auto *op : opsToErase)
@@ -885,11 +885,11 @@ struct NodeSymbolRemover : public OpReduction<firrtl::NodeOp> {
 
 /// A sample reduction pattern that eagerly inlines instances.
 struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
-  void beforeReduction(mlir::ModuleOp op) override {
+  void beforeReduction(hw::DesignOp op) override {
     symbols.clear();
     nlaRemover.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(hw::DesignOp op) override { nlaRemover.remove(op); }
 
   uint64_t match(firrtl::InstanceOp instOp) override {
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);

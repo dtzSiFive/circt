@@ -20,7 +20,7 @@ include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 def CustomServiceDeclOp : ESI_Op<"service.decl",
-          [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
+          [SingleBlock, NoTerminator, HasParent<"::hw::DesignOp">,
           Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
   let summary = "An ESI service interface declaration";
   let description = [{

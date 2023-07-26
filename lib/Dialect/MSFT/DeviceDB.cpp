@@ -69,11 +69,11 @@ void PrimitiveDB::foreach (
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-PlacementDB::PlacementDB(mlir::ModuleOp topMod)
+PlacementDB::PlacementDB(hw::DesignOp topMod)
     : ctxt(topMod->getContext()), topMod(topMod), seeded(false) {
   addDesignPlacements();
 }
-PlacementDB::PlacementDB(mlir::ModuleOp topMod, const PrimitiveDB &seed)
+PlacementDB::PlacementDB(hw::DesignOp topMod, const PrimitiveDB &seed)
     : ctxt(topMod->getContext()), topMod(topMod), seeded(false) {
 
   seed.foreach ([this](PhysLocationAttr loc) { (void)getLeaf(loc); });

@@ -42,13 +42,13 @@ public:
   /// Runs the interestingness testing script on a MLIR test case file. Returns
   /// true if the interesting behavior is present in the test case or false
   /// otherwise.
-  std::pair<bool, size_t> isInteresting(mlir::ModuleOp module) const;
+  std::pair<bool, size_t> isInteresting(hw::DesignOp module) const;
 
   /// Return whether the file in the given path is interesting.
   bool isInteresting(llvm::StringRef testCase) const;
 
   /// Create a new test case for the given `module`.
-  TestCase get(mlir::ModuleOp module) const;
+  TestCase get(hw::DesignOp module) const;
 
   /// Create a new test case for the given file already on disk.
   TestCase get(llvm::Twine filepath) const;
@@ -75,7 +75,7 @@ class TestCase {
 public:
   /// Create a test case with an MLIR module that will be written to a temporary
   /// file on disk. The `TestCase` will clean up the temporary file after use.
-  TestCase(const Tester &tester, mlir::ModuleOp module)
+  TestCase(const Tester &tester, hw::DesignOp module)
       : tester(tester), module(module) {}
 
   /// Create a test case for an already-prepared file on disk. The caller
@@ -113,7 +113,7 @@ private:
   /// The tester that is used to run this test case.
   const Tester &tester;
   /// The module to be tested.
-  mlir::ModuleOp module;
+  hw::DesignOp module;
   /// The path on disk where the test case is located.
   llvm::SmallString<32> filepath;
 

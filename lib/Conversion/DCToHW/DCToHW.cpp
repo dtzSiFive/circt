@@ -812,7 +812,7 @@ namespace {
 class DCToHWPass : public DCToHWBase<DCToHWPass> {
 public:
   void runOnOperation() override {
-    mlir::ModuleOp mod = getOperation();
+    hw::DesignOp mod = getOperation();
 
     // Lowering to HW requires that every DC-typed value is used exactly once.
     // Check whether this precondition is met, and if not, exit.

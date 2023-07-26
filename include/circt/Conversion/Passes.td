@@ -76,7 +76,7 @@ def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::
 //===----------------------------------------------------------------------===//
 
 def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
-                                   "mlir::ModuleOp"> {
+                                   "hw::DesignOp"> {
   let summary = "Apply lowering options";
   let description = [{
     This pass allows overriding lowering options.  It is intended for test
@@ -92,7 +92,7 @@ def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
   ];
 }
 
-def LegalizeAnonEnums : Pass<"legalize-anon-enums", "mlir::ModuleOp"> {
+def LegalizeAnonEnums : Pass<"legalize-anon-enums", "hw::DesignOp"> {
   let summary = "Prepare anonymous enumeration types for ExportVerilog";
   let description = [{
     This pass transforms all anonymous enumeration types into typedecls to work
@@ -119,7 +119,7 @@ def PrepareForEmission : Pass<"prepare-for-emission",
   ];
 }
 
-def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
+def ExportVerilog : Pass<"export-verilog", "hw::DesignOp"> {
   let summary = "Emit the IR to a (System)Verilog file";
   let description = [{
       This pass creates empty module bodies for external modules.  This is
@@ -132,7 +132,7 @@ def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
   ];
 }
 
-def ExportSplitVerilog : Pass<"export-split-verilog", "mlir::ModuleOp"> {
+def ExportSplitVerilog : Pass<"export-split-verilog", "hw::DesignOp"> {
   let summary = "Emit the IR to a (System)Verilog directory of files";
   let description = [{
     This pass generates (System)Verilog for the current design, mutating it
@@ -154,7 +154,7 @@ def ExportSplitVerilog : Pass<"export-split-verilog", "mlir::ModuleOp"> {
 // SCFToCalyx
 //===----------------------------------------------------------------------===//
 
-def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
+def SCFToCalyx : Pass<"lower-scf-to-calyx", "hw::DesignOp"> {
   let summary = "Lower SCF/Standard to Calyx";
   let description = [{
     This pass lowers SCF / standard to Calyx.
@@ -177,7 +177,7 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
 // LoopScheduleToCalyx
 //===----------------------------------------------------------------------===//
 
-def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "mlir::ModuleOp"> {
+def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "hw::DesignOp"> {
   let summary = "Lower LoopSchedule to Calyx";
   let description = [{
     This pass lowers LoopSchedule to Calyx.
@@ -228,7 +228,7 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "mlir::ModuleOp"> {
 // CalyxToHW
 //===----------------------------------------------------------------------===//
 
-def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
+def CalyxToHW : Pass<"lower-calyx-to-hw", "hw::DesignOp"> {
   let summary = "Lower Calyx to HW";
   let description = [{
     This pass lowers Calyx to HW.
@@ -363,7 +363,7 @@ def CalyxRemoveGroupsFromFSM : Pass<"calyx-remove-groups-fsm", "calyx::Component
 // FSMToSV
 //===----------------------------------------------------------------------===//
 
-def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
+def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "hw::DesignOp"> {
   let summary = "Convert FSM to HW";
   let constructor = "circt::createConvertFSMToSVPass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
@@ -374,7 +374,7 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
-def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
+def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "hw::DesignOp"> {
   let summary = "Lower FIRRTL to HW";
   let description = [{
     Lower a module of FIRRTL dialect to the HW dialect family.
@@ -400,7 +400,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
 // HandshakeToDC
 //===----------------------------------------------------------------------===//
 
-def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
+def HandshakeToDC : Pass<"lower-handshake-to-dc", "hw::DesignOp"> {
   let summary = "Lower Handshake to DC";
   let description = [{
     Lower Handshake to DC operations.
@@ -419,7 +419,7 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
 // DCToHW
 //===----------------------------------------------------------------------===//
 
-def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
+def DCToHW : Pass<"lower-dc-to-hw", "hw::DesignOp"> {
   let summary = "Lower DC to HW";
   let description = [{
     Lower DC to ESI/hw/comb/seq operations.
@@ -437,7 +437,7 @@ def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
 // HandshakeToHW
 //===----------------------------------------------------------------------===//
 
-def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
+def HandshakeToHW : Pass<"lower-handshake-to-hw", "hw::DesignOp"> {
   let summary = "Lower Handshake to ESI/HW/Comb/Seq";
   let description = [{
     Lower Handshake to ESI/HW/Comb/Seq.
@@ -451,7 +451,7 @@ def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
 // Moore to Comb/HW/LLHD
 //===----------------------------------------------------------------------===//
 
-def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
+def ConvertMooreToCore : Pass<"convert-moore-to-core", "hw::DesignOp"> {
   let summary = "Convert Moore to Core";
   let description = [{
     This pass translates Moore to the core dialects (Comb/HW/LLHD).
@@ -465,7 +465,7 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
 // LLHDToLLVM
 //===----------------------------------------------------------------------===//
 
-def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
+def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "hw::DesignOp"> {
   let summary = "Convert LLHD to LLVM";
   let description = [{
     This pass translates LLHD to LLVM.
@@ -481,7 +481,7 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
 // HWToLLVM
 //===----------------------------------------------------------------------===//
 
-def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
+def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "hw::DesignOp"> {
   let summary = "Convert HW to LLVM";
   let description = [{
     This pass translates HW to LLVM.
@@ -494,7 +494,7 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
 // HWArithToHW
 //===----------------------------------------------------------------------===//
 
-def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
+def HWArithToHW : Pass<"lower-hwarith-to-hw", "hw::DesignOp"> {
   let summary = "Lower HWArith to HW/Comb";
   let description = [{
     This pass lowers HWArith to HW/Comb.
@@ -507,7 +507,7 @@ def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
 // HWToLLHD
 //===----------------------------------------------------------------------===//
 
-def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
+def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "hw::DesignOp"> {
   let summary = "Convert HW to LLHD";
   let description = [{
     This pass translates a HW design into an equivalent structural LLHD
@@ -521,7 +521,7 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 // HWToSystemC
 //===----------------------------------------------------------------------===//
 
-def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
+def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "hw::DesignOp"> {
   let summary = "Convert HW to SystemC";
   let description = [{
     This pass translates a HW design into an equivalent SystemC design.
@@ -561,7 +561,7 @@ def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
-def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
+def StandardToHandshake : Pass<"lower-std-to-handshake", "hw::DesignOp"> {
   let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createStandardToHandshakePass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
@@ -580,7 +580,7 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
   let constructor = "circt::createHandshakeRemoveBlockPass()";
 }
 
-def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
+def InsertMergeBlocks : Pass<"insert-merge-blocks", "::hw::DesignOp"> {
   let summary = "Insert explicit merge blocks";
   let description = [{
     This pass inserts additional merge blocks for each block with more than
@@ -598,7 +598,7 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
   let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
 }
 
-def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
+def MaximizeSSA : Pass<"maximize-ssa", "::hw::DesignOp"> {
   let summary = "Convert every function in the module into maximal SSA form";
   let description = [{
     Convert the region within every function into maximal SSA form. This
@@ -614,7 +614,7 @@ def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
 // ConvertToArcs
 //===----------------------------------------------------------------------===//
 
-def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
+def ConvertToArcs : Pass<"convert-to-arcs", "hw::DesignOp"> {
   let summary = "Outline logic between registers into state transfer arcs";
   let description = [{
     This pass outlines combinational logic between registers into state transfer
@@ -630,7 +630,7 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
 // ConvertCombToArith
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
+def ConvertCombToArith : Pass<"convert-comb-to-arith", "hw::DesignOp"> {
   let summary = "Convert combinational ops and constants into arith ops";
   let constructor = "circt::createConvertCombToArithPass()";
   let dependentDialects = ["mlir::arith::ArithDialect"];
@@ -640,7 +640,7 @@ def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
 // ConvertArcToLLVM
 //===----------------------------------------------------------------------===//
 
-def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
+def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "hw::DesignOp"> {
   let summary = "Lower state transfer arc representation to LLVM";
   let constructor = "circt::createLowerArcToLLVMPass()";
   let dependentDialects = [
