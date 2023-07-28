@@ -3234,3 +3234,13 @@ void RefReleaseInitialOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.add(eraseIfPredFalse<RefReleaseInitialOp>);
 }
+
+LogicalResult RefDefineOp::canonicalize(RefDefineOp op,
+                                        PatternRewriter &rewriter) {
+  rewriter.replaceUsesWithIf(
+      op.getDest(), op.getSrc(), [&](OpOperand &operand) {
+        return operand.getOwner() != op &&
+               operand.getOwner()->getBlock() == op->getBlock();
+      });
+  return success();
+}

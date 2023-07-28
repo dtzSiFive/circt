@@ -94,6 +94,7 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   let arguments = (ins RefType:$dest, RefType:$src);
 
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = true;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";
