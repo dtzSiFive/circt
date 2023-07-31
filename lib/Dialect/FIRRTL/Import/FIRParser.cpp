@@ -2994,10 +2994,10 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
   // Use Forceable if necessary (until RWProbe supports these things).
-  if (targetType.hasUninferredWidth() || targetType.hasUninferredReset()) {
+  if (targetType.hasUninferredReset()) {
     if (!definingOp)
       return emitError(startTok.getLoc(),
-                       "must have known width or concrete reset type in type ")
+                       "must have concrete reset type in type ")
              << targetType;
 
     auto forceable = dyn_cast<Forceable>(definingOp);

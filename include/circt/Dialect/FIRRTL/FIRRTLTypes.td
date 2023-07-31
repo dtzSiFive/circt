@@ -107,8 +107,8 @@ def RWProbe : FIRRTLDialectType<
 def RWProbeTarget : FIRRTLDialectType<
     CPred<"type_isa<FIRRTLBaseType>($_self) && "
           "!type_cast<FIRRTLBaseType>($_self).hasUninferredReset() &&"
-          "!type_cast<FIRRTLBaseType>($_self).hasUninferredWidth()">,
-    "RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)",
+          "!type_cast<FIRRTLBaseType>($_self).containsConst()">,
+    "RWProbeTarget type (a non-const FIRRTL base type without abstract reset)",
     "::circt::firrtl::FIRRTLBaseType">;
 
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;

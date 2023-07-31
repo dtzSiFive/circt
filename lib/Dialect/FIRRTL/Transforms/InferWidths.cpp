@@ -59,6 +59,44 @@ static void diagnoseUninferredType(InFlightDiagnostic &diag, Type t,
   return;
 }
 
+static FieldRef getRefForIST(const hw::InnerSymTarget &ist) {
+  if (ist.isPort()) {
+    return TypeSwitch<Operation *, FieldRef>(ist.getOp())
+        .Case<FModuleOp>([&](auto fmod) {
+          return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
+        })
+        .Default({});
+  }
+
+  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
+  assert(symOp && symOp.getTargetResultIndex() &&
+         (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
+  return FieldRef(symOp.getTargetResult(), ist.getField());
+}
+
+static uint64_t convertFieldIDToOurVersion(uint64_t fieldID, FIRRTLType type) {
+  auto fType = getBaseOfType<hw::FieldIDTypeInterface>(type);
+  if (!fType)
+    return fieldID;
+
+  auto convertedFieldID = 0;
+
+  auto curFID = fieldID;
+  auto curFType = fType;
+  while (curFID != 0) {
+    auto [child, subID] = curFType.getSubTypeByFieldID(curFID);
+    if (isa<FVectorType>(curFType))
+      convertedFieldID++; // Vector fieldID is 1.
+    else
+      convertedFieldID += curFID - subID; // Add consumed portion.
+    curFID = subID;
+    curFType = child;
+  }
+
+
+  return convertedFieldID;
+}
+
 //===----------------------------------------------------------------------===//
 // Constraint Expressions
 //===----------------------------------------------------------------------===//
@@ -1170,8 +1208,10 @@ namespace {
 /// variables and constraints to be solved later.
 class InferenceMapping {
 public:
-  InferenceMapping(ConstraintSolver &solver, SymbolTable &symtbl)
-      : solver(solver), symtbl(symtbl) {}
+  InferenceMapping(
+      ConstraintSolver &solver, SymbolTable &symtbl,
+      llvm::function_ref<hw::InnerSymbolTableCollection &(void)> getISTC)
+      : solver(solver), symtbl(symtbl), getISTC(getISTC) {}
 
   LogicalResult map(CircuitOp op);
   LogicalResult mapOperation(Operation *op);
@@ -1246,6 +1286,9 @@ private:
 
   /// Cache of module symbols
   SymbolTable &symtbl;
+
+  /// Get inner symbol tables, lazily.
+  llvm::function_ref<hw::InnerSymbolTableCollection &(void)> getISTC;
 };
 
 } // namespace
@@ -1697,7 +1740,27 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<RWProbeOp>([&](auto op) {
         declareVars(op.getResult(), op.getLoc());
-        constrainTypes(op.getResult(), op.getInput(), true);
+        hw::InnerRefNamespace irn{symtbl, getISTC()};
+        auto ist = irn.lookup(op.getTarget());
+        if (!ist) {
+          op->emitError("target of rwprobe could not be resolved");
+          mappingFailed = true;
+          return;
+        }
+        auto ref = getRefForIST(ist);
+        if (!ref) {
+          op->emitError("target of rwprobe resolved to unsupported target");
+          mappingFailed = true;
+          return;
+        }
+        llvm::errs() << "target: " << ist << "\n";
+        llvm::errs() << "ref: " << ref.getValue() << " @ " << ref.getFieldID() << "\n";
+        auto newFID =
+            convertFieldIDToOurVersion(ref.getFieldID(), op.getType());
+        llvm::errs() << "newFID: " << newFID << "\n";
+
+        unifyTypes(FieldRef(op.getResult(), 0),
+                   FieldRef(ref.getValue(), newFID), op.getType());
       })
       .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
         for (Value result : op.getResults()) {
@@ -2288,7 +2351,13 @@ class InferWidthsPass : public InferWidthsBase<InferWidthsPass> {
 void InferWidthsPass::runOnOperation() {
   // Collect variables and constraints
   ConstraintSolver solver;
-  InferenceMapping mapping(solver, getAnalysis<SymbolTable>());
+  auto istc = getCachedAnalysis<hw::InnerSymbolTableCollection>();
+  auto getISTC = [&]() {
+    if (!istc)
+      istc = getAnalysis<hw::InnerSymbolTableCollection>();
+    return *istc;
+  };
+  InferenceMapping mapping(solver, getAnalysis<SymbolTable>(), getISTC);
   if (failed(mapping.map(getOperation()))) {
     signalPassFailure();
     return;
