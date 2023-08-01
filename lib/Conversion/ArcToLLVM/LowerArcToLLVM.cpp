@@ -11,7 +11,6 @@
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcOps.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
@@ -484,7 +483,7 @@ LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
   LLVMConversionTarget target(getContext());
   LLVMTypeConverter converter(&getContext());
   RewritePatternSet patterns(&getContext());
-  target.addLegalOp<hw::HWDesignOp>();
+  target.addLegalOp<mlir::ModuleOp>();
   target.addIllegalOp<arc::ModelOp>();
   populateSCFToControlFlowConversionPatterns(patterns);
   populateFuncToLLVMConversionPatterns(converter, patterns);
