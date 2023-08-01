@@ -142,9 +142,9 @@ def HWDesignOp : HWOp<"design", [
     // OpAsmOpInterface Methods
     //===------------------------------------------------------------------===//
 
-    static ::llvm::StringRef getDefaultDialect() {
-      return "hw";
-    }
+    // static ::llvm::StringRef getDefaultDialect() {
+    //   return "hw";
+    // }
   }];
 
 //  let hasVerifier = 1;
