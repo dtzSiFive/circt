@@ -824,7 +824,7 @@ void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
 }
 
 void SeqToSVPass::runOnOperation() {
-  ModuleOp top = getOperation();
+  auto top = getOperation();
 
   MLIRContext &ctxt = getContext();
   ConversionTarget target(ctxt);
@@ -848,7 +848,7 @@ void SeqFIRRTLToSVPass::runOnOperation() {
 }
 
 void SeqFIRRTLInitToSVPass::runOnOperation() {
-  ModuleOp top = getOperation();
+  auto top = getOperation();
   OpBuilder builder(top.getBody(), top.getBody()->begin());
   // FIXME: getOrCreate
   builder.create<sv::MacroDeclOp>(top.getLoc(), "RANDOM", nullptr, nullptr);
