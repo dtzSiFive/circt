@@ -832,7 +832,7 @@ namespace {
 /// various emitters.
 class VerilogEmitterState {
 public:
-  explicit VerilogEmitterState(ModuleOp designOp,
+  explicit VerilogEmitterState(hw::HWDesignOp designOp,
                                const SharedEmitterState &shared,
                                const LoweringOptions &options,
                                const HWSymbolCache &symbolCache,
@@ -843,8 +843,8 @@ public:
         pp(os, options.emittedLineLength) {
     pp.setListener(&saver);
   }
-  /// This is the root mlir::ModuleOp that holds the whole design being emitted.
-  ModuleOp designOp;
+  /// This is the root hw::HWDesignOp that holds the whole design being emitted.
+  hw::HWDesignOp designOp;
 
   const SharedEmitterState &shared;
 
