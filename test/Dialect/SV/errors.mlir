@@ -6,8 +6,6 @@ hw.module @test_instance_exist_error() {
   %b = sv.interface.instance : !sv.interface<@noexist>
 }
 }
-
-}
 // -----
 
 hw.design {
@@ -300,4 +298,5 @@ hw.module @NoMessage(%clock: i1, %value : i4) -> () {
     // expected-error @below {{failed to verify that has message if has substitutions}}
    "sv.assert"(%clock, %value) { defer = 0 : i32 } : (i1, i4) -> ()
   }
+}
 }
