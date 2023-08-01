@@ -5916,8 +5916,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
-  LoweringOptions options(module);
+static LogicalResult exportVerilogImpl(hw::HWDesignOp module, llvm::raw_ostream &os) {
+  LoweringOptions options(module->getParentOfType<mlir::ModuleOp>());
   GlobalNameTable globalNames = legalizeGlobalNames(module, options);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));

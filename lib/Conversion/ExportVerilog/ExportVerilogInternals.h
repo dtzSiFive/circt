@@ -222,7 +222,7 @@ private:
 /// then shared across all per-file emissions that happen in parallel.
 struct SharedEmitterState {
   /// The MLIR module to emit.
-  ModuleOp designOp;
+  hw::HWDesignOp designOp;
 
   /// The main file that collects all operations that are neither replicated
   /// per-file ops nor specifically assigned to a file.
@@ -256,7 +256,7 @@ struct SharedEmitterState {
   /// Information about renamed global symbols, parameters, etc.
   const GlobalNameTable globalNames;
 
-  explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
+  explicit SharedEmitterState(hw::HWDesignOp designOp, const LoweringOptions &options,
                               GlobalNameTable globalNames)
       : designOp(designOp), options(options),
         globalNames(std::move(globalNames)) {}
