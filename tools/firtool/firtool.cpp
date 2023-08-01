@@ -391,21 +391,22 @@ static LogicalResult processBuffer(
 
     // Emit module and testbench hierarchy JSON files.
     if (exportModuleHierarchy)
-      exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+      exportPm.nest<hw::HWDesignOp>().addPass(
+          sv::createHWExportModuleHierarchyPass(outputFilename));
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
     default:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      exportPm.addPass(createExportVerilogPass((*outputFile)->os()));
+      exportPm.nest<hw::HWDesignOp>().addPass(createExportVerilogPass((*outputFile)->os()));
       break;
     case OutputSplitVerilog:
-      exportPm.addPass(createExportSplitVerilogPass(outputFilename));
+      exportPm.nest<hw::HWDesignOp>().addPass(createExportSplitVerilogPass(outputFilename));
       break;
     case OutputIRVerilog:
       // Run the ExportVerilog pass to get its lowering, but discard the output.
-      exportPm.addPass(createExportVerilogPass(llvm::nulls()));
+      exportPm.nest<hw::HWDesignOp>().addPass(createExportVerilogPass(llvm::nulls()));
       break;
     }
 
