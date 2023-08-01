@@ -539,11 +539,11 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // We run on the top level modules in the IR blob.  Start by finding the
   // firrtl.circuit within it.  If there is none, then there is nothing to do.
-  auto *topLevelModule = getOperation().getBody();
+  auto *topLevelModuleBlock = getOperation().getBody();
 
   // Find the single firrtl.circuit in the module.
   CircuitOp circuit;
-  for (auto &op : *topLevelModule) {
+  for (auto &op : *topLevelModuleBlock) {
     if ((circuit = dyn_cast<CircuitOp>(&op)))
       break;
   }
@@ -552,6 +552,10 @@ void FIRRTLModuleLowering::runOnOperation() {
     return;
 
   auto *circuitBody = circuit.getBodyBlock();
+
+  OpBuilder builder(getOperation().getBodyRegion());
+  auto designOp = builder.create<hw::HWDesignOp>(circuit.getLoc(), circuit.getName());
+  auto *topLevelModule = designOp.getBody();
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
@@ -680,21 +684,22 @@ void FIRRTLModuleLowering::runOnOperation() {
   lowerFileHeader(circuit, state);
 
   // Now that the modules are moved over, remove the Circuit.
-  auto loc = circuit.getLoc();
-  auto nameAttr = circuit.getNameAttr();
+//  auto loc = circuit.getLoc();
+//  auto nameAttr = circuit.getNameAttr();
   circuit.erase();
-
-  auto ops = getOperation().getOps();
-
-  OpBuilder builder(getOperation());
-  auto designOp = builder.create<hw::HWDesignOp>(loc, nameAttr.strref());
-  builder.setInsertionPointToEnd(designOp->getBlock());
-  auto cursor = builder.create<hw::ConstantOp>(loc, APInt(1, 1));
-
-  // getOperation()->getBlock()->getOperations().splice
-  for (auto &op: ops)
-    op.moveBefore(cursor);
-  cursor.erase();
+//
+//  OpBuilder builder(getOperation().getBodyRegion());
+//  //OpBuilder builder(getOperation());
+//  auto designOp = builder.create<hw::HWDesignOp>(loc, nameAttr.strref());
+//
+//  builder.setInsertionPointToStart(designOp.getBody());
+//  auto cursor = builder.create<hw::ConstantOp>(loc, APInt(1, 1));
+//designOp.dump();
+//
+//  // getOperation()->getBlock()->getOperations().splice
+//  for (auto &op: )
+//    op.moveBefore(&designOp.front());
+//  cursor.erase();
 }
 
 /// Emit the file header that defines a bunch of macros.
