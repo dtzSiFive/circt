@@ -5975,7 +5975,7 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
-    mlir::OpPassManager preparePM("builtin.module");
+    mlir::OpPassManager preparePM("hw.design");
     preparePM.addPass(createLegalizeAnonEnumsPass());
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
@@ -6138,7 +6138,7 @@ struct ExportSplitVerilogPass
   }
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
-    mlir::OpPassManager preparePM("builtin.module");
+    mlir::OpPassManager preparePM("hw.design");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))
