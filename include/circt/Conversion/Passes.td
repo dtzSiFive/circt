@@ -76,7 +76,7 @@ def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::
 //===----------------------------------------------------------------------===//
 
 def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
-                                   "::circt::hw::HWDesignOp"> {
+                                   "::mlir::ModuleOp"> {
   let summary = "Apply lowering options";
   let description = [{
     This pass allows overriding lowering options.  It is intended for test
