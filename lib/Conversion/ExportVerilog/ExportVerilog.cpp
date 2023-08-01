@@ -5963,7 +5963,10 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
           module->getContext(), modulesToPrepare,
           [&](auto op) { return prepareHWModule(op, options); })))
     return failure();
-  return exportVerilogImpl(module, os);
+  // TODO: do better
+  auto designs = module.getOps<HWDesignOp>();
+  assert(!designs.empty());
+  return exportVerilogImpl(*designs.begin(), os);
 }
 
 namespace {
@@ -6047,11 +6050,11 @@ static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
   output->keep();
 }
 
-static LogicalResult exportSplitVerilogImpl(ModuleOp module,
+static LogicalResult exportSplitVerilogImpl(HWDesignOp module,
                                             StringRef dirname) {
   // Prepare the ops in the module for emission and legalize the names that will
   // end up in the output.
-  LoweringOptions options(module);
+  LoweringOptions options(module->getParentOfType<mlir::ModuleOp>());
   GlobalNameTable globalNames = legalizeGlobalNames(module, options);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
@@ -6120,7 +6123,10 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
           [&](auto op) { return prepareHWModule(op, options); })))
     return failure();
 
-  return exportSplitVerilogImpl(module, dirname);
+  // TODO: do better
+  auto designs = module.getOps<HWDesignOp>();
+  assert(!designs.empty());
+  return exportSplitVerilogImpl(*designs.begin(), dirname);
 }
 
 namespace {
