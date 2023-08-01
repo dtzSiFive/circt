@@ -493,7 +493,7 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
 
 private:
-  void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
+  void lowerFileHeader(hw::HWDesignOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
                            Operation *moduleOp, StringRef moduleName,
@@ -681,33 +681,18 @@ void FIRRTLModuleLowering::runOnOperation() {
     oldNew.first->erase();
 
   // Emit all the macros and preprocessor gunk at the start of the file.
-  lowerFileHeader(circuit, state);
+  lowerFileHeader(designOp, state);
 
   // Now that the modules are moved over, remove the Circuit.
-//  auto loc = circuit.getLoc();
-//  auto nameAttr = circuit.getNameAttr();
   circuit.erase();
-//
-//  OpBuilder builder(getOperation().getBodyRegion());
-//  //OpBuilder builder(getOperation());
-//  auto designOp = builder.create<hw::HWDesignOp>(loc, nameAttr.strref());
-//
-//  builder.setInsertionPointToStart(designOp.getBody());
-//  auto cursor = builder.create<hw::ConstantOp>(loc, APInt(1, 1));
-//designOp.dump();
-//
-//  // getOperation()->getBlock()->getOperations().splice
-//  for (auto &op: )
-//    op.moveBefore(&designOp.front());
-//  cursor.erase();
 }
 
 /// Emit the file header that defines a bunch of macros.
-void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
+void FIRRTLModuleLowering::lowerFileHeader(hw::HWDesignOp op,
                                            CircuitLoweringState &state) {
   // Intentionally pass an UnknownLoc here so we don't get line number
   // comments on the output of this boilerplate in generated Verilog.
-  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
+  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBodyRegion());
 
   StringSet<> emittedDecls;
 
@@ -716,7 +701,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
       return;
     emittedDecls.insert(name);
     OpBuilder::InsertionGuard guard(b);
-    b.setInsertionPointAfter(op);
+    b.setInsertionPointToEnd(op.getBody());
     b.create<sv::MacroDeclOp>(name, args, StringAttr());
   };
 
