@@ -371,11 +371,11 @@ static LogicalResult processBuffer(
               VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp, hw::HWDesignOp>>(
               "firtool"));
     // Legalize unsupported operations within the modules.
-    exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+    exportPm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
     // Tidy up the IR to improve verilog emission quality.
     if (!firtoolOptions.disableOptimization)
-      exportPm.nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
+      exportPm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
 
     if (stripFirDebugInfo)
       exportPm.addPass(
