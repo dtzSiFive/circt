@@ -226,7 +226,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
 
   // If enabled, run the optimizer.
   if (!opt.disableOptimization) {
-    auto &modulePM = pm.nest<hw::HWModuleOp>();
+    auto &modulePM = pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>();
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
     modulePM.addPass(mlir::createCSEPass());
