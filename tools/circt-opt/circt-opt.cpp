@@ -71,6 +71,10 @@ int main(int argc, char **argv) {
   // Register test passes
   circt::test::registerAnalysisTestPasses();
 
+  // TODO: Maybe change this behavior ?
+  // mlir::MlirOptMainConfig config;
+  // config.useExplicitModule(false);
+
   return mlir::failed(mlir::MlirOptMain(
       argc, argv, "CIRCT modular optimizer driver", registry));
 }
