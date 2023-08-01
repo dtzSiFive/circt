@@ -16,9 +16,9 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
-namespace circt::hw {
-class HWDesignOp;
-} // end namespace circt::hw
+// namespace circt::hw {
+// class HWDesignOp;
+// } // end namespace circt::hw
 
 namespace circt {
 
@@ -37,13 +37,13 @@ createExportSplitVerilogPass(llvm::StringRef directory = "./");
 
 /// Export a module containing HW, and SV dialect code. Requires that the SV
 /// dialect is loaded in to the context.
-mlir::LogicalResult exportVerilog(::circt::hw::HWDesignOp module, llvm::raw_ostream &os);
+mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
 /// Export a module containing HW, and SV dialect code, as one file per SV
 /// module. Requires that the SV dialect is loaded in to the context.
 ///
 /// Files are created in the directory indicated by \p dirname.
-mlir::LogicalResult exportSplitVerilog(::circt::hw::HWDesignOp module,
+mlir::LogicalResult exportSplitVerilog(mlir::ModuleOp module,
                                        llvm::StringRef dirname);
 
 } // namespace circt
