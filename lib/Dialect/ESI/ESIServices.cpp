@@ -450,7 +450,7 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
 
   if (bspPorts && !bspPorts->empty()) {
     b.setInsertionPointToEnd(
-        implReqOp->getParentOfType<hw::HWDesignOp>().getBody());
+        implReqOp->getParentOfType<mlir::ModuleOp>().getBody());
     // TODO: we currently only support one BSP. Should we support more?
     auto decl = b.create<CustomServiceDeclOp>("BSP");
     decl.getPorts().push_back(bspPorts.release());

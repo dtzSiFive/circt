@@ -338,7 +338,7 @@ static void printInferWindowRet(OpAsmPrinter &p, Operation *, Type,
 static ServiceDeclOpInterface getServiceDecl(Operation *op,
                                              SymbolTableCollection &symbolTable,
                                              hw::InnerRefAttr servicePort) {
-  auto top = op->getParentOfType<hw::DesignOp>();
+  ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
   SymbolTable &topSyms = symbolTable.getSymbolTable(top);
 
   StringAttr modName = servicePort.getModule();
@@ -453,7 +453,7 @@ void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
 
 LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  auto top = getOperation()->getParentOfType<hw::DesignOp>();
+  ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
   auto sym = getServiceSymbol();
   if (!sym)
     return success();

@@ -180,7 +180,7 @@ struct Emitter {
   void emitModule(ModuleOp op);
 
   // Metadata emission for the Cider debugger.
-  void emitCiderMetadata(hw::HWDesignOp op) {
+  void emitCiderMetadata(mlir::ModuleOp op) {
     auto metadata = op->getAttrOfType<ArrayAttr>("calyx.metadata");
     if (!metadata)
       return;
@@ -975,7 +975,7 @@ void Emitter::emitControl(ControlOp control) {
 //===----------------------------------------------------------------------===//
 
 // Emit the specified Calyx circuit into the given output stream.
-mlir::LogicalResult circt::calyx::exportCalyx(hw::HWDesignOp module,
+mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
   if (failed(emitter.emitImports(module)))

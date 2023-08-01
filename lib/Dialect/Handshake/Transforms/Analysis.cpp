@@ -605,12 +605,12 @@ private:
 };
 } // namespace
 
-std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::handshake::createHandshakeDotPrintPass() {
   return std::make_unique<HandshakeDotPrintPass>();
 }
 
-std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::handshake::createHandshakeOpCountPass() {
   return std::make_unique<HandshakeOpCountPass>();
 }

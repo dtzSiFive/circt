@@ -401,11 +401,11 @@ unsigned ComponentLoweringStateInterface::getFuncOpResultMapping(
 // CalyxLoweringState
 //===----------------------------------------------------------------------===//
 
-CalyxLoweringState::CalyxLoweringState(hw::HWDesignOp module,
+CalyxLoweringState::CalyxLoweringState(mlir::ModuleOp module,
                                        StringRef topLevelFunction)
     : topLevelFunction(topLevelFunction), module(module) {}
 
-hw::HWDesignOp CalyxLoweringState::getModule() {
+mlir::ModuleOp CalyxLoweringState::getModule() {
   assert(module.getOperation() != nullptr);
   return module;
 }
@@ -426,7 +426,7 @@ std::string CalyxLoweringState::blockName(Block *b) {
 //===----------------------------------------------------------------------===//
 
 /// Helper to update the top-level ModuleOp to set the entrypoing function.
-LogicalResult applyModuleOpConversion(hw::HWDesignOp moduleOp,
+LogicalResult applyModuleOpConversion(mlir::ModuleOp moduleOp,
                                       StringRef topLevelFunction) {
 
   if (moduleOp->hasAttr("calyx.entrypoint"))
