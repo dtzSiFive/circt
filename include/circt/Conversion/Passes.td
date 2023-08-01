@@ -154,7 +154,7 @@ def ExportSplitVerilog : Pass<"export-split-verilog", "::circt::hw::HWDesignOp">
 // SCFToCalyx
 //===----------------------------------------------------------------------===//
 
-def SCFToCalyx : Pass<"lower-scf-to-calyx", "::circt::hw::HWDesignOp"> {
+def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
   let summary = "Lower SCF/Standard to Calyx";
   let description = [{
     This pass lowers SCF / standard to Calyx.
@@ -177,7 +177,7 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "::circt::hw::HWDesignOp"> {
 // LoopScheduleToCalyx
 //===----------------------------------------------------------------------===//
 
-def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "::circt::hw::HWDesignOp"> {
+def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "mlir::ModuleOp"> {
   let summary = "Lower LoopSchedule to Calyx";
   let description = [{
     This pass lowers LoopSchedule to Calyx.
@@ -228,7 +228,7 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "mlir::ModuleOp"> {
 // CalyxToHW
 //===----------------------------------------------------------------------===//
 
-def CalyxToHW : Pass<"lower-calyx-to-hw", "::circt::hw::HWDesignOp"> {
+def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower Calyx to HW";
   let description = [{
     This pass lowers Calyx to HW.
@@ -363,7 +363,7 @@ def CalyxRemoveGroupsFromFSM : Pass<"calyx-remove-groups-fsm", "calyx::Component
 // FSMToSV
 //===----------------------------------------------------------------------===//
 
-def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "::circt::hw::HWDesignOp"> {
+def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
   let summary = "Convert FSM to HW";
   let constructor = "circt::createConvertFSMToSVPass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
@@ -374,7 +374,7 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "::circt::hw::HWDesignOp"> {
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
-def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "::circt::hw::HWDesignOp"> {
+def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower FIRRTL to HW";
   let description = [{
     Lower a module of FIRRTL dialect to the HW dialect family.
@@ -400,7 +400,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "::circt::hw::HWDesignOp"> {
 // HandshakeToDC
 //===----------------------------------------------------------------------===//
 
-def HandshakeToDC : Pass<"lower-handshake-to-dc", "::circt::hw::HWDesignOp"> {
+def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
   let summary = "Lower Handshake to DC";
   let description = [{
     Lower Handshake to DC operations.
@@ -419,7 +419,7 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "::circt::hw::HWDesignOp"> {
 // DCToHW
 //===----------------------------------------------------------------------===//
 
-def DCToHW : Pass<"lower-dc-to-hw", "::circt::hw::HWDesignOp"> {
+def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower DC to HW";
   let description = [{
     Lower DC to ESI/hw/comb/seq operations.
@@ -437,7 +437,7 @@ def DCToHW : Pass<"lower-dc-to-hw", "::circt::hw::HWDesignOp"> {
 // HandshakeToHW
 //===----------------------------------------------------------------------===//
 
-def HandshakeToHW : Pass<"lower-handshake-to-hw", "::circt::hw::HWDesignOp"> {
+def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower Handshake to ESI/HW/Comb/Seq";
   let description = [{
     Lower Handshake to ESI/HW/Comb/Seq.
@@ -451,7 +451,7 @@ def HandshakeToHW : Pass<"lower-handshake-to-hw", "::circt::hw::HWDesignOp"> {
 // Moore to Comb/HW/LLHD
 //===----------------------------------------------------------------------===//
 
-def ConvertMooreToCore : Pass<"convert-moore-to-core", "::circt::hw::HWDesignOp"> {
+def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
   let summary = "Convert Moore to Core";
   let description = [{
     This pass translates Moore to the core dialects (Comb/HW/LLHD).
@@ -465,7 +465,7 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "::circt::hw::HWDesignOp"
 // LLHDToLLVM
 //===----------------------------------------------------------------------===//
 
-def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "::circt::hw::HWDesignOp"> {
+def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
   let summary = "Convert LLHD to LLVM";
   let description = [{
     This pass translates LLHD to LLVM.
@@ -481,7 +481,7 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "::circt::hw::HWDesignOp"> 
 // HWToLLVM
 //===----------------------------------------------------------------------===//
 
-def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "::circt::hw::HWDesignOp"> {
+def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
   let summary = "Convert HW to LLVM";
   let description = [{
     This pass translates HW to LLVM.
@@ -494,7 +494,7 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "::circt::hw::HWDesignOp"> {
 // HWArithToHW
 //===----------------------------------------------------------------------===//
 
-def HWArithToHW : Pass<"lower-hwarith-to-hw", "::circt::hw::HWDesignOp"> {
+def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower HWArith to HW/Comb";
   let description = [{
     This pass lowers HWArith to HW/Comb.
@@ -507,7 +507,7 @@ def HWArithToHW : Pass<"lower-hwarith-to-hw", "::circt::hw::HWDesignOp"> {
 // HWToLLHD
 //===----------------------------------------------------------------------===//
 
-def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "::circt::hw::HWDesignOp"> {
+def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
   let summary = "Convert HW to LLHD";
   let description = [{
     This pass translates a HW design into an equivalent structural LLHD
@@ -521,7 +521,7 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "::circt::hw::HWDesignOp"> {
 // HWToSystemC
 //===----------------------------------------------------------------------===//
 
-def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "::circt::hw::HWDesignOp"> {
+def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
   let summary = "Convert HW to SystemC";
   let description = [{
     This pass translates a HW design into an equivalent SystemC design.
