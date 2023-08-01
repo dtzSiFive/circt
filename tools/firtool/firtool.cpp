@@ -317,7 +317,7 @@ static LogicalResult processBuffer(
   if (verbosePassExecutions)
     pm.addInstrumentation(
         std::make_unique<
-            VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
+            VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp, hw::HWDesignOp>>(
             "firtool"));
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
