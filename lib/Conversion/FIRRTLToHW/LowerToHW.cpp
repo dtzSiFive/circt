@@ -383,6 +383,8 @@ private:
                                   Location typeLoc) {
       assert(!frozen && "Record already frozen, cannot be updated");
 
+      // TODO: Fix this!
+      assert(0  && "sadface");
       if (!typeScope) {
         auto b = ImplicitLocOpBuilder::atBlockBegin(
             circuitOp.getLoc(),
