@@ -20,6 +20,7 @@ class raw_ostream;
 
 namespace mlir {
 struct LogicalResult;
+class ModuleOp;
 } // namespace mlir
 
 namespace circt::hw {
@@ -29,7 +30,7 @@ class HWDesignOp;
 namespace circt {
 namespace calyx {
 
-mlir::LogicalResult exportCalyx(::circt::hw::HWDesignOp module, llvm::raw_ostream &os);
+mlir::LogicalResult exportCalyx(mlir::ModuleOp module, llvm::raw_ostream &os);
 
 void registerToCalyxTranslation();
 

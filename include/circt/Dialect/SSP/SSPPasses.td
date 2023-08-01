@@ -15,12 +15,12 @@
 
 include "mlir/Pass/PassBase.td"
 
-def Print : Pass<"ssp-print", "::circt::hw::HWDesignOp"> {
+def Print : Pass<"ssp-print", "mlir::ModuleOp"> {
   let summary = "Prints all SSP instances as DOT graphs.";
   let constructor = "circt::ssp::createPrintPass()";
 }
 
-def Roundtrip : Pass<"ssp-roundtrip", "::circt::hw::HWDesignOp"> {
+def Roundtrip : Pass<"ssp-roundtrip", "mlir::ModuleOp"> {
   let summary = "Roundtrips all SSP instances via the scheduling infrastructure";
   let constructor = "circt::ssp::createRoundtripPass()";
   let options = [
@@ -31,7 +31,7 @@ def Roundtrip : Pass<"ssp-roundtrip", "::circt::hw::HWDesignOp"> {
   ];
 }
 
-def Schedule : Pass<"ssp-schedule", "::circt::hw::HWDesignOp"> {
+def Schedule : Pass<"ssp-schedule", "mlir::ModuleOp"> {
   let summary = "Schedules all SSP instances.";
   let constructor = "circt::ssp::createSchedulePass()";
   let options = [

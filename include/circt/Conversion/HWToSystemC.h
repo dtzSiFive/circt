@@ -19,6 +19,7 @@
 namespace mlir {
 template <typename T>
 class OperationPass;
+class ModuleOp;
 } // namespace mlir
 
 namespace circt::hw {
@@ -26,7 +27,7 @@ class HWDesignOp;
 } // end namespace circt::hw
 
 namespace circt {
-std::unique_ptr<mlir::OperationPass<::circt::hw::HWDesignOp>>
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createConvertHWToSystemCPass();
 } // namespace circt
 

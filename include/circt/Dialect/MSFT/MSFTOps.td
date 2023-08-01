@@ -63,7 +63,7 @@ def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
     MSFTOp<mnemonic, traits # [
       IsolatedFromAbove, Symbol, FunctionOpInterface, OpAsmOpInterface,
-      HasParent<"::circt::hw::HWDesignOp">, DeclareOpInterfaceMethods<HWModuleLike>
+      HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>
     ]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -119,7 +119,7 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
 }
 
 def MSFTModuleOp : MSFTModuleOpBase<"module",
-      [RegionKindInterface, HasParent<"::circt::hw::HWDesignOp">,
+      [RegionKindInterface, HasParent<"mlir::ModuleOp">,
        SingleBlockImplicitTerminator<"OutputOp">,
        DeclareOpInterfaceMethods<HWMutableModuleLike>]>{
   let summary = "MSFT HW Module";
@@ -199,7 +199,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
-      [Symbol, FunctionOpInterface, HasParent<"::circt::hw::HWDesignOp">, DeclareOpInterfaceMethods<HWModuleLike>]> {
+      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "MSFT external Module";
   let description = [{
     Identical to `hw.module.extern`, and trivially lowers to that. This op

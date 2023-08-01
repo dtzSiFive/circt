@@ -16,7 +16,7 @@
 include "mlir/Pass/PassBase.td"
 
 def SystemCLowerInstanceInterop : Pass<"systemc-lower-instance-interop",
-                                       "::circt::hw::HWDesignOp"> {
+                                       "mlir::ModuleOp"> {
   let summary = "Lower all SystemC instance interop operations.";
 
   let constructor =  "circt::systemc::createSystemCLowerInstanceInteropPass()";

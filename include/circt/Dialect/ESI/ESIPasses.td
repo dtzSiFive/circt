@@ -18,7 +18,7 @@ include "mlir/Pass/PassBase.td"
 
 include "circt/Dialect/ESI/ESIDialect.td"
 
-def ESIConnectServices : Pass<"esi-connect-services", "::circt::hw::HWDesignOp"> {
+def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
   let summary = "Connect up ESI service requests to service providers";
   let constructor = "circt::esi::createESIConnectServicesPass()";
   let dependentDialects = [
@@ -26,7 +26,7 @@ def ESIConnectServices : Pass<"esi-connect-services", "::circt::hw::HWDesignOp">
     "circt::comb::CombDialect"];
 }
 
-def ESIAddCPPAPI: Pass<"esi-emit-cpp-api", "::circt::hw::HWDesignOp"> {
+def ESIAddCPPAPI: Pass<"esi-emit-cpp-api", "mlir::ModuleOp"> {
   let summary = "Add C++ cosimulation API to the module";
   let constructor = "circt::esi::createESIAddCPPAPIPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
@@ -38,7 +38,7 @@ def ESIAddCPPAPI: Pass<"esi-emit-cpp-api", "::circt::hw::HWDesignOp"> {
   ];
 }
 
-def ESIEmitCollateral: Pass<"esi-emit-collateral", "::circt::hw::HWDesignOp"> {
+def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
   let summary = "Emit all the neccessary collateral";
   let constructor = "circt::esi::createESIEmitCollateralPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
@@ -51,31 +51,31 @@ def ESIEmitCollateral: Pass<"esi-emit-collateral", "::circt::hw::HWDesignOp"> {
   ];
 }
 
-def ESICleanMetadata : Pass<"esi-clean-metadata", "::circt::hw::HWDesignOp"> {
+def ESICleanMetadata : Pass<"esi-clean-metadata", "mlir::ModuleOp"> {
   let summary = "Clean up ESI service metadata";
   let constructor = "circt::esi::createESICleanMetadataPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
-def LowerESIToPhysical: Pass<"lower-esi-to-physical", "::circt::hw::HWDesignOp"> {
+def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
-def LowerESIPorts: Pass<"lower-esi-ports", "::circt::hw::HWDesignOp"> {
+def LowerESIPorts: Pass<"lower-esi-ports", "mlir::ModuleOp"> {
   let summary = "Lower ESI input and/or output ports.";
   let constructor = "circt::esi::createESIPortLoweringPass()";
   let dependentDialects = ["circt::comb::CombDialect", "circt::sv::SVDialect"];
 }
 
-def LowerESITypes: Pass<"lower-esi-types", "::circt::hw::HWDesignOp"> {
+def LowerESITypes: Pass<"lower-esi-types", "mlir::ModuleOp"> {
   let summary = "Lower ESI high level types.";
   let constructor = "circt::esi::createESITypeLoweringPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
-def LowerESItoHW: Pass<"lower-esi-to-hw", "::circt::hw::HWDesignOp"> {
+def LowerESItoHW: Pass<"lower-esi-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower ESI to HW where possible and SV elsewhere.";
   let constructor = "circt::esi::createESItoHWPass()";
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];

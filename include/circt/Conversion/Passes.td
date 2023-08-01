@@ -561,7 +561,7 @@ def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
-def StandardToHandshake : Pass<"lower-std-to-handshake", "::circt::hw::HWDesignOp"> {
+def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createStandardToHandshakePass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
@@ -580,7 +580,7 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
   let constructor = "circt::createHandshakeRemoveBlockPass()";
 }
 
-def InsertMergeBlocks : Pass<"insert-merge-blocks", "::circt::hw::HWDesignOp"> {
+def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
   let summary = "Insert explicit merge blocks";
   let description = [{
     This pass inserts additional merge blocks for each block with more than
@@ -598,7 +598,7 @@ def InsertMergeBlocks : Pass<"insert-merge-blocks", "::circt::hw::HWDesignOp"> {
   let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
 }
 
-def MaximizeSSA : Pass<"maximize-ssa", "::circt::hw::HWDesignOp"> {
+def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
   let summary = "Convert every function in the module into maximal SSA form";
   let description = [{
     Convert the region within every function into maximal SSA form. This
@@ -614,7 +614,7 @@ def MaximizeSSA : Pass<"maximize-ssa", "::circt::hw::HWDesignOp"> {
 // ConvertToArcs
 //===----------------------------------------------------------------------===//
 
-def ConvertToArcs : Pass<"convert-to-arcs", "::circt::hw::HWDesignOp"> {
+def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
   let summary = "Outline logic between registers into state transfer arcs";
   let description = [{
     This pass outlines combinational logic between registers into state transfer
@@ -630,7 +630,7 @@ def ConvertToArcs : Pass<"convert-to-arcs", "::circt::hw::HWDesignOp"> {
 // ConvertCombToArith
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToArith : Pass<"convert-comb-to-arith", "::circt::hw::HWDesignOp"> {
+def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
   let summary = "Convert combinational ops and constants into arith ops";
   let constructor = "circt::createConvertCombToArithPass()";
   let dependentDialects = ["mlir::arith::ArithDialect"];
@@ -640,7 +640,7 @@ def ConvertCombToArith : Pass<"convert-comb-to-arith", "::circt::hw::HWDesignOp"
 // ConvertArcToLLVM
 //===----------------------------------------------------------------------===//
 
-def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "::circt::hw::HWDesignOp"> {
+def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
   let summary = "Lower state transfer arc representation to LLVM";
   let constructor = "circt::createLowerArcToLLVMPass()";
   let dependentDialects = [

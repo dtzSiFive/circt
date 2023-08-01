@@ -27,12 +27,12 @@ struct Reduction {
   /// Called before the reduction is applied to a new subset of operations.
   /// Reductions may use this callback to collect information such as symbol
   /// tables about the module upfront.
-  virtual void beforeReduction(hw::HWDesignOp) {}
+  virtual void beforeReduction(mlir::ModuleOp) {}
 
   /// Called after the reduction has been applied to a subset of operations.
   /// Reductions may use this callback to perform post-processing of the
   /// reductions before the resulting module is tried for interestingness.
-  virtual void afterReduction(hw::HWDesignOp) {}
+  virtual void afterReduction(mlir::ModuleOp) {}
 
   /// Check if the reduction can apply to a specific operation. Returns a
   /// benefit measure where a higher number means that applying the pattern

@@ -11,7 +11,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerComb : Pass<"lower-comb", "::circt::hw::HWDesignOp"> {
+def LowerComb : Pass<"lower-comb", "mlir::ModuleOp"> {
   let summary = "Lowers the some of the comb ops";
   let description = [{
     Some operations in the comb dialect (e.g. `comb.truth_table`) are not

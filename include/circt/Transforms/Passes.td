@@ -16,7 +16,7 @@
 include "mlir/Pass/PassBase.td"
 include "mlir/Rewrite/PassUtil.td"
 
-def FlattenMemRef : Pass<"flatten-memref", "::circt::hw::HWDesignOp"> {
+def FlattenMemRef : Pass<"flatten-memref", "::mlir::ModuleOp"> {
   let summary = "Flatten memrefs";
   let description = [{
     Flattens multidimensional memories and accesses to them into
@@ -25,7 +25,7 @@ def FlattenMemRef : Pass<"flatten-memref", "::circt::hw::HWDesignOp"> {
   let dependentDialects = ["mlir::memref::MemRefDialect"];
 }
 
-def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::circt::hw::HWDesignOp"> {
+def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::mlir::ModuleOp"> {
   let summary = "Flatten memref calls";
   let description = [{
     Flattens calls to functions which have multidimensional memrefs as arguments.
@@ -38,7 +38,7 @@ def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::circt::hw::HWDesignOp">
   let dependentDialects = ["mlir::memref::MemRefDialect"];
 }
 
-def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::circt::hw::HWDesignOp"> {
+def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp"> {
   let summary = "Selectively strip debug info from all operations";
 
   let description = [{

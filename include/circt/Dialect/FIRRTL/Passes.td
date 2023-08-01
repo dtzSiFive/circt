@@ -702,7 +702,7 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
-def ExtractClasses : Pass<"firrtl-extract-classes", "::circt::hw::HWDesignOp"> {
+def ExtractClasses : Pass<"firrtl-extract-classes", "mlir::ModuleOp"> {
   let summary = "Extract OM classes from FIRRTL modules with properties";
   let description = [{
     This pass walks all FIRRTL modules and creates OM classes from their non-RTL

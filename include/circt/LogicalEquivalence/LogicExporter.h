@@ -38,7 +38,7 @@ public:
       : moduleName(moduleName), circuit(circuit) {}
 
   /// Initializes the exporting by visiting the builtin module.
-  mlir::LogicalResult run(hw::HWDesignOp &module);
+  mlir::LogicalResult run(mlir::ModuleOp &module);
   mlir::LogicalResult run(hw::HWModuleOp &module);
 
 private:

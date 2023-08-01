@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def PrintFSMGraph : Pass<"fsm-print-graph", "::circt::hw::HWDesignOp"> {
+def PrintFSMGraph : Pass<"fsm-print-graph", "mlir::ModuleOp"> {
   let summary = "Print a DOT graph of the module hierarchy.";
   let constructor =  "circt::fsm::createPrintFSMGraphPass()";
 }

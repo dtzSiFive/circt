@@ -458,11 +458,11 @@ private:
 /// state during the lowering of a Calyx program.
 class CalyxLoweringState {
 public:
-  explicit CalyxLoweringState(::circt::hw::HWDesignOp module,
+  explicit CalyxLoweringState(mlir::ModuleOp module,
                               StringRef topLevelFunction);
 
   /// Returns the current program.
-  ::circt::hw::HWDesignOp getModule();
+  mlir::ModuleOp getModule();
 
   /// Returns the name of the top-level function in the source program.
   StringRef getTopLevelFunction() const;
@@ -503,7 +503,7 @@ private:
   /// The name of this top-level function.
   StringRef topLevelFunction;
   /// The program associated with this state.
-  ::circt::hw::HWDesignOp module;
+  mlir::ModuleOp module;
   /// Mapping from ComponentOp to component lowering state.
   DenseMap<Operation *, std::unique_ptr<ComponentLoweringStateInterface>>
       componentStates;
@@ -565,7 +565,7 @@ private:
 };
 
 /// Helper to update the top-level ModuleOp to set the entrypoing function.
-LogicalResult applyModuleOpConversion(::circt::hw::HWDesignOp,
+LogicalResult applyModuleOpConversion(mlir::ModuleOp,
                                       StringRef topLevelFunction);
 
 /// FuncOpPartialLoweringPatterns are patterns which intend to match on FuncOps

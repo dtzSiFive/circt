@@ -16,10 +16,6 @@
 
 #include "circt/Support/LLVM.h"
 
-// namespace circt::hw {
-// class HWDesignOp;
-// } // end namespace circt::hw
-
 namespace circt {
 namespace firrtl {
 

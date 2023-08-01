@@ -10,7 +10,7 @@ include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 def DeclPhysicalRegionOp : MSFTOp<"physical_region",
-    [Symbol, HasParent<"::circt::hw::HWDesignOp">]> {
+    [Symbol, HasParent<"mlir::ModuleOp">]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     PhysicalBoundsArray:$bounds
@@ -22,7 +22,7 @@ def DeclPhysicalRegionOp : MSFTOp<"physical_region",
 }
 
 def EntityExternOp : MSFTOp<"entity.extern",
-    [Symbol, HasParent<"::circt::hw::HWDesignOp">]> {
+    [Symbol, HasParent<"mlir::ModuleOp">]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     AnyAttr:$metadata);
@@ -81,7 +81,7 @@ def PDPhysRegionOp : MSFTOp<"pd.physregion",
 }
 
 def InstanceHierarchyOp : MSFTOp<"instance.hierarchy",
-                                 [HasParent<"::circt::hw::HWDesignOp">, NoTerminator]> {
+                                 [HasParent<"mlir::ModuleOp">, NoTerminator]> {
   let summary = "The root of an instance hierarchy";
   let description = [{
     Models the "root" / "top" of an instance hierarchy. `DynamicInstanceOp`s

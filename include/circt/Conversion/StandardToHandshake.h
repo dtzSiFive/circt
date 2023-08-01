@@ -22,13 +22,10 @@
 #include <memory>
 
 namespace mlir {
+class ModuleOp;
 template <typename T>
 class OperationPass;
 } // namespace mlir
-
-namespace circt::hw {
-class HWDesignOp;
-} // end namespace circt::hw
 
 namespace circt {
 
@@ -288,10 +285,10 @@ LogicalResult postDataflowConvert(Operation *op);
 
 } // namespace handshake
 
-std::unique_ptr<mlir::OperationPass<::circt::hw::HWDesignOp>>
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createHandshakeAnalysisPass();
 
-std::unique_ptr<mlir::OperationPass<::circt::hw::HWDesignOp>>
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createStandardToHandshakePass(bool sourceConstants = false,
                               bool disableTaskPipelining = false);
 
