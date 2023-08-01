@@ -17,11 +17,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 
-// #include "circt/Dialect/HW/HWOps.h"
-
-namespace circt::hw {
-  class HWDesignOp;
-} // end namespace circt::hw
+namespace mlir {
+class ModuleOp;
+}
 
 namespace circt {
 
@@ -41,11 +39,11 @@ struct LoweringOptions {
   /// loads a string attribute with the key `circt.loweringOptions`. If there is
   /// an error parsing the attribute this will print an error using the
   /// ModuleOp.
-  LoweringOptions(hw::HWDesignOp module);
+  LoweringOptions(mlir::ModuleOp module);
 
   /// Return the value of the `circt.loweringOptions` in the specified module
   /// if present, or a null attribute if not.
-  static mlir::StringAttr getAttributeFrom(hw::HWDesignOp module);
+  static mlir::StringAttr getAttributeFrom(mlir::ModuleOp module);
 
   /// Read in options from a string, overriding only the set options in the
   /// string.
@@ -55,11 +53,11 @@ struct LoweringOptions {
   std::string toString() const;
 
   /// Write the verilog emitter options to a module's attributes.
-  void setAsAttribute(hw::HWDesignOp module);
+  void setAsAttribute(mlir::ModuleOp module);
 
   /// Load any emitter options from the module. If there is an error validating
   /// the attribute, this will print an error using the ModuleOp.
-  void parseFromAttribute(hw::HWDesignOp module);
+  void parseFromAttribute(mlir::ModuleOp module);
 
   /// If true, emits `sv.alwayscomb` as Verilog `always @(*)` statements.
   /// Otherwise, print them as `always_comb`.
