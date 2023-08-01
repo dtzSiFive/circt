@@ -26,7 +26,7 @@ LoweringOptions::LoweringOptions(StringRef options, ErrorHandlerT errorHandler)
   parse(options, errorHandler);
 }
 
-LoweringOptions::LoweringOptions(hw::HWDesignOp module) : LoweringOptions() {
+LoweringOptions::LoweringOptions(mlir::ModuleOp module) : LoweringOptions() {
   parseFromAttribute(module);
 }
 
