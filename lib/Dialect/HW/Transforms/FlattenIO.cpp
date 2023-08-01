@@ -313,7 +313,7 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(hw::HWDesignOp module) {
 }
 
 template <typename T>
-static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
+static LogicalResult flattenOpsOfType(hw::HWDesignOp module, bool recursive) {
   auto *ctx = module.getContext();
   FlattenIOTypeConverter typeConverter;
 
@@ -385,7 +385,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
 //===----------------------------------------------------------------------===//
 
 template <typename... TOps>
-static bool flattenIO(ModuleOp module, bool recursive) {
+static bool flattenIO(hw::HWDesignOp module, bool recursive) {
   return (failed(flattenOpsOfType<TOps>(module, recursive)) || ...);
 }
 
@@ -394,7 +394,7 @@ namespace {
 class FlattenIOPass : public circt::hw::FlattenIOBase<FlattenIOPass> {
 public:
   void runOnOperation() override {
-    ModuleOp module = getOperation();
+    auto module = getOperation();
     if (flattenIO<hw::HWModuleOp, hw::HWModuleExternOp,
                   hw::HWModuleGeneratedOp>(module, recursive))
       signalPassFailure();
