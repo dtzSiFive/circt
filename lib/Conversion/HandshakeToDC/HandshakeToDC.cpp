@@ -546,7 +546,7 @@ public:
 class HandshakeToDCPass : public HandshakeToDCBase<HandshakeToDCPass> {
 public:
   void runOnOperation() override {
-    hw::HWDesignOp mod = getOperation();
+    mlir::ModuleOp mod = getOperation();
 
     // Maintain the set of operations which has been converted either through
     // unit rate conversion, or as part of other conversions.
@@ -563,7 +563,7 @@ public:
     ConversionTarget target(getContext());
     target.addIllegalDialect<handshake::HandshakeDialect>();
     target.addLegalDialect<dc::DCDialect, func::FuncDialect, hw::HWDialect>();
-    target.addLegalOp<hw::HWDesignOp>();
+    target.addLegalOp<mlir::ModuleOp>();
 
     // The various patterns will insert new operations into the module to
     // facilitate the conversion - however, these operations must be

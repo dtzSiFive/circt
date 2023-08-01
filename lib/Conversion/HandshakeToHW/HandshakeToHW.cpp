@@ -248,7 +248,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// Check whether a submodule with the same name has been created elsewhere in
 /// the top level module. Return the matched module operation if true, otherwise
 /// return nullptr.
-static HWModuleLike checkSubModuleOp(hw::HWDesignOp parentModule,
+static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
                                      StringRef modName) {
   if (auto mod = parentModule.lookupSymbol<HWModuleOp>(modName))
     return mod;
@@ -257,7 +257,7 @@ static HWModuleLike checkSubModuleOp(hw::HWDesignOp parentModule,
   return {};
 }
 
-static HWModuleLike checkSubModuleOp(hw::HWDesignOp parentModule,
+static HWModuleLike checkSubModuleOp(mlir::ModuleOp parentModule,
                                      Operation *oldOp) {
   HWModuleLike targetModule;
   if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp))
@@ -1861,7 +1861,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
     return instName;
   };
 
-  auto ls = HandshakeLoweringState{op->getParentOfType<hw::HWDesignOp>(),
+  auto ls = HandshakeLoweringState{op->getParentOfType<mlir::ModuleOp>(),
                                    instanceUniquer};
   RewritePatternSet patterns(op.getContext());
   patterns.insert<FuncOpConversionPattern, ReturnConversionPattern>(
@@ -1911,7 +1911,7 @@ namespace {
 class HandshakeToHWPass : public HandshakeToHWBase<HandshakeToHWPass> {
 public:
   void runOnOperation() override {
-    hw::HWDesignOp mod = getOperation();
+    mlir::ModuleOp mod = getOperation();
 
     // Lowering to HW requires that every value is used exactly once. Check
     // whether this precondition is met, and if not, exit.

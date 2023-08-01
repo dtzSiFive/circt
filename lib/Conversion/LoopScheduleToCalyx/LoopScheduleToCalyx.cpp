@@ -1390,7 +1390,7 @@ public:
         partialPatternRes(success()) {}
   void runOnOperation() override;
 
-  LogicalResult setTopLevelFunction(hw::HWDesignOp moduleOp,
+  LogicalResult setTopLevelFunction(mlir::ModuleOp moduleOp,
                                     std::string &topLevelFunction) {
     if (!topLevelFunctionOpt.empty()) {
       if (SymbolTable::lookupSymbolIn(moduleOp, topLevelFunctionOpt) ==
@@ -1429,9 +1429,9 @@ public:
   LogicalResult labelEntryPoint(StringRef topLevelFunction) {
     // Program legalization - the partial conversion driver will not run
     // unless some pattern is provided - provide a dummy pattern.
-    struct DummyPattern : public OpRewritePattern<hw::HWDesignOp> {
+    struct DummyPattern : public OpRewritePattern<mlir::ModuleOp> {
       using OpRewritePattern::OpRewritePattern;
-      LogicalResult matchAndRewrite(hw::HWDesignOp,
+      LogicalResult matchAndRewrite(mlir::ModuleOp,
                                     PatternRewriter &) const override {
         return failure();
       }
