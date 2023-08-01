@@ -117,7 +117,7 @@ def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> 
   ];
 }
 
-def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "::circt::hw::HWDesignOp"> {
+def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
   let summary = "Intermodule dead code elimination";
   let description = [{
     This pass performs inter-module liveness analysis and deletes dead code
@@ -169,7 +169,7 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
   ];
 }
 
-def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "::circt::hw::HWDesignOp"> {
+def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
   let summary = "Emit metadata of the FIRRTL modules";
   let description = [{
     This pass handles the emission of several different kinds of metadata.
@@ -655,7 +655,7 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
-def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "::circt::hw::HWDesignOp"> {
+def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
   let summary = "Eliminate dead inner symbols";
   let description = [{
     This pass deletes all inner symbols which have no uses. This is necessary to
@@ -691,7 +691,7 @@ def DropConst : Pass<"firrtl-drop-const", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createDropConstPass()";
 }
 
-def FinalizeIR : Pass<"firrtl-finalize-ir", "::circt::hw::HWDesignOp"> {
+def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let summary = "Perform final IR mutations after ExportVerilog";
   let description = [{
     This pass finalizes the IR after it has been exported with ExportVerilog,

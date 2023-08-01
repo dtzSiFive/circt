@@ -1270,7 +1270,7 @@ void Emitter::emitLocation(Location loc) {
 
 // Emit the specified FIRRTL circuit into the given output stream.
 mlir::LogicalResult
-circt::firrtl::exportFIRFile(hw::HWDesignOp module, llvm::raw_ostream &os,
+circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
                              std::optional<size_t> targetLineLength,
                              FIRVersion version) {
   Emitter emitter(os, version,

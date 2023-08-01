@@ -17,6 +17,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 
+// #include "circt/Dialect/HW/HWOps.h"
+
 namespace circt::hw {
   class HWDesignOp;
 } // end namespace circt::hw

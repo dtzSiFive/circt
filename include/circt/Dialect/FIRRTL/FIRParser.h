@@ -50,7 +50,7 @@ struct FIRParserOptions {
   bool scalarizeExtModules = false;
 };
 
-mlir::OwningOpRef<hw::HWDesignOp> importFIRFile(llvm::SourceMgr &sourceMgr,
+mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
                                                 mlir::MLIRContext *context,
                                                 mlir::TimingScope &ts,
                                                 FIRParserOptions options = {});
