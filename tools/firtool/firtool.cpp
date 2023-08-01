@@ -368,7 +368,7 @@ static LogicalResult processBuffer(
     if (verbosePassExecutions)
       exportPm.addInstrumentation(
           std::make_unique<
-              VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
+              VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp, hw::HWDesignOp>>(
               "firtool"));
     // Legalize unsupported operations within the modules.
     exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
