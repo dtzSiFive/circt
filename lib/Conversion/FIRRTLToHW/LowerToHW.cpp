@@ -680,7 +680,21 @@ void FIRRTLModuleLowering::runOnOperation() {
   lowerFileHeader(circuit, state);
 
   // Now that the modules are moved over, remove the Circuit.
+  auto loc = circuit.getLoc();
+  auto nameAttr = circuit.getNameAttr();
   circuit.erase();
+
+  auto ops = getOperation().getOps();
+
+  OpBuilder builder(getOperation());
+  auto designOp = builder.create<hw::HWDesignOp>(loc, nameAttr.strref());
+  builder.setInsertionPointToEnd(designOp->getBlock());
+  auto cursor = builder.create<hw::ConstantOp>(loc, APInt(1, 1));
+
+  // getOperation()->getBlock()->getOperations().splice
+  for (auto &op: ops)
+    op.moveBefore(cursor);
+  cursor.erase();
 }
 
 /// Emit the file header that defines a bunch of macros.
