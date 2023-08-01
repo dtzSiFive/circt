@@ -21,7 +21,7 @@ using namespace circt;
 /// A sample reduction pattern that removes operations which either produce no
 /// results or their results have no users.
 struct OperationPruner : public Reduction {
-  void beforeReduction(hw::HWDesignOp module) override {
+  void beforeReduction(mlir::ModuleOp module) override {
     userMap = std::make_unique<SymbolUserMap>(table, module);
   }
   uint64_t match(Operation *op) override {
