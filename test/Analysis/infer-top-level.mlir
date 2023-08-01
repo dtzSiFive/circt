@@ -1,7 +1,7 @@
 // RUN: circt-opt -split-input-file -test-infer-top-level -verify-diagnostics %s | FileCheck %s
 
 // CHECK: module attributes {test.top = ["baz"]}
-module {
+hw.design {
   hw.module @bar() -> () {}
   hw.module @foo() -> () {
     hw.instance "bar" @bar() -> ()
@@ -16,7 +16,7 @@ module {
 
 // Test cycle through a component
 // expected-error @+1 {{'builtin.module' op cannot deduce top level module - cycle detected in instance graph (bar->baz->foo->bar).}}
-module {
+hw.design {
   hw.module @bar() -> () {
     hw.instance "baz" @baz() -> ()
   }
@@ -34,7 +34,7 @@ module {
 
 // test multiple candidate top components
 // CHECK: module attributes {test.top = ["bar", "foo"]}
-module {
+hw.design {
   hw.module @bar() -> () {
     hw.instance "baz" @baz() -> ()
   }
