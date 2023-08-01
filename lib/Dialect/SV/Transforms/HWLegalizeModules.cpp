@@ -189,7 +189,7 @@ void HWLegalizeModulesPass::runOnOperation() {
 
   // Parse the lowering options if necessary.
   auto optionsAttr = LoweringOptions::getAttributeFrom(
-      cast<ModuleOp>(thisHWModule->getParentOp()));
+      thisHWModule->getParentOfType<ModuleOp>());
   if (optionsAttr != lastParsedOptions) {
     if (optionsAttr)
       options = LoweringOptions(optionsAttr.getValue(), [&](Twine error) {
