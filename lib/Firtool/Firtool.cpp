@@ -194,7 +194,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
 
   if (!opt.disableOptimization) {
-    auto &modulePM = pm.nest<hw::HWModuleOp>();
+    auto &modulePM = pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>();
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
