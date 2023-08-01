@@ -265,7 +265,7 @@ FirMemConfig LowerFirMemPass::collectMemory(FirMemOp op) {
 /// Create the `HWModuleGeneratedOp` for a list of memory parametrizations.
 SmallVector<HWModuleGeneratedOp>
 LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
-  ModuleOp circuit = getOperation();
+  auto circuit = getOperation();
 
   // Create or re-use the generator schema.
   hw::HWGeneratorSchemaOp schemaOp;
