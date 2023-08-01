@@ -311,7 +311,7 @@ void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
 GlobalNameTable
-ExportVerilog::legalizeGlobalNames(ModuleOp topLevel,
+ExportVerilog::legalizeGlobalNames(::circt::hw::HWDesignOp topLevel,
                                    const LoweringOptions &options) {
   GlobalNameResolver resolver(topLevel, options);
   return resolver.takeGlobalNameTable();

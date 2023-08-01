@@ -328,7 +328,7 @@ void pruneZeroValuedLogic(hw::HWModuleOp module);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
-GlobalNameTable legalizeGlobalNames(ModuleOp topLevel,
+GlobalNameTable legalizeGlobalNames(hw::HWDesignOp topLevel,
                                     const LoweringOptions &options);
 
 } // namespace ExportVerilog
