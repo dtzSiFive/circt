@@ -159,7 +159,7 @@ static Value castFromFIRRTLType(Value val, Type type,
 }
 
 /// Move a ExtractTestCode related annotation from annotations to an attribute.
-static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
+static void moveVerifAnno(hw::HWDesignOp top, AnnotationSet &annos,
                           StringRef annoClass, StringRef attrBase) {
   auto anno = annos.getAnnotation(annoClass);
   auto ctx = top.getContext();
@@ -567,11 +567,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<FModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
+  moveVerifAnno(designOp, circuitAnno, extractAssertAnnoClass,
                 "firrtl.extract.assert");
-  moveVerifAnno(getOperation(), circuitAnno, extractAssumeAnnoClass,
+  moveVerifAnno(designOp, circuitAnno, extractAssumeAnnoClass,
                 "firrtl.extract.assume");
-  moveVerifAnno(getOperation(), circuitAnno, extractCoverageAnnoClass,
+  moveVerifAnno(designOp, circuitAnno, extractCoverageAnnoClass,
                 "firrtl.extract.cover");
   circuitAnno.removeAnnotationsWithClass(
       extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
