@@ -176,7 +176,7 @@ static void populatePipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
-  pm.addPass(seq::createLowerFirMemPass());
+  pm.addNestedPass<hw::HWDesignOp>(seq::createLowerFirMemPass());
   pm.addPass(
       arc::createAddTapsPass(observePorts, observeWires, observeNamedValues));
   pm.addPass(arc::createStripSVPass());
