@@ -5265,7 +5265,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
 
   auto instance = op.getReferencedInstance(&state.symbolCache);
   auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
-  auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
+  auto *interface = op->getParentOfType<hw::HWDesignOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   startStatement();
   ps << "bind " << PPExtString(instantiator) << PP::nbsp
