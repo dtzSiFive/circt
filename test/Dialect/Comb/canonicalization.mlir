@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -canonicalize='top-down=true region-simplify=true' | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(%a: i8, %b: i8, %c: i1) -> (o: i4) {
 // CHECK-NEXT: %0 = comb.extract %a from 1 : (i8) -> i4
@@ -1531,4 +1532,5 @@ hw.module @OrMuxSameTrueValueAndZero(%tag_0: i1, %tag_1: i1, %tag_2: i1, %tag_3:
   %3 = comb.mux bin %tag_3, %in, %c0_i4 : i4
   %4 = comb.or bin %0, %1, %2, %3 : i4
   hw.output %4 : i4
+}
 }
