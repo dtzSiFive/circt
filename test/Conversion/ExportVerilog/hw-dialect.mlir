@@ -1,8 +1,8 @@
-// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
+// RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -verify-diagnostics -o %t.mlir --split-input-file | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
-hw.module.extern @Array(%a: !hw.array<2xi4>)
 
 hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %array2d: !hw.array<12 x array<10xi4>>,
@@ -208,7 +208,12 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:      assign r46 = '{foo: [[WIRE1]].foo, bar: b};
 // CHECK-NEXT:      assign r47 = array1[/*Zero width*/ 1'b0];
 // CHECK-NEXT: endmodule
+}
 
+
+// -----
+
+hw.design {
 hw.module @i0Inst() {
   %c0_i0 = hw.constant 0 : i0
   hw.instance "i0" sym @i0Module @i0Module(arg1: %c0_i0: i0) -> ()
@@ -330,11 +335,15 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1)
 // CHECK-NEXT:   assign z = x;
 // CHECK-NEXT: endmodule
 
+}
 
+// -----
 
+hw.design {
 hw.module @shl(%a: i1) -> (b: i1) {
   %0 = comb.shl %a, %a : i1
   hw.output %0 : i1
+}
 }
 // CHECK-LABEL:  module shl(
 // CHECK-NEXT:   input  a,
@@ -344,10 +353,13 @@ hw.module @shl(%a: i1) -> (b: i1) {
 // CHECK-NEXT:   assign b = a << a;
 // CHECK-NEXT: endmodule
 
+// -----
 
+hw.design {
 hw.module @inout_0(%a: !hw.inout<i42>) -> (out: i42) {
   %aget = sv.read_inout %a: !hw.inout<i42>
   hw.output %aget : i42
+}
 }
 // CHECK-LABEL:  module inout_0(
 // CHECK-NEXT:     inout  [41:0] a,
@@ -356,6 +368,8 @@ hw.module @inout_0(%a: !hw.inout<i42>) -> (out: i42) {
 // CHECK-EMPTY:
 // CHECK-NEXT:     assign out = a;
 // CHECK-NEXT:   endmodule
+
+// -----
 
 // https://github.com/llvm/circt/issues/316
 // FIXME: The MLIR parser doesn't accept an i0 even though it is valid IR,
@@ -366,13 +380,18 @@ hw.module @inout_0(%a: !hw.inout<i42>) -> (out: i42) {
 
 // https://github.com/llvm/circt/issues/318
 // This shouldn't generate invalid Verilog
+hw.design {
 hw.module @extract_all(%tmp85: i1) -> (tmp106: i1) {
   %1 = comb.extract %tmp85 from 0 : (i1) -> i1
   hw.output %1 : i1
 }
+}
 // CHECK-LABEL: module extract_all
 // CHECK:  assign tmp106 = tmp85;
 
+// -----
+
+hw.design @wires {
 hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-LABEL: module wires( //
   // CHECK-NEXT:   input  [3:0] in4, //
@@ -427,7 +446,11 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-NEXT: assign c = myUArray1[in4];
   hw.output %wireout, %memout1, %memout2 : i4, i8, i8
 }
+}
 
+// -----
+
+hw.design @signs {
 // CHECK-LABEL: module signs
 hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %awire = sv.wire : !hw.inout<i4>
@@ -461,8 +484,11 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
 
   hw.output
 }
+}
 
+// -----
 
+hw.design @casts {
 // CHECK-LABEL: module casts(
 // CHECK-NEXT: input  [6:0]      in1,
 // CHECK-NEXT: input  [7:0][3:0] in2,
@@ -478,7 +504,11 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (r1: !hw.array<7xi1>, r2: i
   // CHECK-NEXT: assign r2 = /*cast(bit[31:0])*/in2;
   hw.output %r1, %r2 : !hw.array<7xi1>, i32
 }
+}
 
+// -----
+
+hw.design @zero {
 // CHECK-LABEL: module TestZero(
 // CHECK-NEXT:      input  [3:0]               a,
 // CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
@@ -607,8 +637,11 @@ hw.module @cyclic(%a: i1) -> (b: i1) {
   %2 = comb.sub %1, %1 : i1
   hw.output %2 : i1
 }
+}
 
+// -----
 
+hw.design @long {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longExpressions
 hw.module @longExpressions(%a: i8, %a2: i8) -> (b: i8) {
@@ -654,7 +687,11 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
   hw.output %1 : i8
 }
+}
 
+// -----
+
+hw.design @Issue736 {
 // https://github.com/llvm/circt/issues/736
 // Can't depend on left associativeness since ops can have args with different sizes
 // CHECK-LABEL: module eqIssue(
@@ -672,7 +709,11 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
     %4 = comb.icmp eq %1, %2 : i1
     hw.output %4 : i1
   }
+}
 
+// -----
+
+hw.design @Issue750 {
 // https://github.com/llvm/circt/issues/750
 // Always get array indexes on the lhs
 // CHECK-LABEL: module ArrayLHS
@@ -696,7 +737,12 @@ hw.module @ArrayLHS(%clock: i1) {
     sv.bpassign %3, %false : i1
   }
 }
+}
 
+// -----
+
+// TODO: Finish breaking apart or whatever
+hw.design {
 // CHECK-LABEL: module noTemporaryIfReadInOutIsAfterUse
 hw.module @noTemporaryIfReadInOutIsAfterUse(%clock: i1, %x: i1) {
   // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
@@ -1415,6 +1461,13 @@ hw.module @inline_bitcast_in_concat(%in1: i7, %in2: !hw.array<8xi4>) -> (out: i3
   %0 = comb.concat %in1, %r2: i7, i32
   hw.output %0 : i39
 }
+}
+
+// -----
+
+hw.design {
+// CHECK-LABEL: external module Array
+hw.module.extern @Array(%a: !hw.array<2xi4>)
 
 // CHECK-LABEL: module DontInlineAggregateConstantIntoPorts(
 // CHECK:         wire [1:0][3:0] _GEN = {4'h0, 4'h1};
@@ -1426,6 +1479,9 @@ hw.module @DontInlineAggregateConstantIntoPorts() -> () {
   %0 = hw.aggregate_constant [0 : i4, 1 : i4] : !hw.array<2xi4>
   hw.instance "i0" @Array(a: %0: !hw.array<2xi4>) -> ()
 }
+}
+
+// -----
 
 // CHECK-LABEL: module FooA(
 // CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [9:0] b; logic [5:0] __post_padding_b;} b;} test
@@ -1437,11 +1493,15 @@ hw.module @DontInlineAggregateConstantIntoPorts() -> () {
 // CHECK-NEXT:    assign b = test.b.b;
 // CHECK-NEXT:  endmodule
 !unionA = !hw.union<a: i16, b: i10>
+hw.design {
 hw.module @FooA(%test: !unionA) -> (a: i16, b: i10) {
   %0 = hw.union_extract %test["a"] : !unionA
   %1 = hw.union_extract %test["b"] : !unionA
   hw.output %0, %1 : i16, i10
 }
+}
+
+// -----
 
 // CHECK-LABEL: module FooB(
 // CHECK-NEXT:    input union packed {logic [15:0] a; struct packed {logic [1:0] __pre_padding_b; logic [13:0] b;} b;} test,
@@ -1453,8 +1513,10 @@ hw.module @FooA(%test: !unionA) -> (a: i16, b: i10) {
 // CHECK-NEXT:    assign b = test.b.b;
 // CHECK-NEXT:  endmodule
 !unionB = !hw.union<a: i16, b: i14 offset 2>
+hw.design {
 hw.module @FooB(%test: !unionB) -> (a: i16, b: i14) {
   %0 = hw.union_extract %test["a"] : !unionB
   %1 = hw.union_extract %test["b"] : !unionB
   hw.output %0, %1 : i16, i14
+}
 }

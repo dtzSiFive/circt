@@ -2,9 +2,11 @@
 // RUN: circt-opt --test-apply-lowering-options='options=' --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
 // RUN: circt-opt --test-apply-lowering-options='options=noAlwaysComb' --split-input-file --export-verilog %s | FileCheck %s --check-prefix=NOALWAYSCOMB
 
+hw.design {
 hw.module @test() {
   sv.alwayscomb {
   }
+}
 }
 
 // DEFAULT: always_comb begin
@@ -19,9 +21,11 @@ hw.module @test() {
 // -----
 
 module attributes {circt.loweringOptions = "noAlwaysComb"} {
+hw.design {
 hw.module @test() {
   sv.alwayscomb {
   }
+}
 }
 }
 

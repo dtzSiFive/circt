@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace
 
+hw.design {
 // CHECK: module namechange(
 // CHECK: input  [3:0] casex_0,
 // CHECK: output [3:0] if_0
@@ -181,4 +182,5 @@ sv.interface @output {
 hw.module @InterfaceAsInstance () {
   // CHECK: output_0 myOutput();
   %myOutput = sv.interface.instance : !sv.interface<@output>
+}
 }

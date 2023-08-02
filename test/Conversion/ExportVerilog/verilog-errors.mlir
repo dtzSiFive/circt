@@ -1,7 +1,9 @@
 // RUN: circt-opt -export-verilog -verify-diagnostics --split-input-file -mlir-print-op-on-diagnostic=false %s
 
 // expected-error @+1 {{value has an unsupported verilog type 'f32'}}
+hw.design {
 hw.module @Top(%out: f32) {
+}
 }
 
 // -----
@@ -12,6 +14,7 @@ module attributes {circt.loweringOptions = "badOption,anotherOne"} {}
 
 // -----
 
+hw.design {
 hw.module.extern @A<width: none> ()
 
 hw.module @B() {
@@ -23,3 +26,4 @@ hw.module @B() {
 
 // expected-error @+1 {{name "parameter" is not allowed in Verilog output}}
 hw.module.extern @parameter ()
+}

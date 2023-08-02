@@ -1,6 +1,7 @@
 // RUN: circt-opt --export-verilog %s | FileCheck %s --check-prefix=CHECK-OFF
 // RUN: circt-opt --test-apply-lowering-options='options=verifLabels' --export-verilog %s | FileCheck %s --check-prefix=CHECK-ON
 
+hw.design {
 hw.module @foo(%clock: i1, %cond: i1) {
   sv.initial {
     // CHECK-OFF: assert(
@@ -67,4 +68,5 @@ hw.module @foo(%clock: i1, %cond: i1) {
   sv.assert.concurrent posedge %clock, %cond label "assert_6"
   sv.assume.concurrent posedge %clock, %cond label "assume_8"
   sv.cover.concurrent posedge %clock, %cond label "cover_10"
+}
 }

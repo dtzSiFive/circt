@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+hw.design {
 hw.module @top(%clock : i1, %reset: i1) -> () {
   sv.alwaysff(posedge %clock) {
     %0 = hw.constant 0x80000001 : i32
@@ -17,4 +18,5 @@ hw.module @top(%clock : i1, %reset: i1) -> () {
     %2 = hw.constant 0x80000002 : i32
     sv.fwrite %2, "direct fd"
   }
+}
 }

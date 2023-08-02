@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -split-input-file -o %t.mlir | FileCheck %s
 
+hw.design {
 // CHECK: typedef enum bit [0:0] {enum0_T} enum0;
 // CHECK: // typedef enum bit [0:0] {} enum1;
 // CHECK: typedef enum bit [0:0] {enum2_U} enum2;
@@ -113,4 +114,5 @@ hw.module @AnFSM(%clock : i1) {
       case A : { sv.passign %reg_state2, %B_state2 : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>> }
       default : { sv.passign %reg_state2, %A_state2 : !hw.typealias<@__AnFSMTypedecl::@_state2,!hw.enum<A, B>> }
   }
+}
 }

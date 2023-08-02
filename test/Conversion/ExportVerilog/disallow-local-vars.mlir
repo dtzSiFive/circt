@@ -6,6 +6,7 @@
 
 // CHECK-LABEL: module side_effect_expr
 // DISALLOW-LABEL: module side_effect_expr
+hw.design {
 hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 
   // CHECK: `ifdef FOO_MACRO
@@ -234,4 +235,5 @@ hw.module @AggregateInline(%clock: i1) {
   // DISALLOW: assign [[GEN]] = register.a[15:0]
   // CHECK: assign [[GEN]] = register.a[15:0]
   hw.output
+}
 }
