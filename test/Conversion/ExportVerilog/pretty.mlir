@@ -1,5 +1,6 @@
 // RUN: circt-opt -export-verilog --split-input-file %s | FileCheck %s --strict-whitespace --match-full-lines
 
+hw.design {
 sv.interface @IValidReady_Struct  {
   sv.interface.signal @data : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
 }
@@ -35,10 +36,12 @@ hw.module @structs(%clk: i1, %rstn: i1) {
   %92 = hw.array_concat %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %16, %16 : !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<8xi1>, !hw.array<64xi1>, !hw.array<64xi1>
   %s = hw.struct_create (%90, %91, %92) : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
 }
+}
 
 // -----
 
 // CHECK-LABEL:module CoverAssert({{.*}}
+hw.design {
 hw.module @CoverAssert(
   %clock: i1, %reset: i1,
   %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0: i4) {
@@ -158,9 +161,11 @@ hw.module @MuxChain(%a_0: i1, %a_1: i1, %a_2: i1, %c_0: i1, %c_1: i1, %c_2: i1) 
 // CHECK-NEXT:                                                                                                               : c_2)
 // CHECK-NEXT:                                                                                                          : c_1;{{.*}}
 }
+}
 
 // -----
 
+hw.design {
 // CHECK-LABEL:module svattrs{{.*}}
 hw.module @svattrs() {
 //      CHECK:  (* dont_merge, dont_retime = true, foo0 = bar0, foo1 = bar1, foo2 = bar2, foo3 = bar3,
@@ -234,9 +239,11 @@ hw.module @svattrs() {
       #sv.attribute<"end">
    ]} : !hw.inout<i10>
 }
+}
 
 // -----
 
+hw.design {
 sv.macro.decl @RANDOM
 
 // CHECK-LABEL:module ForStatement{{.*}}
@@ -262,9 +269,11 @@ hw.module @ForStatement(%aaaaaaaaaaa: i5, %xxxxxxxxxxxxxxx : i2, %yyyyyyyyyyyyyy
     }
   }
 }
+}
 
 // -----
 
+hw.design {
 sv.macro.decl @TEST_COND
 
 // CHECK-LABEL:module TestCond{{.*}}
@@ -280,4 +289,5 @@ hw.module @TestCond() {
    sv.macro.def @TEST_COND "1"
   }
   hw.output
+}
 }
