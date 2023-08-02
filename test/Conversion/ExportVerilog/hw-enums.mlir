@@ -12,9 +12,11 @@ hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>, %c : !hw.enum<U>)
   // CHECK: assign f = c;
   hw.output %a, %b, %c : !hw.enum<T>, !hw.enum<>, !hw.enum<U>
 }
+}
 
 // -----
 
+hw.design {
 // CHECK:       typedef enum bit [0:0] {enum0_A, enum0_B} enum0;
 // CHECK-LABEL: module EnumCmp(
 // CHECK-NEXT:   input  enum0 test,
@@ -27,6 +29,7 @@ hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
   %A = hw.enum.constant A : !hw.enum<A, B>
   %0 = hw.enum.cmp %test, %A : !hw.enum<A, B>, !hw.enum<A, B>
   hw.output %0 : i1
+}
 }
 
 // -----
@@ -74,6 +77,7 @@ hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
 // CHECK:   end
 // CHECK: endmodule
 
+hw.design {
 hw.type_scope @__AnFSMTypedecl {
   hw.typedecl @_state1 : !hw.enum<A, B>
   hw.typedecl @_state2 : !hw.enum<A, B>

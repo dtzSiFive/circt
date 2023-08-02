@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -prepare-for-emission --split-input-file -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(hw.module(prepare-for-emission)))' --split-input-file -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s -export-verilog -split-input-file
 
 hw.design {
