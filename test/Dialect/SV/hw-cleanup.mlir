@@ -1,6 +1,6 @@
-// RUN: circt-opt -hw-cleanup %s | FileCheck %s
-// RUN: circt-opt -hw-cleanup %s | FileCheck %s
-// RUN: circt-opt -hw-cleanup="merge-always-blocks=false" %s | FileCheck %s --check-prefix=SEPARATE
+// RUN: circt-opt -pass-pipeline='builtin.module(hw.design(hw.module(hw-cleanup)))' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(hw.design(hw.module(hw-cleanup)))' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(hw.design(hw.module(hw-cleanup{merge-always-blocks=false})))' %s | FileCheck %s --check-prefix=SEPARATE
 
 //CHECK-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 //CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
