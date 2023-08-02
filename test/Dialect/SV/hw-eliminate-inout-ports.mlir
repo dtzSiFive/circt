@@ -1,5 +1,6 @@
-// RUN: circt-opt --hw-eliminate-inout-ports %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.design(hw-eliminate-inout-ports))' %s | FileCheck %s
 
+hw.design {
 // CHECK-LABEL:   hw.module @read(
 // CHECK-SAME:                    %[[VAL_0:.*]]: i42) -> (out: i42) {
 // CHECK:           hw.output %[[VAL_0]] : i42
@@ -92,4 +93,6 @@ hw.module @outputInout() -> (out : !hw.inout<i42>) {
 hw.module @outputInoutDriver() {
   %0 = hw.instance "outputInout" @outputInout() -> (out : !hw.inout<i42>)
   hw.instance "write" @write(a : %0 : !hw.inout<i42>) -> ()
+}
+
 }

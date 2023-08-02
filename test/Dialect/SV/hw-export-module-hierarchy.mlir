@@ -1,5 +1,6 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(hw-export-module-hierarchy)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(hw.design(hw-export-module-hierarchy))' %s | FileCheck %s
 
+hw.design {
 hw.module @InnerModule() -> () {}
 
 hw.module @MainDesign() -> () {
@@ -8,6 +9,7 @@ hw.module @MainDesign() -> () {
 
 hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"testharness_hier.json", excludeFromFileList>]} {
   hw.instance "main_design" @MainDesign() -> ()
+}
 }
 
 // CHECK:      hw.module @MainDesign()
