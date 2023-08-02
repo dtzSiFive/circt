@@ -1,6 +1,5 @@
 // RUN:  circt-opt --pass-pipeline='builtin.module(hw.design(sv-extract-test-code))' --split-input-file %s | FileCheck %s
-// CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
-// CHECK-NEXT: hw.design {
+// CHECK-LABEL: hw.design attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assume
@@ -33,8 +32,7 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assert>
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
-hw.design {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
   hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(%a : i1) attributes {"firrtl.extract.assert.extra"}
@@ -61,7 +59,6 @@ hw.design {
     hw.output
   }
 }
-}
 
 // -----
 
@@ -73,8 +70,7 @@ hw.design {
 // CHECK-LABEL: @AlreadyExtracted
 // CHECK-COUNT-1: doNotPrint
 // CHECK-NOT:     doNotPrint
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-hw.design {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @AlreadyExtracted(%clock: i1) -> () {
     sv.always posedge %clock  {
       sv.assert %clock, immediate
@@ -84,7 +80,6 @@ hw.design {
     hw.instance "submodule" @AlreadyExtracted(clock: %clock: i1) -> () {doNotPrint = true}
   }
 }
-}
 
 // -----
 
@@ -92,14 +87,12 @@ hw.design {
 //
 // CHECK-NOT:  hw.module @ModuleInTestHarness_assert
 // CHECK-NOT:  firrtl.extract.do_not_extract
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-hw.design {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @ModuleInTestHarness(%clock: i1) -> () attributes {"firrtl.extract.do_not_extract"} {
     sv.always posedge %clock  {
       sv.assert %clock, immediate
     }
   }
-}
 }
 
 // -----
@@ -109,8 +102,7 @@ hw.design {
 // CHECK:      hw.instance "[[name:.+]]_assert" sym @{{[^ ]+}} @[[name]]_assert
 // CHECK-NEXT: hw.instance "[[name:.+]]_assume" sym @{{[^ ]+}} @[[name]]_assume
 // CHECK-NEXT: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-hw.design {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @InstanceName(%clock: i1, %cond: i1, %cond2: i1) -> () {
     sv.always posedge %clock  {
       sv.assert %cond, immediate
@@ -119,7 +111,6 @@ hw.design {
     }
   }
 }
-}
 
 
 // -----
@@ -127,8 +118,7 @@ hw.design {
 
 // CHECK-LABEL: @MultiRead(
 // CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(foo: %0: i1, clock: %clock: i1)
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-hw.design {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @MultiRead(%clock: i1, %cond: i1) -> () {
     %foo = sv.wire : !hw.inout<i1>
     sv.assign %foo, %cond : i1
@@ -142,15 +132,13 @@ hw.design {
     }
   }
 }
-}
 
 // -----
 // Check extracted module ports take name of instance result when needed.
 
 // CHECK-LABEL: @InstResult(
 // CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem.result_name: %{{[^ ]+}}: i1, mem.1: %{{[^ ]+}}: i1, clock: %clock: i1)
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-hw.design {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @Mem() -> (result_name: i1, "": i1) {
     %reg = sv.reg : !hw.inout<i1>
     %0 = sv.read_inout %reg : !hw.inout<i1>
@@ -166,7 +154,6 @@ hw.design {
       sv.cover %2, immediate
     }
   }
-}
 }
 
 // -----
