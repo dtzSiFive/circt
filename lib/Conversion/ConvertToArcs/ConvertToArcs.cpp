@@ -63,15 +63,13 @@ struct Converter {
 } // namespace
 
 LogicalResult Converter::run(ModuleOp module) {
-  for (auto design : module.getOps<HWDesignOp>())
-    for (auto &op : design.getOps()) {
-      if (auto sym =
-              op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-        globalNamespace.newName(sym.getValue());
-    for (auto module : design.getOps<HWModuleOp>())
-      if (failed(runOnModule(module)))
-        return failure();
-  }
+  for (auto &op : module.getOps())
+    if (auto sym =
+            op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+      globalNamespace.newName(sym.getValue());
+  for (auto module : module.getOps<HWModuleOp>())
+    if (failed(runOnModule(module)))
+      return failure();
   return success();
 }
 

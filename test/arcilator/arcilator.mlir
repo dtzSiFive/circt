@@ -20,7 +20,6 @@
 // CHECK-NOT: hw.module @Top
 // CHECK-LABEL: arc.model "Top" {
 // CHECK-NEXT: ^bb0(%arg0: !arc.storage<6>):
-hw.design {
 hw.module @Top(%clock: i1, %i0: i4, %i1: i4) -> (out: i4) {
   // CHECK-DAG: arc.root_input "clock", %arg0 {offset = 0
   // CHECK-DAG: arc.root_input "i0", %arg0 {offset = 1
@@ -62,7 +61,6 @@ hw.module @Top(%clock: i1, %i0: i4, %i1: i4) -> (out: i4) {
   %bar = seq.compreg %2, %clock : i4
   %3 = comb.mul %foo, %bar : i4
   hw.output %3 : i4
-}
 }
 
 // LLVM: define void @Top_passthrough(ptr %0)
