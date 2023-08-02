@@ -38,6 +38,8 @@
 //SEPARATE-NEXT:   hw.output
 //SEPARATE-NEXT: }
 
+hw.design @cleanup {
+
 hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
   %fd = hw.constant 0x80000002 : i32
 
@@ -371,4 +373,5 @@ hw.module @sv_attributes() {
   sv.initial  {
     sv.fwrite %fd, "B"
   } {sv.attributes = [#sv.attribute<"dont_merge">]}
+}
 }

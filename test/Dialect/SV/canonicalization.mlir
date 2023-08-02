@@ -1,5 +1,7 @@
 // RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
+hw.design @canonicalize {
+
 // CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.always posedge %arg0  {
@@ -317,4 +319,6 @@ hw.module @MergeAssignments(%a: !hw.array<4xi1>, %clock: i1) -> (d: !hw.array<4x
 hw.module @Sampled(%in: i1) {
   %2 = sv.system.sampled %in : i1
   hw.output
+}
+
 }
