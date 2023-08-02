@@ -156,7 +156,7 @@ def HWDesignOp : HWOp<"design", [
 
 def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
                                          OpAsmOpInterface, 
-                                         HasParent<"mlir::ModuleOp">, 
+                                         HasParent<"::circt::hw::HWDesignOp">, 
                                          IsolatedFromAbove,
                                          SingleBlockImplicitTerminator<"OutputOp">]> {
   let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
