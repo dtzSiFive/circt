@@ -179,7 +179,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-DAG: sv.bind <@Top::@[[input_only_cover]]>
 // CHECK-DAG: sv.bind <@InputOnlySym::@[[input_only_sym_cover]]>
 // CHECK-DAG: sv.bind <@Top::@[[already_bound]]>
-module {
+hw.design {
   hw.module private @AlreadyBound() -> () {}
 
   hw.module private @InputOnly(%clock: i1, %cond: i1) -> () {
@@ -291,7 +291,7 @@ module {
 // CHECK: hw.instance "non_testcode_and_instance0"
 // CHECK: hw.instance "non_testcode_and_instance1"
 
-module {
+hw.design {
   hw.module private @Foo(%a: i1) -> (b: i1) {
     hw.output %a : i1
   }
@@ -418,7 +418,7 @@ module {
 // -----
 // Check register extraction
 
-module {
+hw.design {
   // CHECK-LABEL: @RegExtracted_cover
   // CHECK-SAME: %designAndTestCode
   // CHECK: %testCode1 = seq.firreg
@@ -450,7 +450,7 @@ module {
 // -----
 // Check that constants are cloned freely.
 
-module {
+hw.design {
   // CHECK-LABEL: @ConstantCloned_cover(%in: i1, %clock: i1)
   // CHECK-NEXT:   %true = hw.constant true
   // CHECK-NEXT:   comb.xor bin %in, %true : i1
@@ -469,7 +469,7 @@ module {
 // -----
 // Check that input only modules are inlined properly.
 
-module {
+hw.design {
   // @ShouldNotBeInlined cannot be inlined because there is a wire with an inner sym
   // that is referred by hierpath op.
   hw.hierpath private @Foo [@ShouldNotBeInlined::@foo]

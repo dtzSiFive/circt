@@ -312,7 +312,7 @@ module  {
 
 // -----
 
-module {
+hw.design {
   hw.module @A(%a : !hw.int<41>) -> (out: !hw.int<42>) {
 // expected-error @+1 {{'hw.instance' op operand type #0 must be 'i42', but got 'i41'}}
     %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<41>) -> (out: !hw.int<42>)
@@ -324,7 +324,7 @@ module {
 
 // -----
 
-module {
+hw.design {
   hw.module @A(%a : !hw.int<42>) -> (out: !hw.int<41>) {
 // expected-error @+1 {{'hw.instance' op result type #0 must be 'i42', but got 'i41'}}
     %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<42>) -> (out: !hw.int<41>)

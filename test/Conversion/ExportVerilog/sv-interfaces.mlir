@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
-module {
+hw.design {
   // CHECK-LABEL: interface data_vr;
   // CHECK:         logic [31:0] data;
   // CHECK:         logic valid;

@@ -47,7 +47,7 @@ hw.module @carryOverWireAttrs(%a: i1) -> (b: i1){
 
 // -----
 
-module {
+hw.design {
   // CHECK-LABEL:  hw.module @SpillTemporaryInProceduralRegion
   hw.module @SpillTemporaryInProceduralRegion(%a: i4, %b: i4, %fd: i32) -> () {
     // CHECK-NEXT: %r = sv.reg
