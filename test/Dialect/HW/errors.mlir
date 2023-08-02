@@ -1,33 +1,42 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
+hw.design {
 func.func private @test_extract(%arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %a = comb.extract %arg0 from 6 : (i4) -> i3
 }
+}
 
 // -----
 
+hw.design {
 func.func private @test_extract(%arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %b = comb.extract %arg0 from 2 : (i4) -> i3
 }
+}
 
 // -----
 
+hw.design {
 func.func private @test_and() {
   // expected-error @+1 {{'comb.and' op expected 1 or more operands}}
   %b = comb.and : i111
 }
-
-// -----
-
-hw.module @InnerSymVisibility() {
-  // expected-error @+1 {{expected 'public', 'private', or 'nested'}}
-  %wire = hw.wire %wire sym [<@x, 1, oops>] : i1
 }
 
 // -----
 
+hw.design {
+hw.module @InnerSymVisibility() {
+  // expected-error @+1 {{expected 'public', 'private', or 'nested'}}
+  %wire = hw.wire %wire sym [<@x, 1, oops>] : i1
+}
+}
+
+// -----
+
+hw.design {
 func.func private @notModule () {
   return
 }
@@ -36,47 +45,62 @@ hw.module @A(%arg0: i1) {
   // expected-error @+1 {{symbol reference 'notModule' isn't a module}}
   hw.instance "foo" @notModule(a: %arg0: i1) -> ()
 }
-
-// -----
-
-hw.module @A(%arg0: i1) {
-  // expected-error @+1 {{Cannot find module definition 'doesNotExist'}}
-  hw.instance "b1" @doesNotExist(a: %arg0: i1) -> ()
 }
 
 // -----
 
+hw.design {
+hw.module @A(%arg0: i1) {
+  // expected-error @+1 {{Cannot find module definition 'doesNotExist'}}
+  hw.instance "b1" @doesNotExist(a: %arg0: i1) -> ()
+}
+}
+
+// -----
+
+hw.design {
 hw.generator.schema @S, "Test Schema", ["test"]
 // expected-error @+1 {{Cannot find generator definition 'S2'}}
 hw.module.generated @A, @S2(%arg0: i1) -> (a: i1) attributes { test = 1 }
+}
 
 // -----
 
+hw.design {
 hw.module @S() { }
 // expected-error @+1 {{which is not a HWGeneratorSchemaOp}}
 hw.module.generated @A, @S(%arg0: i1) -> (a: i1) attributes { test = 1 }
+}
 
 
 // -----
 
+hw.design {
 // expected-error @+1 {{'hw.output' op must have same number of operands as region results}}
 hw.module @A() -> ("": i1) { }
+}
 
 // -----
 
+hw.design {
 // expected-error @+1 {{expected non-function type}}
 func.func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
+}
 
 // -----
 
+hw.design {
 // expected-error @+1 {{invalid element for hw.inout type}}
 func.func private @invalidInout(%arg0: !hw.inout<tensor<*xf32>>) { }
+}
 
 // -----
 
+hw.design {
 hw.module @inout(%a: i42) {
   // expected-error @+1 {{'input' must be InOutType, but got 'i42'}}
   %aget = sv.read_inout %a: i42
+}
 }
 
 // -----
@@ -299,7 +323,7 @@ hw.module @Use<xx: none, xx: none>() {}
 
 // -----
 
-module  {
+hw.design {
 // expected-error @+1 {{'inst_1' in module:'A' does not contain a reference to 'glbl_D_M1'}}
   hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_1>]
   hw.module @C() -> () {
@@ -336,6 +360,7 @@ hw.design {
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module.extern @submodule () -> (out0: i32)
 
@@ -343,9 +368,11 @@ hw.module @wrongResultLabel() {
   // expected-error @+1 {{result label #0 must be "out0", but got "o"}}
   %inst0.out0 = hw.instance "inst0" @submodule () -> (o: i32)
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module.extern @submodule () -> (out0: i32)
 
@@ -353,9 +380,11 @@ hw.module @wrongNumberOfResultNames() {
   // expected-error @+1 {{has a wrong number of results port labels; expected 1 but got 0}}
   "hw.instance"() {instanceName="inst0", moduleName=@submodule, argNames=[], resultNames=[], parameters=[]} : () -> i32
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module.extern @submodule (%arg0: i32) -> ()
 
@@ -363,34 +392,43 @@ hw.module @wrongNumberOfInputNames(%arg0: i32) {
   // expected-error @+1 {{has a wrong number of input port names; expected 1 but got 0}}
   "hw.instance"(%arg0) {instanceName="inst0", moduleName=@submodule, argNames=[], resultNames=[], parameters=[]} : (i32) -> ()
 }
+}
 
 // -----
 
+hw.design {
 // expected-error @+1 {{unsupported dimension kind in hw.array}}
 hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}
+}
 
 // -----
 
+hw.design {
 hw.module @foo() {
   // expected-error @+1 {{enum value 'D' is not a member of enum type '!hw.enum<A, B, C>'}}
   %0 = hw.enum.constant D : !hw.enum<A, B, C>
   hw.output
 }
+}
 
 // -----
 
+hw.design {
 hw.module @foo() {
   // expected-error @+1 {{return type '!hw.enum<A, B>' does not match attribute type #hw.enum.field<A, !hw.enum<A>>}}
   %0 = "hw.enum.constant"() {field = #hw.enum.field<A, !hw.enum<A>>} : () -> !hw.enum<A, B>
   hw.output
 }
+}
 
 // -----
 
+hw.design {
 hw.module @foo() {
   %0 = hw.enum.constant A : !hw.enum<A>
   %1 = hw.enum.constant B : !hw.enum<B>
   // expected-error @+1 {{types do not match}}
   %2 = hw.enum.cmp %0, %1 : !hw.enum<A>, !hw.enum<B>
   hw.output
+}
 }
