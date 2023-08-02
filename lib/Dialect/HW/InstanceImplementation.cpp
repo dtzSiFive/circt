@@ -29,7 +29,10 @@ instance_like_impl::getReferencedModule(const HWSymbolCache *cache,
     if (auto *result = cache->getDefinition(moduleName))
       return result;
 
-  auto topLevelModuleOp = instanceOp->getParentOfType<hw::HWDesignOp>();
+  if (auto topLevelModuleOp = instanceOp->getParentOfType<hw::HWDesignOp>() )
+    return topLevelModuleOp.lookupSymbol(moduleName.getValue());
+  auto topLevelModuleOp = instanceOp->getParentOfType<ModuleOp>();
+  assert(topLevelModuleOp);
   return topLevelModuleOp.lookupSymbol(moduleName.getValue());
 }
 
