@@ -33,7 +33,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       FunctionOpInterface, Symbol,
-      OpAsmOpInterface, ParentOneOf<["::circt::hw::HWDesignOp","::mlir::ModuleOp"]>]> {
+      OpAsmOpInterface, HasParent<"::circt::hw::HWDesignOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
 
