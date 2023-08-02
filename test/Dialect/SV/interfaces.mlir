@@ -1,8 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL: module {
-module {
+// CHECK-LABEL: hw.design {
+hw.design {
 
   // Empty interface test
   sv.interface @empty { }
