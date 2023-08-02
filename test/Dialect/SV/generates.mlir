@@ -1,7 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s --export-verilog -o %t.mlir | FileCheck %s --check-prefix=SV
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(export-verilog))' -o %t.mlir | FileCheck %s --check-prefix=SV
 
+hw.design {
 hw.module @PrintPath<> () -> () {
   %fd = hw.constant 0x80000002 : i32
   sv.initial {
@@ -92,3 +93,4 @@ hw.module @CaseNoDefault<NUM : i8> () -> () {
 // SV:         end: bar
 // SV:         endgenerate
 // SV:       endmodule
+}
