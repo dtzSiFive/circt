@@ -214,12 +214,12 @@ struct CircuitLoweringState {
       used_RANDOMIZE_MEM_INIT{false};
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
-  CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
+  CircuitLoweringState(CircuitOp circuitOp, Block *insertPoint, bool enableAnnotationWarning,
                        bool emitChiselAssertsAsSVA,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
+        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable), typeAliases(circuitOp, insertPoint) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -366,7 +366,7 @@ private:
   /// deteministic TypeDecls inside the global TypeScopeOp.
   struct RecordTypeAlias {
 
-    RecordTypeAlias(CircuitOp c) : circuitOp(c) {}
+    RecordTypeAlias(CircuitOp c, Block *insertPoint) : circuitOp(c), insertPoint(insertPoint) {}
 
     hw::TypeAliasType getTypedecl(BaseTypeAliasType firAlias) const {
       auto iter = firrtlTypeToAliasTypeMap.find(firAlias);
@@ -384,14 +384,12 @@ private:
       assert(!frozen && "Record already frozen, cannot be updated");
 
       // TODO: Fix this!
-      assert(0  && "sadface");
       if (!typeScope) {
-        auto b = ImplicitLocOpBuilder::atBlockBegin(
-            circuitOp.getLoc(),
-            &circuitOp->getParentRegion()->getBlocks().back());
+        auto b =
+            ImplicitLocOpBuilder::atBlockBegin(circuitOp.getLoc(), insertPoint);
         typeScope = b.create<hw::TypeScopeOp>(
             b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
-        typeScope.getBodyRegion().push_back(new Block());
+        typeScope.getBodyRegion().emplaceBlock();
       }
       auto typeName = firAlias.getName();
       // Get a unique typedecl name.
@@ -426,9 +424,10 @@ private:
     Namespace typeDeclNamespace;
 
     CircuitOp circuitOp;
+    Block *insertPoint;
   };
 
-  RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
+  RecordTypeAlias typeAliases;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -562,7 +561,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
+      circuit, topLevelModule, enableAnnotationWarning, emitChiselAssertsAsSVA,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
