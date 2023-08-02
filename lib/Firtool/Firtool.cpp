@@ -205,9 +205,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
   if (opt.extractTestCode)
-    pm.addPass(sv::createSVExtractTestCodePass(opt.etcDisableInstanceExtraction,
-                                               opt.etcDisableRegisterExtraction,
-                                               opt.etcDisableModuleInlining));
+    pm.nest<hw::HWDesignOp>().addPass(sv::createSVExtractTestCodePass(
+        opt.etcDisableInstanceExtraction, opt.etcDisableRegisterExtraction,
+        opt.etcDisableModuleInlining));
 
   pm.nest<hw::HWDesignOp>().addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
   auto &modulePM = pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>();
