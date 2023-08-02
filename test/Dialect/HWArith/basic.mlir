@@ -1,6 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: @test1() {
+hw.design {
 hw.module @test1() {
   // CHECK: %0 = hwarith.constant 0 : ui1
   // CHECK: %1 = hwarith.constant 1 : ui1
@@ -35,4 +36,5 @@ hw.module @test1() {
   %13 = hwarith.icmp eq %5, %10 : ui2, si9
   // CHECK: %14 = hwarith.cast %13 : (ui1) -> i1
   %14 = hwarith.cast %13 : (ui1) -> i1
+}
 }
