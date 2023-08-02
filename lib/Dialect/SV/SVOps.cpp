@@ -1804,9 +1804,8 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto module = (*this)->getParentOfType<hw::HWDesignOp>();
-  auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      symbolTable.lookupSymbolIn(module, getInstance().getModule()));
+  auto hwModule = symbolTable.lookupNearestSymbolFrom<hw::HWModuleOp>(
+      *this, getInstance().getModule());
   if (!hwModule)
     return emitError("Referenced module doesn't exist ")
            << getInstance().getModule() << "::" << getInstance().getName();
