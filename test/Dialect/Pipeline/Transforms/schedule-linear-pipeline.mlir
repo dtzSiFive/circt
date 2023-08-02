@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='hw.design(any(pipeline-schedule-linear))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.design(any(pipeline-schedule-linear)))' %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @pipeline(
 // CHECK-SAME:          %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
