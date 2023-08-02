@@ -1,6 +1,7 @@
-// RUN: circt-opt -prettify-verilog %s | FileCheck %s
-// RUN: circt-opt -prettify-verilog %s | circt-opt --export-verilog | FileCheck %s --check-prefix=VERILOG
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.design(hw.module(prettify-verilog)))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.design(hw.module(prettify-verilog)))' %s | circt-opt --pass-pipeline='builtin.module(hw.design(export-verilog))' | FileCheck %s --check-prefix=VERILOG
 
+hw.design {
 // CHECK-LABEL: hw.module @unary_ops
 hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
    -> (a: i8, b: i8, c: i1) {
@@ -597,4 +598,5 @@ hw.module @Issue4030(%a: i1, %clock: i1, %in1: !hw.array<2xi1>) -> (b: !hw.array
     sv.passign %1, %0 : i1
   }
   hw.output %2 : !hw.array<5xi1>
+}
 }
