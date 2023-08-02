@@ -1,5 +1,6 @@
 // RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
+hw.design @canonicalize {
 // CHECK-LABEL: hw.module @extract_noop(%arg0: i3) -> ("": i3) {
 // CHECK-NEXT:    hw.output %arg0
 
@@ -1744,3 +1745,4 @@ hw.module @Wires(%a: i42) {
   // CHECK-NEXT: hw.instance "names3" @WiresKeep(keep: %4: i42)
 }
 hw.module.extern @WiresKeep(%keep: i42)
+}

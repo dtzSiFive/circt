@@ -1,5 +1,6 @@
 // RUN: circt-opt %s | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @bitwise(%arg0: i7, %arg1: i7) -> (r: i21) {
 hw.module @bitwise(%arg0: i7, %arg1: i7) -> (r: i21) {
 // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.xor %arg0 : i7
@@ -38,4 +39,5 @@ hw.module @casts(%in1: i7) -> (x: !hw.struct<int: i7>) {
   %bits = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
   %backToInt = hw.bitcast %bits : (!hw.array<7xi1>) -> !hw.struct<int: i7>
   hw.output %backToInt : !hw.struct<int: i7>
+}
 }

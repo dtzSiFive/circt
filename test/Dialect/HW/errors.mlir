@@ -105,62 +105,79 @@ hw.module @inout(%a: i42) {
 
 // -----
 
+hw.design {
 hw.module @wire(%a: i42) {
   // expected-error @+1 {{'sv.wire' op result #0 must be InOutType, but got 'i42'}}
   %aget = sv.wire: i42
 }
+}
 
 // -----
 
+hw.design {
 hw.module @struct(%a: i42) {
   // expected-error @+1 {{custom op 'hw.struct_create' expected !hw.struct type or alias}}
   %aget = hw.struct_create(%a) : i42
 }
+}
 
 // -----
 
+hw.design {
 hw.module @struct(%a: !hw.struct<foo: i42>) {
   // expected-error @+1 {{custom op 'hw.struct_explode' invalid kind of type specified}}
   %aget = hw.struct_explode %a : i42
 }
+}
 
 // -----
 
+hw.design {
 hw.module @struct(%a: !hw.struct<foo: i42>) {
   // expected-error @+1 {{custom op 'hw.struct_extract' invalid kind of type specified}}
   %aget = hw.struct_extract %a["foo"] : i42
 }
+}
 
 // -----
 
+hw.design {
 hw.module @struct(%a: !hw.struct<foo: i42>) {
   // expected-error @+1 {{custom op 'hw.struct_extract' invalid field name specified}}
   %aget = hw.struct_extract %a["bar"] : !hw.struct<foo: i42>
 }
+}
 
 // -----
 
+hw.design {
 hw.module @struct(%a: !hw.struct<foo: i42>, %b: i42) {
   // expected-error @+1 {{custom op 'hw.struct_inject' invalid kind of type specified}}
   %aget = hw.struct_inject %a["foo"], %b : i42
 }
+}
 
 // -----
 
+hw.design {
 hw.module @struct(%a: !hw.struct<foo: i42>, %b: i42) {
   // expected-error @+1 {{custom op 'hw.struct_inject' invalid field name specified}}
   %aget = hw.struct_inject %a["bar"], %b : !hw.struct<foo: i42>
 }
-
-// -----
-
-hw.module @union(%b: i42) {
-  // expected-error @+1 {{custom op 'hw.union_create' cannot find union field 'bar'}}
-  %u = hw.union_create "bar", %a : !hw.union<foo: i42>
 }
 
 // -----
 
+hw.design {
+hw.module @union(%b: i42) {
+  // expected-error @+1 {{custom op 'hw.union_create' cannot find union field 'bar'}}
+  %u = hw.union_create "bar", %a : !hw.union<foo: i42>
+}
+}
+
+// -----
+
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module @empty() -> () {
   hw.output
@@ -171,9 +188,11 @@ hw.module @test() -> () {
   %0, %1, %3 = hw.instance "test" @empty() -> (a: i2, b: i2, c: i2)
   hw.output
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module @f() -> (a: i2) {
   %a = hw.constant 1 : i2
@@ -185,9 +204,11 @@ hw.module @test() -> () {
   %0 = hw.instance "test" @f() -> (a: i1)
   hw.output
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module @empty() -> () {
   hw.output
@@ -198,9 +219,11 @@ hw.module @test(%a: i1) -> () {
   hw.instance "test" @empty(a: %a: i1) -> ()
   hw.output
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module @f(%a: i1) -> () {
   hw.output
@@ -211,10 +234,11 @@ hw.module @test(%a: i2) -> () {
   hw.instance "test" @f(a: %a: i2) -> ()
   hw.output
 }
-
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module @f(%a: i1) -> () {
   hw.output
@@ -225,9 +249,11 @@ hw.module @test(%a: i1) -> () {
   hw.instance "test" @f(b: %a: i1) -> ()
   hw.output
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
 
@@ -236,9 +262,11 @@ hw.module @Use(%a: i8) -> (xx: i8) {
   %r0 = hw.instance "inst1" @p<p1: i42 = 4>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
 
@@ -247,9 +275,11 @@ hw.module @Use(%a: i8) -> (xx: i8) {
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p3: i1 = 0>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
 }
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
 
@@ -258,9 +288,11 @@ hw.module @Use(%a: i8) -> (xx: i8) {
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i2 = 0>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
 }
+}
 
 // -----
 
+hw.design {
 hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
 
 hw.module @Use(%a: i8) -> (xx: i8) {
@@ -268,10 +300,12 @@ hw.module @Use(%a: i8) -> (xx: i8) {
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i1>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
 }
+}
 
 // -----
 // Check attribute validity for parameters.
 
+hw.design {
 hw.module.extern @p<p: i42>() -> ()
 
 // expected-note @+1 {{module declared here}}
@@ -279,10 +313,12 @@ hw.module @Use() {
   // expected-error @+1 {{op use of unknown parameter "FOO"}}
   hw.instance "inst1" @p<p: i42 = #hw.param.decl.ref<"FOO">>() -> ()
 }
+}
 
 // -----
 // Check attribute validity for parameters.
 
+hw.design {
 hw.module.extern @p<p: i42>() -> ()
 
 // expected-note @+1 {{module declared here}}
@@ -290,36 +326,47 @@ hw.module @Use<xx: i41>() {
   // expected-error @+1 {{op parameter "xx" used with type 'i42'; should have type 'i41'}}
   hw.instance "inst1" @p<p: i42 = #hw.param.decl.ref<"xx">>() -> ()
 }
+}
 
 
 // -----
 // Check attribute validity for module parameters.
 
+hw.design {
 // expected-error @+1 {{op parameter "p" cannot be used as a default value for a parameter}}
 hw.module.extern @p<p: i42 = #hw.param.decl.ref<"p">>() -> ()
+}
 
 // -----
 
+hw.design {
 // expected-note @+1 {{module declared here}}
 hw.module @Use<xx: i41>() {
   // expected-error @+1 {{'hw.param.value' op parameter "xx" used with type 'i40'; should have type 'i41'}}
   %0 = hw.param.value i40 = #hw.param.decl.ref<"xx">
 }
+}
 
 // -----
 
+hw.design {
 // expected-error @+1 {{parameter #hw.param.decl<"xx": i41> : i41 has the same name as a previous parameter}}
 hw.module @Use<xx: i41, xx: i41>() {}
+}
 
 // -----
 
+hw.design {
 // expected-error @+1 {{parameter #hw.param.decl<"xx": i41 = 1> : i41 has the same name as a previous parameter}}
 hw.module @Use<xx: i41, xx: i41 = 1>() {}
+}
 
 // -----
 
+hw.design {
 // expected-error @+1 {{parameter #hw.param.decl<"xx": none> has the same name as a previous parameter}}
 hw.module @Use<xx: none, xx: none>() {}
+}
 
 // -----
 
