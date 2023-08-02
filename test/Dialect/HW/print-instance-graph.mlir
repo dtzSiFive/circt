@@ -9,6 +9,7 @@
 // CHECK:   [[BEAR]] [shape=record,label="{Bear}"];
 // CHECK:   [[BEAR]] -> [[CAT]][label=cat];
 
+hw.design {
 hw.module @Top() {
   hw.instance "alligator" @Alligator() -> ()
   hw.instance "cat" @Cat() -> ()
@@ -24,3 +25,4 @@ hw.module private @Bear() {
 
 hw.module private @Cat() { }
 
+}
