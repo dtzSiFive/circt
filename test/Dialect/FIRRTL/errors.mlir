@@ -1893,7 +1893,7 @@ firrtl.circuit "RWProbeRemote" {
   }
   firrtl.module @RWProbeRemote() {
     // expected-error @below {{op has non-local target}}
-    %rw = firrtl.ref.rwprobe <@Other::@x> : !firrtl.uint<1>
+    %rw = firrtl.ref.rwprobe <@Other::@x> : !firrtl.rwprobe<uint<1>>
   }
 }
 
@@ -1902,7 +1902,7 @@ firrtl.circuit "RWProbeRemote" {
 firrtl.circuit "RWProbeNonBase" {
   firrtl.module @RWProbeNonBase() {
     // expected-error @below {{cannot force type '!firrtl.string'}}
-    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@invalid> : !firrtl.string
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@invalid> : !firrtl.rwprobe<string>
   }
 }
 
@@ -1913,7 +1913,7 @@ firrtl.circuit "RWProbeTypes" {
     // expected-note @below {{target resolves here}}
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
-    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.uint<1>
+    %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.rwprobe<uint<1>>
   }
 }
 
@@ -1923,7 +1923,7 @@ firrtl.circuit "RWProbeUninferred" {
   firrtl.module @RWProbeUninferred() {
     %w = firrtl.wire sym @x : !firrtl.uint
     // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.uint
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.rwprobe<uint>
   }
 }
 
@@ -1933,7 +1933,7 @@ firrtl.circuit "RWProbeUninferredReset" {
   firrtl.module @RWProbeUninferredReset() {
     %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
     // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.bundle<a: reset>
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 
@@ -1945,7 +1945,7 @@ firrtl.circuit "RWProbeInstance" {
     // expected-note @below {{target resolves here}}
     firrtl.instance inst sym @inst @Ext()
     // expected-error @below {{op has target that cannot be probed}}
-    %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.uint<1>
+    %rw = firrtl.ref.rwprobe <@RWProbeInstance::@inst> : !firrtl.rwprobe<uint<1>>
   }
 }
 
