@@ -1901,7 +1901,7 @@ firrtl.circuit "RWProbeRemote" {
 
 firrtl.circuit "RWProbeNonBase" {
   firrtl.module @RWProbeNonBase() {
-    // expected-error @below {{cannot force type '!firrtl.string'}}
+    // expected-error @below {{expected base type, found '!firrtl.string'}}
     %rw = firrtl.ref.rwprobe <@RWProbeTypes::@invalid> : !firrtl.rwprobe<string>
   }
 }
@@ -1919,21 +1919,11 @@ firrtl.circuit "RWProbeTypes" {
 
 // -----
 
-firrtl.circuit "RWProbeUninferred" {
-  firrtl.module @RWProbeUninferred() {
-    %w = firrtl.wire sym @x : !firrtl.uint
-    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.rwprobe<uint>
-  }
-}
-
-// -----
-
 firrtl.circuit "RWProbeUninferredReset" {
   firrtl.module @RWProbeUninferredReset() {
     %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op attribute 'type' failed to satisfy constraint: type attribute of RWProbeTarget type (a FIRRTL base type with a known width and not abstract reset)}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferred::@x> : !firrtl.rwprobe<bundle<a: reset>>
+    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
+    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 
