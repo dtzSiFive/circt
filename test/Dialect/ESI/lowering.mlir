@@ -1,7 +1,10 @@
-// RUN: circt-opt %s --lower-esi-to-physical -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
-// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(lower-esi-to-physical))' -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(lower-esi-ports))' -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(lower-esi-to-physical,lower-esi-ports,hw-flatten-io,lower-esi-to-hw))' -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
 
+!st1 = !hw.struct<a: i3, b: i7>
+
+hw.design {
 hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8) attributes {esi.bundle}
 hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle}
 hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1) attributes {esi.bundle}
@@ -162,7 +165,6 @@ hw.module @fifo0LoopbackTop() -> () {
 // IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in_in, %in_flatBroke_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
 // IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_readEnable_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
 // IFACE-NEXT:     hw.output %rden, %data, %empty : i1, !hw.struct<a: i3, b: i7>, i1
-!st1 = !hw.struct<a: i3, b: i7>
 hw.module @structFifo0Loopback(%in: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>)
     attributes {esi.portFlattenStructs, esi.portRdenSuffix="_readEnable",
                 esi.portEmptySuffix="_flatBroke", esi.portInSuffix="_in"} {
@@ -186,4 +188,5 @@ hw.module @i3LoopbackOddNames(%in: !esi.channel<i3>) -> (out: !esi.channel<i3>)
     attributes {esi.portFlattenStructs, esi.portValidSuffix="_good",
                 esi.portReadySuffix="_letErRip", esi.portOutSuffix="_out"} {
   hw.output %in : !esi.channel<i3>
+}
 }
