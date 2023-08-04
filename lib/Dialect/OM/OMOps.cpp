@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/OM/OMOps.h"
 
+#include "circt/Dialect/HW/HWOps.h"
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
@@ -236,7 +238,9 @@ void circt::om::ObjectOp::build(::mlir::OpBuilder &odsBuilder,
 LogicalResult
 circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Get the containing ModuleOp.
-  auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
+  // auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
+  auto moduleOp = getOperation()->getParentOfType<::circt::hw::HWDesignOp>();
+  assert(moduleOp);
 
   // Verify the result type is the same as the referred-to class.
   StringAttr resultClassName = getResult().getType().getClassName().getAttr();
@@ -284,7 +288,9 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 LogicalResult
 circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Get the containing ModuleOp.
-  auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
+  // auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
+  auto moduleOp = getOperation()->getParentOfType<::circt::hw::HWDesignOp>();
+  assert(moduleOp);
 
   // Get the ObjectInstOp and the ClassLike it is an instance of.
   ObjectOp objectInst = getObject().getDefiningOp<ObjectOp>();
