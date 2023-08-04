@@ -84,6 +84,8 @@ static uint64_t convertFieldIDToOurVersion(uint64_t fieldID, FIRRTLType type) {
   auto curFID = fieldID;
   auto curFType = fType;
   while (curFID != 0) {
+    llvm::errs() << "curFType: " << curFType << ", curFID: " << curFID
+                 << ", convertedFieldID: " << convertedFieldID << "\n";
     auto [child, subID] = curFType.getSubTypeByFieldID(curFID);
     if (isa<FVectorType>(curFType))
       convertedFieldID++; // Vector fieldID is 1.
@@ -1755,8 +1757,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         }
         llvm::errs() << "target: " << ist << "\n";
         llvm::errs() << "ref: " << ref.getValue() << " @ " << ref.getFieldID() << "\n";
-        auto newFID =
-            convertFieldIDToOurVersion(ref.getFieldID(), op.getType());
+        auto newFID = convertFieldIDToOurVersion(
+            ref.getFieldID(), type_cast<FIRRTLType>(ref.getValue().getType()));
         llvm::errs() << "newFID: " << newFID << "\n";
 
         unifyTypes(FieldRef(op.getResult(), 0),
@@ -2193,6 +2195,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
   // If this is an operation that does not generate any free variables that
   // are determined during width inference, simply update the value type based
   // on the operation arguments.
+  if (!isa_and_nonnull<RWProbeOp>(value.getDefiningOp()))
   if (auto op = dyn_cast_or_null<InferTypeOpInterface>(value.getDefiningOp())) {
     SmallVector<Type, 2> types;
     auto res =
