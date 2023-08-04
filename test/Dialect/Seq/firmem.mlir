@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --verify-diagnostics | circt-opt --verify-diagnostics | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @Basic
 hw.module @Basic() {
   // CHECK-NEXT: seq.firmem 0, 1, undefined, undefined : <3 x 19>
@@ -52,4 +53,5 @@ hw.module @Ports(%clock: i1, %enable: i1, %address: i4, %data: i20, %mode: i1, %
 
   // CHECK-NEXT: comb.xor [[R0]], [[R1]], [[R2]], [[R3]], [[R4]]
   comb.xor %0, %1, %2, %3, %4 : i20
+}
 }

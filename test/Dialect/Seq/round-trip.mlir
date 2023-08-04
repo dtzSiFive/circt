@@ -1,5 +1,6 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
+hw.design {
 hw.module @d1(%clk : i1, %rst : i1) -> () {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
@@ -71,4 +72,5 @@ hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () 
 hw.module @preset(%clock : i1, %reset : i1, %next : i32) -> () {
   // CHECK: %reg = seq.firreg %next clock %clock preset 0 : i32
   %reg = seq.firreg %next clock %clock preset 0 : i32
+}
 }

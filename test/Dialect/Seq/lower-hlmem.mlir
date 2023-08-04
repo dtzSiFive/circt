@@ -1,5 +1,6 @@
-// RUN: circt-opt --lower-seq-hlmem %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.design(hw.module(lower-seq-hlmem)))' %s | FileCheck %s
 
+hw.design {
 // CHECK-LABEL:   hw.module @d1(
 // CHECK-SAME:                  %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                  %[[VAL_1:.*]]: i1) {
@@ -33,4 +34,5 @@ hw.module @d1(%clk : i1, %rst : i1) -> () {
   %myMemory_rdata = seq.read %myMemory[%c0_i2] rden %c1_i1 { latency = 0} : !seq.hlmem<4xi32>
   %myMemory_rdata2 = seq.read %myMemory[%c0_i2] rden %c1_i1 { latency = 2} : !seq.hlmem<4xi32>
   hw.output
+}
 }

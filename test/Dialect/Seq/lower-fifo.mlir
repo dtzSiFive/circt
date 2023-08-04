@@ -1,8 +1,10 @@
 // This is such a large lowering that it doesn't really make that much sense to
 // inspect the test output. So this is mostly here for detecting regressions.
 // Canonicalize used to remove some of the constants introduced by the lowering.
-// RUN: circt-opt --lower-seq-fifo --canonicalize %s | FileCheck %s --implicit-check-not=seq.fifo
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.design(hw.module(lower-seq-fifo),canonicalize))' %s | FileCheck %s --implicit-check-not=seq.fifo
 
+
+hw.design {
 
 // CHECK-LABEL:   hw.module @fifo1(
 // CHECK-SAME:            %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
@@ -97,4 +99,5 @@ hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> (ou
 hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> (out: i32, empty: i1, full: i1, almost_empty : i1, almost_full : i1) {
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 4 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   hw.output %out, %empty, %full, %almostEmpty, %almostFull : i32, i1, i1, i1, i1
+}
 }
