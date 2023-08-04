@@ -38,12 +38,12 @@ using circt::hw::InstancePath;
 namespace {
 
 struct ObjectModelIR {
-  ObjectModelIR(mlir::ModuleOp moduleOp) : moduleOp(moduleOp) {}
+  ObjectModelIR(firrtl::CircuitOp op) : circuitOp(op) {}
   void createMemorySchema() {
-    auto *context = moduleOp.getContext();
+    auto *context = circuitOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
-    auto builderOM =
-        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        unknownLoc, circuitOp.getBodyBlock());
 
     // Add all the properties of a memory as fields of the class.
     // The types must match exactly with the FMemModuleOp attribute type.
@@ -71,10 +71,10 @@ struct ObjectModelIR {
   }
 
   void createRetimeModulesSchema() {
-    auto *context = moduleOp.getContext();
+    auto *context = circuitOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
-    auto builderOM =
-        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        unknownLoc, circuitOp.getBodyBlock());
     Type classFieldTypes[] = {om::SymbolRefType::get(context)};
     retimeModulesSchemaClass = om::ClassOp::buildSimpleClassOp(
         builderOM, unknownLoc, "RetimeModulesSchema", retimeModulesParamNames,
@@ -99,10 +99,10 @@ struct ObjectModelIR {
   }
 
   void addBlackBoxModulesSchema() {
-    auto *context = moduleOp.getContext();
+    auto *context = circuitOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
-    auto builderOM =
-        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        unknownLoc, circuitOp.getBodyBlock());
     Type classFieldTypes[] = {om::SymbolRefType::get(context)};
     blackBoxModulesSchemaClass = om::ClassOp::buildSimpleClassOp(
         builderOM, unknownLoc, "SitestBlackBoxModulesSchema",
@@ -152,7 +152,7 @@ struct ObjectModelIR {
     builderOM.create<om::ClassFieldOp>(
         builderOM.getStringAttr("mem_" + mem.getName()), object);
   }
-  mlir::ModuleOp moduleOp;
+  firrtl::CircuitOp circuitOp;
   om::ClassOp memorySchemaClass;
   om::ClassOp memoryMetadataClass;
   om::ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
@@ -615,7 +615,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       dutModuleSet.insert(node->getModule());
     });
   }
-  ObjectModelIR omir(moduleOp);
+  ObjectModelIR omir(circuitOp);
 
   if (failed(emitRetimeModulesMetadata(omir)) ||
       failed(emitSitestBlackboxMetadata(omir)) ||
