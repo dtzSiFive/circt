@@ -3032,7 +3032,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
       getInnerRefTo(innerSymTarget, [&](FModuleOp mod) -> ModuleNamespace & {
         return modNameSpace;
       });
-  result = builder.create<RWProbeOp>(sym, targetType);
+  result = builder.create<RWProbeOp>(forceableType, sym);
   return success();
 }
 
