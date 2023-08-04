@@ -182,7 +182,6 @@ class CreateSiFiveMetadataPass
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   // The design under test module.
   FModuleOp dutMod;
-  CircuitOp circuitOp;
 
 public:
   CreateSiFiveMetadataPass(bool replSeqMem, StringRef replSeqMemFile) {
@@ -199,6 +198,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
   if (!replSeqMem)
     return success();
 
+  CircuitOp circuitOp = getOperation();
   // The instance graph analysis will be required to print the hierarchy names
   // of the memory.
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
@@ -444,6 +444,7 @@ LogicalResult
 CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 
   auto *context = &getContext();
+  auto circuitOp = getOperation();
 
   // Get the filename, removing the annotation from the circuit.
   StringRef filename;
@@ -503,6 +504,7 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
       dataTapsBlackboxClass, memTapBlackboxClass};
 
   auto *context = &getContext();
+  auto circuitOp = getOperation();
 
   // Get the filenames from the annotations.
   StringRef dutFilename, testFilename;
@@ -598,17 +600,7 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 }
 
 void CreateSiFiveMetadataPass::runOnOperation() {
-
-  auto moduleOp = getOperation();
-  auto circuits = moduleOp.getOps<CircuitOp>();
-  if (circuits.empty())
-    return;
-  auto cIter = circuits.begin();
-  circuitOp = *cIter++;
-
-  assert(cIter == circuits.end() &&
-         "cannot handle more than one CircuitOp in a mlir::ModuleOp");
-
+  auto circuitOp = getOperation();
   auto *body = circuitOp.getBodyBlock();
 
   // Find the device under test and create a set of all modules underneath it.
@@ -635,7 +627,6 @@ void CreateSiFiveMetadataPass::runOnOperation() {
 
   // Clear pass-global state as required by MLIR pass infrastructure.
   dutMod = {};
-  circuitOp = {};
   dutModuleSet.empty();
 }
 
