@@ -11,11 +11,13 @@
  */
 
 #include "circt-c/Dialect/OM.h"
+#include "circt-c/Dialect/HW.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
 #include <mlir-c/Support.h>
 #include <stdio.h>
+#include <assert.h>
 
 void testEvaluator(MlirContext ctx) {
   const char *testIR =
@@ -34,6 +36,7 @@ void testEvaluator(MlirContext ctx) {
   // Set up the Evaluator.
   MlirModule testModule =
       mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testIR));
+  assert(!mlirModuleIsNull(testModule));
 
   OMEvaluator evaluator = omEvaluatorNew(testModule);
 
@@ -137,6 +140,7 @@ void testEvaluator(MlirContext ctx) {
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__om__(), ctx);
+  mlirDialectHandleRegisterDialect(mlirGetDialectHandle__hw__(), ctx);
   testEvaluator(ctx);
   return 0;
 }

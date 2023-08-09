@@ -27,4 +27,5 @@ target_link_libraries(circt-capi-om-test
 
   MLIRCAPIIR
   CIRCTCAPIOM
+  CIRCTCAPIHW
 )
