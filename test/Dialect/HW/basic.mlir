@@ -230,7 +230,7 @@ hw.design {
   }
 }
 
-module {
+hw.design {
   hw.testmodule @NewStyle (input %a : i3, output %b : i3, inout %c : i64 {hw.exportPort = #hw<innerSym@symA>}) {
     hw.output %a : i3
   }
