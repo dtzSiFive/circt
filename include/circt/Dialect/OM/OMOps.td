@@ -29,7 +29,7 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
     SingleBlock, NoTerminator, Symbol, SymbolTable,
-    // ParentOneOf<["::circt::hw::HWDesignOp","::mlir::ModuleOp"]>,
+    ParentOneOf<["::circt::hw::HWDesignOp","::mlir::ModuleOp"]>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
