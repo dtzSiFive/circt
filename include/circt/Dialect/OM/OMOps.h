@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/OM/OMOpInterfaces.h"
 #include "circt/Dialect/OM/OMTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpDefinition.h"
