@@ -2,6 +2,7 @@
 
 !TWrite = !esi.channel<!hw.struct<addr: i32, data: i8>>
 
+hw.design {
 esi.service.decl @BSP {
   esi.service.to_client @Recv : !esi.channel<!TWrite>
   esi.service.to_server @Send : !esi.channel<i8>
@@ -21,6 +22,7 @@ hw.module @Top(%clk: i1, %rst: i1) {
 
 hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>) {
   hw.output %loopback_tohw : !esi.channel<i8>
+}
 }
 
 // =============================================================================
