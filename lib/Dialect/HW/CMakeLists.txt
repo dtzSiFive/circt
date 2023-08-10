@@ -17,7 +17,6 @@ set(CIRCT_HW_Sources
 set(LLVM_OPTIONAL_SOURCES
   ${CIRCT_HW_Sources}
   HWReductions.cpp
-  HWTranslations.cpp
 )
 
 add_circt_dialect_library(CIRCTHW

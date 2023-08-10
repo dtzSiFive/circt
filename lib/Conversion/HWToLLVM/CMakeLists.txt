@@ -1,5 +1,6 @@
 add_circt_conversion_library(CIRCTHWToLLVM
   HWToLLVM.cpp
+  HWTranslations.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen

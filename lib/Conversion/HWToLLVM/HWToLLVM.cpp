@@ -673,7 +673,7 @@ void circt::populateHWToLLVMConversionPatterns(
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<DesignOpConversion>(converter);
+  // patterns.add<DesignOpConversion>(converter);
   patterns.add<HWConstantOpConversion>(ctx, converter);
   patterns.add<HWDynamicArrayCreateOpConversion, HWStructCreateOpConversion>(
       converter);
