@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --lower-arc-to-llvm | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: llvm.func internal @EmptyArc() {
 arc.define @EmptyArc() {
   arc.output
@@ -187,4 +188,5 @@ func.func @funcCallOp(%arg0: i32) -> (i32, i32) {
 }
 func.func @dummyFuncCallee(%arg0: i32) -> (i32, i32) {
   func.return %arg0, %arg0 : i32, i32
+}
 }
