@@ -171,7 +171,7 @@ static void populatePipeline(PassManager &pm) {
   auto untilReached = [](Until until) {
     return until >= runUntilBefore || until > runUntilAfter;
   };
-  auto designPM = pm.nest<hw::HWDesignOp>();
+  auto &designPM = pm; // .nest<hw::HWDesignOp>();
 
   // Pre-process the input such that it no longer contains any SV dialect ops
   // and external modules that are relevant to the arc transformation are
@@ -275,10 +275,10 @@ static void populatePipeline(PassManager &pm) {
 static LogicalResult processBuffer(
     MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
-  mlir::OwningOpRef<mlir::ModuleOp> module;
+  mlir::OwningOpRef<hw::HWDesignOp> module;
   {
     auto parserTimer = ts.nest("Parse MLIR input");
-    module = parseSourceFile<ModuleOp>(sourceMgr, &context);
+    module = parseSourceFile<hw::HWDesignOp>(sourceMgr, &context);
   }
   if (!module)
     return failure();
