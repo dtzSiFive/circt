@@ -680,6 +680,7 @@ void HWToLLVMLoweringPass::runOnOperation() {
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
   target.addLegalOp<ModuleOp>();
+  target.addLegalOp<hw::HWDesignOp>();
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addIllegalDialect<hw::HWDialect>();
 
