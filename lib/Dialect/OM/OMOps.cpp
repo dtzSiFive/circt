@@ -245,9 +245,12 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << resultClassName << ") does not match referred to class ("
            << className << ')';
 
+  // TODO: do better
+  auto resolutionRoot = getOperation()->getParentOp()->getParentOp();
+
   // Verify the referred to ClassOp exists.
-  auto classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
-      getOperation()->getParentOp(), className);
+  auto classDef =
+      symbolTable.lookupNearestSymbolFrom<ClassLike>(resolutionRoot, className);
   if (!classDef)
     return emitOpError("refers to non-existant class (") << className << ')';
 
@@ -284,8 +287,11 @@ LogicalResult
 circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Get the ObjectInstOp and the ClassLike it is an instance of.
   ObjectOp objectInst = getObject().getDefiningOp<ObjectOp>();
+  // TODO: do better
+  auto resolutionRoot = getOperation()->getParentOp()->getParentOp();
+
   auto classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
-      getOperation()->getParentOp(), objectInst.getClassNameAttr());
+      resolutionRoot, objectInst.getClassNameAttr());
 
   // Traverse the field path, verifying each field exists.
   ClassFieldLike finalField;
@@ -314,7 +320,7 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       // The nested ClassOp must exist, since a field with ClassType must be
       // an ObjectInstOp, which already verifies the class exists.
       classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
-          getOperation()->getParentOp(), classType.getClassName());
+          resolutionRoot, classType.getClassName());
 
       // Proceed to the next field in the path.
       continue;
