@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-lower-clocks-to-funcs --verify-diagnostics
 
+hw.design {
 arc.model "NonConstExternalValue" {
 ^bb0(%arg0: !arc.storage<42>):
   %c0_i9001 = hw.constant 0 : i9001
@@ -11,4 +12,5 @@ arc.model "NonConstExternalValue" {
     // expected-note @+1 {{clock trees can only use external constant values}}
     %1 = comb.sub %0, %0 : i9001
   }
+}
 }

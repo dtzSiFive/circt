@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-split-loops | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @Simple(
 hw.module @Simple(%a: i4, %b: i4) -> (x: i4, y: i4) {
   // CHECK-NEXT: %0 = arc.state @SimpleArc_split_0(%a, %b)
@@ -188,4 +189,5 @@ arc.define @SplitDependency(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) {
   %1 = comb.xor %arg2, %arg1 : i1
   %2 = comb.xor %0, %1 : i1
   arc.output %1, %2 : i1, i1
+}
 }

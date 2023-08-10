@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-mux-to-control-flow | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: @test1
 arc.define @test1(%arg0: i41, %arg1: i1, %arg2: i1, %arg3: i1, %arg4: i1, %arg5: i1, %arg6: i1, %arg7: i1, %arg8: i1, %arg9: i1, %arg10: i1, %arg11: i1, %arg12: i1, %arg13: i1, %arg14: i1) -> i1 {
   %true = hw.constant true
@@ -43,3 +44,4 @@ arc.define @test1(%arg0: i41, %arg1: i1, %arg2: i1, %arg3: i1, %arg4: i1, %arg5:
 // not because of incorrectness, but because of slightly different performance
 // tradeoffs chosen. Bottom line is that it is hard to implement non-fragile tests
 // in this FileCheck based setting before the heuristics are stable.
+}

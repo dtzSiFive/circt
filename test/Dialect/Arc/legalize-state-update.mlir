@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-legalize-state-update | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: func.func @Unaffected
 func.func @Unaffected(%arg0: !arc.storage, %arg1: i4) -> i4 {
   %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i4>
@@ -250,4 +251,5 @@ arc.model "Memory" {
   %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
   %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
   %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
+}
 }

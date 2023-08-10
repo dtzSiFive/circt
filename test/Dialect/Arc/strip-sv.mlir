@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-strip-sv --verify-diagnostics | FileCheck %s
 
+hw.design {
 // CHECK-NOT: sv.verbatim
 // CHECK-NOT: sv.ifdef
 sv.verbatim "// Standard header to adapt well known macros to our needs." {symbols = []}
@@ -33,3 +34,4 @@ hw.module @Top() {
 
 // CHECK-NOT: sv.macro.decl
 sv.macro.decl @RANDOM
+}

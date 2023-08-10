@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-lower-clocks-to-funcs --verify-diagnostics | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: func.func @Trivial_clock(%arg0: !arc.storage<42>) {
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %c0_i9001 = hw.constant 0 : i9001
@@ -85,4 +86,5 @@ arc.model "InsertionOrderProblem" {
       comb.add %true, %false : i1
     }
   }
+}
 }

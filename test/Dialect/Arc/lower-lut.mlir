@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-lower-lut | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: arc.define @checkEndianess(%arg0: i1, %arg1: i1, %arg2: i1) -> i3 {
 // CHECK-NEXT:   %c-342392_i24 = hw.constant -342392 : i24
 // CHECK-NEXT:   %c0_i21 = hw.constant 0 : i21
@@ -101,4 +102,5 @@ arc.define @arrayLut(%arg0: i1, %arg1: i1, %arg2: i2, %arg3: i2, %arg4: i2) -> i
     arc.output %6 : i2
   }
   arc.output %0 : i2
+}
 }

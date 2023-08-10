@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-make-tables | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: arc.define @Simple
 arc.define @Simple(%arg0: i4) -> i4 {
   // CHECK-NEXT: %0 = hw.aggregate_constant [7 : i4, -2 : i4, -3 : i4, -4 : i4, -5 : i4, -6 : i4, -7 : i4, -8 : i4, 7 : i4, 6 : i4, 5 : i4, 4 : i4, 3 : i4, 2 : i4, 1 : i4, 0 : i4] : !hw.array<16xi4>
@@ -62,3 +63,4 @@ arc.define @TooManyBits(%arg0: i30) -> i30 {
   arc.output %20 : i30
 }
 // CHECK-NEXT: }
+}

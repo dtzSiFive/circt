@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-lower-state | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: arc.model "Empty" {
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
 // CHECK-NEXT:  }
@@ -325,3 +326,4 @@ hw.module @BlackBox(%clk: i1) {
 }
 // CHECK-NOT: hw.module.extern private @BlackBoxExt
 hw.module.extern private @BlackBoxExt(%a: i42, %b: i42) -> (c: i42, d: i42)
+}

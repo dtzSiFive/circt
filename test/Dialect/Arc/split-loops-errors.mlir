@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-split-loops --verify-diagnostics --split-input-file
 
+hw.design {
 hw.module @UnbreakableLoop(%a: i4) -> (x: i4) {
   // expected-error @below {{loop splitting did not eliminate all loops; loop detected}}
   // expected-note @below {{through operand 1 here:}}
@@ -15,4 +16,5 @@ arc.define @UnbreakableLoopArc(%arg0: i4, %arg1: i4) -> (i4, i4) {
     scf.yield %arg1, %arg0 : i4, i4
   }
   arc.output %0#0, %0#1 : i4, i4
+}
 }

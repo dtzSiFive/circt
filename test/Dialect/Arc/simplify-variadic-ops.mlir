@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-simplify-variadic-ops | FileCheck %s
 
+hw.design {
 // Should convert variadic comb ops with arbitrarily shuffled inputs into a
 // reasonable tree with individual nodes as close to their operand definitions
 // as possible.
@@ -48,4 +49,5 @@ func.func @SkipBlockBoundaries() {
     scf.yield
   }
   return
+}
 }

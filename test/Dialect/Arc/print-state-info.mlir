@@ -1,6 +1,7 @@
 // RUN: circt-opt %s --arc-print-state-info=state-file=%t
 // RUN: cat %t | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: "name": "Foo"
 // CHECK-DAG: "numStateBytes": 5724
 arc.model "Foo" {
@@ -44,4 +45,5 @@ arc.model "Bar" {
   // CHECK-NEXT: "numBits": 1337
   // CHECK-NEXT: "type": "wire"
   arc.alloc_state %arg0 tap {name = "z", offset = 92} : (!arc.storage<9001>) -> !arc.state<i1337>
+}
 }
