@@ -711,7 +711,7 @@ void FIRRTLModuleLowering::lowerFileHeader(hw::HWDesignOp op,
       return;
     emittedDecls.insert(name);
     OpBuilder::InsertionGuard guard(b);
-    b.setInsertionPointToEnd(op.getBody());
+    b.setInsertionPointToStart(op.getBody());
     b.create<sv::MacroDeclOp>(name, args, StringAttr());
   };
 
