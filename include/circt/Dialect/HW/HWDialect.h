@@ -23,4 +23,24 @@
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/HW/HWEnums.h.inc"
 
+// TODO: Put this elsewhere?
+
+namespace mlir {
+class DialectRegistry;
+class MLIRContext;
+} // namespace mlir
+
+namespace circt {
+namespace hw {
+/// Register the HW dialect and the translation from it to the LLVM IR in
+/// the given registry;
+void registerHWDialectTranslation(mlir::DialectRegistry &registry);
+
+/// Register the HW dialect and the translation from it in the registry
+/// associated with the given context.
+void registerHWDialectTranslation(mlir::MLIRContext &context);
+
+} // namespace hw
+} // namespace circt
+
 #endif // CIRCT_DIALECT_HW_HWDIALECT_H
