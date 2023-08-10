@@ -42,11 +42,13 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
   auto opName = pass->getOpName();
   if (opName && opName->equals("firrtl.circuit"))
     pm->nest<firrtl::CircuitOp>().addPass(std::move(pass));
+  else if (opName && opName->equals("hw.design"))
+    pm->nest<hw::HWDesignOp>().addPass(std::move(pass));
   else if (opName && opName->equals("firrtl.module"))
     pm->nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         std::move(pass));
   else if (opName && opName->equals("hw.module"))
-    pm->nest<hw::HWModuleOp>().addPass(std::move(pass));
+    pm->nest<hw::HWDesignOp>().nest<hw::HWModuleOp>().addPass(std::move(pass));
   else
     pm->addPass(std::move(pass));
 }
