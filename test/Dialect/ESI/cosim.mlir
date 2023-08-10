@@ -2,6 +2,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --esi-emit-collateral=schema-file=%t1.capnp --lower-esi-ports --lower-esi-to-hw --export-verilog -verify-diagnostics | FileCheck --check-prefix=COSIM %s
 
+hw.design {
 hw.module.extern @Sender() -> (x: !esi.channel<si14>)
 hw.module.extern @Reciever(%a: !esi.channel<i32>)
 hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
@@ -41,4 +42,5 @@ hw.module @top(%clk:i1, %rst:i1) -> () {
 
   // COSIM-LABEL: hw.module @top(%clk: i1, %rst: i1)
   // COSIM: %TestEP.DataOutValid, %TestEP.DataOut, %TestEP.DataInReady = hw.instance "TestEP" @Cosim_Endpoint<ENDPOINT_ID_EXT: none = "", SEND_TYPE_ID: ui64 = 11229133067582987457, SEND_TYPE_SIZE_BITS: i32 = 128, RECV_TYPE_ID: ui64 = 10578209918096690139, RECV_TYPE_SIZE_BITS: i32 = 128>(clk: %clk: i1, rst: %rst: i1, DataOutReady: %{{.+}}: i1, DataInValid: %{{.+}}: i1, DataIn: %{{.+}}: !hw.array<128xi1>) -> (DataOutValid: i1, DataOut: !hw.array<128xi1>, DataInReady: i1)
+}
 }
