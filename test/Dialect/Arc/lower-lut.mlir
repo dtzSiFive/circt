@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --arc-lower-lut | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(arc.define(arc-lower-lut)))' | FileCheck %s
 
 hw.design {
 // CHECK-LABEL: arc.define @checkEndianess(%arg0: i1, %arg1: i1, %arg2: i1) -> i3 {
