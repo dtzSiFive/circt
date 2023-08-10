@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --convert-to-arcs | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @Empty
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
@@ -215,3 +216,4 @@ hw.module @NonTrivial(%clock: i1, %i0: i4, %reset1: i1, %reset2: i1) -> (out1: i
   hw.output %foo, %bar : i4, i4
 }
 // CHECK-NEXT: }
+}
