@@ -34,7 +34,7 @@ using namespace cppapi;
 
 namespace {
 struct CPPAPI {
-  CPPAPI(ModuleOp module, llvm::raw_ostream &os)
+  CPPAPI(hw::HWDesignOp module, llvm::raw_ostream &os)
       : module(module), os(os), diag(module.getContext()->getDiagEngine()),
         unknown(UnknownLoc::get(module.getContext())) {
     diag.registerHandler([this](Diagnostic &diag) -> LogicalResult {
@@ -54,7 +54,7 @@ private:
   LogicalResult emitDesignModules();
   LogicalResult emitGlobalNamespace();
 
-  ModuleOp module;
+  hw::HWDesignOp module;
   mlir::raw_indented_ostream os;
   mlir::DiagnosticEngine &diag;
   const Location unknown;
@@ -199,7 +199,7 @@ LogicalResult CPPAPI::emitDesignModules() {
   return success();
 }
 
-LogicalResult circt::esi::cppapi::exportCPPAPI(ModuleOp module,
+LogicalResult circt::esi::cppapi::exportCPPAPI(hw::HWDesignOp module,
                                                llvm::raw_ostream &os) {
   CPPAPI api(module, os);
   return api.emit();

@@ -27,7 +27,7 @@ namespace esi {
 namespace cppapi {
 
 // Writes the C++ API for the given module to the provided output stream.
-LogicalResult exportCPPAPI(ModuleOp module, llvm::raw_ostream &os);
+LogicalResult exportCPPAPI(hw::HWDesignOp module, llvm::raw_ostream &os);
 
 // Generate and reason about a C++ type for a particular Cap'nProto and MLIR
 // type.

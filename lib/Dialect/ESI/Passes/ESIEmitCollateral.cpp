@@ -129,7 +129,7 @@ struct ESIEmitCollateralPass
 } // anonymous namespace
 
 void ESIEmitCollateralPass::emitServiceJSON() {
-  ModuleOp mod = getOperation();
+  auto mod = getOperation();
   auto *ctxt = &getContext();
   SymbolCache topSyms;
   topSyms.addDefinitions(mod);
@@ -244,7 +244,7 @@ void ESIEmitCollateralPass::emitServiceJSON() {
 }
 
 void ESIEmitCollateralPass::runOnOperation() {
-  ModuleOp mod = getOperation();
+  auto mod = getOperation();
   auto *ctxt = &getContext();
 
   emitServiceJSON();
@@ -274,7 +274,7 @@ void ESIEmitCollateralPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<OperationPass<ModuleOp>>
+std::unique_ptr<OperationPass<hw::HWDesignOp>>
 circt::esi::createESIEmitCollateralPass() {
   return std::make_unique<ESIEmitCollateralPass>();
 }

@@ -294,7 +294,7 @@ private:
 } // anonymous namespace
 
 void ESIConnectServicesPass::runOnOperation() {
-  ModuleOp outerMod = getOperation();
+  auto outerMod = getOperation();
   topLevelSyms.addDefinitions(outerMod);
   if (failed(verifyInstances(outerMod))) {
     signalPassFailure();
@@ -450,7 +450,7 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
 
   if (bspPorts && !bspPorts->empty()) {
     b.setInsertionPointToEnd(
-        implReqOp->getParentOfType<mlir::ModuleOp>().getBody());
+        implReqOp->getParentOfType<hw::HWDesignOp>().getBody());
     // TODO: we currently only support one BSP. Should we support more?
     auto decl = b.create<CustomServiceDeclOp>("BSP");
     decl.getPorts().push_back(bspPorts.release());
@@ -656,7 +656,7 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
   return success();
 }
 
-std::unique_ptr<OperationPass<ModuleOp>>
+std::unique_ptr<OperationPass<hw::HWDesignOp>>
 circt::esi::createESIConnectServicesPass() {
   return std::make_unique<ESIConnectServicesPass>();
 }

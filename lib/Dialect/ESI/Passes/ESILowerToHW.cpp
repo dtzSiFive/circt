@@ -515,6 +515,6 @@ void ESItoHWPass::runOnOperation() {
     signalPassFailure();
 }
 
-std::unique_ptr<OperationPass<ModuleOp>> circt::esi::createESItoHWPass() {
+std::unique_ptr<OperationPass<hw::HWDesignOp>> circt::esi::createESItoHWPass() {
   return std::make_unique<ESItoHWPass>();
 }

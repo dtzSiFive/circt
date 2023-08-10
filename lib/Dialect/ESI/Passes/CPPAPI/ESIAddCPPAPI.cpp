@@ -43,12 +43,12 @@ struct ESIAddCPPAPIPass : public ESIAddCPPAPIBase<ESIAddCPPAPIPass> {
 } // anonymous namespace
 
 LogicalResult ESIAddCPPAPIPass::emitAPI(llvm::raw_ostream &os) {
-  ModuleOp mod = getOperation();
+  auto mod = getOperation();
   return exportCPPAPI(mod, os);
 }
 
 void ESIAddCPPAPIPass::runOnOperation() {
-  ModuleOp mod = getOperation();
+  auto mod = getOperation();
   auto *ctxt = &getContext();
 
   // Generate the API.
@@ -76,6 +76,6 @@ void ESIAddCPPAPIPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<OperationPass<ModuleOp>> circt::esi::createESIAddCPPAPIPass() {
+std::unique_ptr<OperationPass<hw::HWDesignOp>> circt::esi::createESIAddCPPAPIPass() {
   return std::make_unique<ESIAddCPPAPIPass>();
 }
