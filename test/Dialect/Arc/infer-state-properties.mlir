@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-infer-state-properties | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: arc.define @ANDBasedReset
 arc.define @ANDBasedReset(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
   %true = hw.constant true
@@ -247,3 +248,4 @@ hw.module @testModule (%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1, %clock: i1) {
 
 // TODO: test that patterns handle the case where the output is used for another thing as well properly
 // TODO: test that reset and enable are only added when the latency is actually 1 or higher
+}

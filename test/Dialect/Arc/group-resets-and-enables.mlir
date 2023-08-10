@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-group-resets-and-enables | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: arc.model "BasicResetGrouping"
 arc.model "BasicResetGrouping" {
 ^bb0(%arg0: !arc.storage):
@@ -393,4 +394,5 @@ arc.model "ResetAndEnableGrouping" {
   // CHECK-NEXT: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
   %1 = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i4>
   %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
+}
 }

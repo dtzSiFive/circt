@@ -3,6 +3,7 @@
 //--- default
 // RUN: circt-opt %t/default --arc-inline | FileCheck %t/default
 
+hw.design {
 // CHECK-LABEL: func.func @Simple
 func.func @Simple(%arg0: i4, %arg1: i1) -> (i4, i4) {
   // CHECK-NEXT: %0 = comb.and %arg0, %arg0
@@ -163,10 +164,12 @@ arc.define @ToBeRemoved2(%arg0: i32) -> i32 {
 arc.define @ToBeRemoved3(%arg0: i32) -> i32 {
   arc.output %arg0 : i32
 }
+}
 
 //--- onlyIntoArcs
 // RUN: circt-opt %t/onlyIntoArcs --arc-inline=into-arcs-only=1 | FileCheck %t/onlyIntoArcs
 
+hw.design {
 // CHECK-LABEL: hw.module @onlyIntoArcs
 hw.module @onlyIntoArcs(%arg0: i4, %arg1: i4) -> (out0: i4) {
   %0 = arc.state @sub1(%arg0, %arg1) lat 0 : (i4, i4) -> i4
@@ -182,4 +185,5 @@ arc.define @sub1(%arg0: i4, %arg1: i4) -> i4 {
 arc.define @sub2(%arg0: i4, %arg1: i4) -> i4 {
   %0 = comb.add %arg0, %arg1 : i4
   arc.output %0 : i4
+}
 }

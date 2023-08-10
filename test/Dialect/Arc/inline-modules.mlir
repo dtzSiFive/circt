@@ -1,6 +1,7 @@
 // RUN: circt-opt %s --arc-inline-modules | FileCheck %s
 
 
+hw.design {
 // CHECK-LABEL: hw.module @SimpleA
 hw.module @SimpleA(%x: i4) -> (y: i4) {
   // CHECK-NOT: hw.instance
@@ -88,3 +89,4 @@ hw.module private @ExtModuleB() {
   hw.instance "c1" @ExtModuleC() -> ()
 }
 hw.module.extern private @ExtModuleC()
+}

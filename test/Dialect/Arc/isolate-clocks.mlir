@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-isolate-clocks | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @basics
 hw.module @basics(%clk0: i1, %clk1: i1, %clk2: i1, %c0: i1, %c1: i1, %in: i32) -> (out0: i32, out1: i32) {
   // COM: check the basic things: clocked ops are grouped properly, lat 0 states
@@ -89,4 +90,5 @@ hw.module @preexistingClockDomain(%clk0: i1, %clk1: i1, %in: i32) -> (out0: i32,
 }
 arc.define @DummyArc2(%arg0: i32, %arg1: i32) -> i32 {
   arc.output %arg0 : i32
+}
 }

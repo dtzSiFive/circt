@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-legalize-state-update --split-input-file --verify-diagnostics
 
+hw.design {
 arc.model "Memory" {
 ^bb0(%arg0: !arc.storage):
   %false = hw.constant false
@@ -19,4 +20,5 @@ arc.model "Memory" {
   %mem1 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
   %mem2 = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<2 x i32, i1>
   %s1 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i32>
+}
 }

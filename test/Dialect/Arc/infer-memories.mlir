@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-infer-memories=tap-ports=0 | FileCheck %s
 
+hw.design {
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 
 
@@ -91,3 +92,4 @@ hw.module @TestRWMemory(%clock: i1, %addr: i10, %enable: i1, %wmode: i1, %wdata:
 // CHECK-NEXT: }
 // CHECK-NOT: hw.module.generated @RWMemory, @FIRRTLMem
 hw.module.generated @RWMemory, @FIRRTLMem(%RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i8) -> (RW0_rdata: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+}
