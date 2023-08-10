@@ -164,10 +164,12 @@ LogicalResult ExportCosimSchema::emit() {
   return success(handler.errorCount == 0);
 }
 
-LogicalResult circt::esi::exportCosimSchema(hw::HWDesignOp module,
+LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
                                             llvm::raw_ostream &os) {
+  for (auto op : module.getOps<hw::HWDesignOp>()) {
+  }
   ExportCosimSchema schema(module, os);
-  return schema.emit();
+  schema.emit();
 }
 
 #else // Not CAPNP
