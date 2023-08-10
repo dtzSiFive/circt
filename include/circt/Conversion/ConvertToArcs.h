@@ -10,10 +10,11 @@
 #define CIRCT_CONVERSION_CONVERTTOARCS_H
 
 #include "circt/Support/LLVM.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include <memory>
 
 namespace circt {
-std::unique_ptr<OperationPass<ModuleOp>> createConvertToArcsPass();
+std::unique_ptr<OperationPass<hw::HWDesignOp>> createConvertToArcsPass();
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_CONVERTTOARCS_H

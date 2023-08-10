@@ -614,7 +614,7 @@ def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
 // ConvertToArcs
 //===----------------------------------------------------------------------===//
 
-def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
+def ConvertToArcs : Pass<"convert-to-arcs", "::circt::hw::HWDesignOp"> {
   let summary = "Outline logic between registers into state transfer arcs";
   let description = [{
     This pass outlines combinational logic between registers into state transfer

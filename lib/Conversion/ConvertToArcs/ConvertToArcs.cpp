@@ -34,7 +34,7 @@ static bool isArcBreakingOp(Operation *op) {
 
 namespace {
 struct Converter {
-  LogicalResult run(ModuleOp module);
+  LogicalResult run(HWDesignOp module);
   LogicalResult runOnModule(HWModuleOp module);
   LogicalResult analyzeFanIn();
   void extractArcs(HWModuleOp module);
@@ -62,12 +62,12 @@ struct Converter {
 };
 } // namespace
 
-LogicalResult Converter::run(ModuleOp module) {
-  for (auto &op : module.getOps())
+LogicalResult Converter::run(HWDesignOp design) {
+  for (auto &op : design.getOps())
     if (auto sym =
             op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
       globalNamespace.newName(sym.getValue());
-  for (auto module : module.getOps<HWModuleOp>())
+  for (auto module : design.getOps<HWModuleOp>())
     if (failed(runOnModule(module)))
       return failure();
   return success();
@@ -430,6 +430,6 @@ struct ConvertToArcsPass : public ConvertToArcsBase<ConvertToArcsPass> {
 };
 } // namespace
 
-std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertToArcsPass() {
+std::unique_ptr<OperationPass<HWDesignOp>> circt::createConvertToArcsPass() {
   return std::make_unique<ConvertToArcsPass>();
 }
