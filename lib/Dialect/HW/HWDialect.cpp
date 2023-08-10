@@ -20,6 +20,8 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
 
+#include "mlir/Target/LLVMIR/LLVMTranslationInterface.h"
+
 using namespace circt;
 using namespace hw;
 
@@ -66,6 +68,20 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
 };
 } // end anonymous namespace
 
+namespace {
+class HWDialectLLVMIRTranslationInterface
+    : public mlir::LLVMTranslationDialectInterface {
+public:
+  using LLVMTranslationDialectInterface::LLVMTranslationDialectInterface;
+
+  LogicalResult
+  convertOperation(Operation *op, llvm::IRBuilderBase &builder,
+                   mlir::LLVM::ModuleTranslation &moduleTranslation) const override {
+    return success(isa<circt::hw::HWDesignOp>(op));
+  }
+};
+} // end anonymous namespace
+
 void HWDialect::initialize() {
   // Register types and attributes.
   registerTypes();
@@ -78,7 +94,9 @@ void HWDialect::initialize() {
       >();
 
   // Register interface implementations.
-  addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface>();
+  addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface, HWDialectLLVMIRTranslationInterface>();
+
+
 }
 
 // Registered hook to materialize a single constant operation from a given
