@@ -247,6 +247,6 @@ void ConvertCombToArithPass::runOnOperation() {
     signalPassFailure();
 }
 
-std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertCombToArithPass() {
+std::unique_ptr<OperationPass<hw::HWDesignOp>> circt::createConvertCombToArithPass() {
   return std::make_unique<ConvertCombToArithPass>();
 }

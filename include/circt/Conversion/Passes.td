@@ -630,7 +630,7 @@ def ConvertToArcs : Pass<"convert-to-arcs", "::circt::hw::HWDesignOp"> {
 // ConvertCombToArith
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
+def ConvertCombToArith : Pass<"convert-comb-to-arith", "::circt::hw::HWDesignOp"> {
   let summary = "Convert combinational ops and constants into arith ops";
   let constructor = "circt::createConvertCombToArithPass()";
   let dependentDialects = ["mlir::arith::ArithDialect"];
@@ -640,7 +640,7 @@ def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
 // ConvertArcToLLVM
 //===----------------------------------------------------------------------===//
 
-def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
+def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "::circt::hw::HWDesignOp"> {
   let summary = "Lower state transfer arc representation to LLVM";
   let constructor = "circt::createLowerArcToLLVMPass()";
   let dependentDialects = [

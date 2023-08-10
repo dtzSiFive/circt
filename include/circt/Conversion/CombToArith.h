@@ -10,13 +10,14 @@
 #define CIRCT_CONVERSION_COMBTOARITH_H
 
 #include "circt/Support/LLVM.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include <memory>
 
 namespace circt {
 void populateCombToArithConversionPatterns(TypeConverter &converter,
                                            RewritePatternSet &patterns);
 
-std::unique_ptr<OperationPass<ModuleOp>> createConvertCombToArithPass();
+std::unique_ptr<OperationPass<hw::HWDesignOp>> createConvertCombToArithPass();
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_COMBTOARITH_H

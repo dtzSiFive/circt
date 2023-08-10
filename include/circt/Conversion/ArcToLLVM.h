@@ -10,10 +10,11 @@
 #define CIRCT_CONVERSION_ARCTOLLVM_H
 
 #include "circt/Support/LLVM.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include <memory>
 
 namespace circt {
-std::unique_ptr<OperationPass<ModuleOp>> createLowerArcToLLVMPass();
+std::unique_ptr<OperationPass<hw::HWDesignOp>> createLowerArcToLLVMPass();
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_ARCTOLLVM_H

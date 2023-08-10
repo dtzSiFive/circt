@@ -483,7 +483,7 @@ LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
   LLVMConversionTarget target(getContext());
   LLVMTypeConverter converter(&getContext());
   RewritePatternSet patterns(&getContext());
-  target.addLegalOp<mlir::ModuleOp>();
+  target.addLegalOp<hw::HWDesignOp>();
   target.addIllegalOp<arc::ModelOp>();
   populateSCFToControlFlowConversionPatterns(patterns);
   populateFuncToLLVMConversionPatterns(converter, patterns);
@@ -499,6 +499,6 @@ LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
   return applyFullConversion(getOperation(), target, std::move(patterns));
 }
 
-std::unique_ptr<OperationPass<ModuleOp>> circt::createLowerArcToLLVMPass() {
+std::unique_ptr<OperationPass<hw::HWDesignOp>> circt::createLowerArcToLLVMPass() {
   return std::make_unique<LowerArcToLLVMPass>();
 }
