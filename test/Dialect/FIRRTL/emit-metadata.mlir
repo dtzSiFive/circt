@@ -36,9 +36,6 @@ firrtl.circuit "retime0" attributes { annotations = [{
 // CHECK:         firrtl.module @retime0() {
 // CHECK:         firrtl.module @retime1() {
 // CHECK:         firrtl.module @retime2() {
-// CHECK{LITERAL}:  sv.verbatim "[\0A \22{{0}}\22,\0A \22{{1}}\22\0A]"
-// CHECK-SAME:        output_file = #hw.output_file<"retime_modules.json", excludeFromFileList>
-// CHECK-SAME:        symbols = [@retime0, @retime2]
 
 // CHECK:   om.class @RetimeModulesSchema(%moduleName: !om.sym_ref) {
 // CHECK-NEXT:     om.class.field @moduleName, %moduleName : !om.sym_ref
@@ -52,6 +49,10 @@ firrtl.circuit "retime0" attributes { annotations = [{
 // CHECK-NEXT:     %3 = om.object @RetimeModulesSchema(%2) : (!om.sym_ref) -> !om.class.type<@RetimeModulesSchema>
 // CHECK-NEXT:     om.class.field @[[m2:.+]], %3 : !om.class.type<@RetimeModulesSchema>
 // CHECK-NEXT:   }
+
+// CHECK{LITERAL}:  sv.verbatim "[\0A \22{{0}}\22,\0A \22{{1}}\22\0A]"
+// CHECK-SAME:        output_file = #hw.output_file<"retime_modules.json", excludeFromFileList>
+// CHECK-SAME:        symbols = [@retime0, @retime2]
 
 // -----
 
@@ -121,13 +122,11 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
   firrtl.extmodule @NoDefName()
 
   firrtl.extmodule @TestBlackbox() attributes {defname = "TestBlackbox"}
-  // CHECK: sv.verbatim "[\0A \22TestBlackbox\22\0A]" {output_file = #hw.output_file<"test_blackboxes.json", excludeFromFileList>}
 
   // Should be de-duplicated and sorted.
   firrtl.extmodule @DUTBlackbox_0() attributes {defname = "DUTBlackbox2"}
   firrtl.extmodule @DUTBlackbox_1() attributes {defname = "DUTBlackbox1"}
   firrtl.extmodule @DUTBlackbox_2() attributes {defname = "DUTBlackbox1"}
-  // CHECK: sv.verbatim "[\0A \22DUTBlackbox1\22,\0A \22DUTBlackbox2\22\0A]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>}
 }
 // CHECK:  om.class @SitestBlackBoxModulesSchema(%moduleName: !om.sym_ref) {
 // CHECK-NEXT:    om.class.field @moduleName, %moduleName : !om.sym_ref
@@ -147,6 +146,10 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 // CHECK:     %7 = om.object @SitestBlackBoxModulesSchema(%6)
 // CHECK:     om.class.field @exterMod_DUTBlackbox_2, %7
 // CHECK:   }
+
+// CHECK: sv.verbatim "[\0A \22TestBlackbox\22\0A]" {output_file = #hw.output_file<"test_blackboxes.json", excludeFromFileList>}
+
+// CHECK: sv.verbatim "[\0A \22DUTBlackbox1\22,\0A \22DUTBlackbox2\22\0A]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>}
 
 // -----
 
@@ -173,7 +176,7 @@ firrtl.circuit "OneMemory" {
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [{direction = "input", name = "user_input", width = 5 : ui32}], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   // CHECK{LITERAL}: "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 0,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [\0A {\0A \22name\22: \22user_input\22,\0A \22direction\22: \22input\22,\0A \22width\22: 5\0A }\0A ],\0A \22hierarchy\22: [\0A \22{{1}}.MWrite_ext\22\0A ]\0A }\0A]"
   // CHECK-SAME: symbols = [@MWrite_ext, @OneMemory]
-  // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 12 width 42 ports write\0A" {output_file = #hw.output_file<"'dut.conf'"
+  // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 12 width 42 ports write\0A" {output_file = #hw.output_file<"\22dut.conf\22"
   // CHECK-SAME: symbols = [@MWrite_ext]
 }
 
@@ -187,7 +190,7 @@ firrtl.circuit "DualReadsSMem" {
   firrtl.memmodule @DualReads_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, in R0_data: !firrtl.uint<42>, in R1_addr: !firrtl.uint<4>, in R1_en: !firrtl.uint<1>, in R1_clk: !firrtl.clock, in R1_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 2 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   // CHECK{LITERAL}: sv.verbatim "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 2,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{1}}.DualReads_ext\22\0A ]\0A }\0A]"
   // CHECK: symbols = [@DualReads_ext, @DualReadsSMem]}
-  // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 12 width 42 ports write,read,read\0A" {output_file = #hw.output_file<"'dut.conf'", excludeFromFileList>, symbols = [@DualReads_ext]}
+  // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 12 width 42 ports write,read,read\0A" {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>, symbols = [@DualReads_ext]}
 }
 
 // -----
@@ -219,11 +222,6 @@ firrtl.circuit "top" {
     firrtl.memmodule private @head_0_ext(in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
     firrtl.memmodule private @memory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<8>, in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<8>, out RW0_rdata: !firrtl.uint<8>) attributes {dataWidth = 8 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
     firrtl.memmodule private @dumm_ext(in R0_addr: !firrtl.uint<5>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<5>, in W0_addr: !firrtl.uint<5>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<5>) attributes {dataWidth = 5 : ui32, depth = 20 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-    // CHECK{LITERAL}: sv.verbatim "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 16,\0A \22width\22: 8,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 0,\0A \22readwrite\22: 1,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{3}}.{{4}}.memory_ext\22\0A ]\0A },\0A {\0A \22module_name\22: \22{{5}}\22,\0A \22depth\22: 20,\0A \22width\22: 5,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{3}}.{{4}}.dumm_ext\22\0A ]\0A }\0A]"
-    // CHECK-SAME: symbols = [@memory_ext, @top, #hw.innerNameRef<@top::@[[DUT_SYM]]>, @DUT, #hw.innerNameRef<@DUT::@[[MEM1_SYM]]>, @dumm_ext]
-    // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 20 width 5 ports write\0Aname {{1}} depth 20 width 5 ports write\0Aname {{2}} depth 16 width 8 ports read,rw\0Aname {{3}} depth 20 width 5 ports write,read\0A"
-    // CHECK-SAME: {output_file = #hw.output_file<"'dut.conf'", excludeFromFileList
-    // CHECK-SAME: symbols = [@head_ext, @head_0_ext, @memory_ext, @dumm_ext]
 }
 
 // CHECK:  om.class @MemorySchema(%name: !om.sym_ref, %depth: ui64, %width: ui32, %maskBits: ui32, %readPorts: ui32, %writePorts: ui32, %readwritePorts: ui32, %writeLatency: ui32, %readLatency: ui32) {
@@ -284,3 +282,9 @@ firrtl.circuit "top" {
 // CHECK-NEXT:    %[[v39:.+]] = om.object @MemorySchema(%[[v30]], %[[v31]], %[[v32]], %[[v33]], %[[v34]], %[[v35]], %[[v36]], %[[v37]], %[[v38]]) : (!om.sym_ref, ui64, ui32, ui32, ui32, ui32, ui32, ui32, ui32) -> !om.class.type<@MemorySchema>
 // CHECK-NEXT:    om.class.field @[[m3:.+]], %[[v39]] : !om.class.type<@MemorySchema>
 // CHECK-NEXT:  }
+
+// CHECK{LITERAL}: sv.verbatim "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 16,\0A \22width\22: 8,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 0,\0A \22readwrite\22: 1,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{3}}.{{4}}.memory_ext\22\0A ]\0A },\0A {\0A \22module_name\22: \22{{5}}\22,\0A \22depth\22: 20,\0A \22width\22: 5,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{3}}.{{4}}.dumm_ext\22\0A ]\0A }\0A]"
+// CHECK-SAME: symbols = [@memory_ext, @top, #hw.innerNameRef<@top::@[[DUT_SYM]]>, @DUT, #hw.innerNameRef<@DUT::@[[MEM1_SYM]]>, @dumm_ext]
+// CHECK{LITERAL}: sv.verbatim "name {{0}} depth 20 width 5 ports write\0Aname {{1}} depth 20 width 5 ports write\0Aname {{2}} depth 16 width 8 ports read,rw\0Aname {{3}} depth 20 width 5 ports write,read\0A"
+// CHECK-SAME: {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList
+// CHECK-SAME: symbols = [@head_ext, @head_0_ext, @memory_ext, @dumm_ext]
