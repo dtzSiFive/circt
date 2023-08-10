@@ -52,7 +52,7 @@ struct ErrorCountingHandler : public mlir::ScopedDiagnosticHandler {
 };
 
 struct ExportCosimSchema {
-  ExportCosimSchema(ModuleOp module, llvm::raw_ostream &os)
+  ExportCosimSchema(hw::HWDesignOp module, llvm::raw_ostream &os)
       : module(module), os(os), handler(module.getContext()),
         unknown(UnknownLoc::get(module.getContext())) {}
 
@@ -64,7 +64,7 @@ struct ExportCosimSchema {
   LogicalResult visitEndpoint(CosimEndpointOp);
 
 private:
-  ModuleOp module;
+  hw::HWDesignOp module;
   llvm::raw_ostream &os;
   ErrorCountingHandler handler;
   const Location unknown;
@@ -164,7 +164,7 @@ LogicalResult ExportCosimSchema::emit() {
   return success(handler.errorCount == 0);
 }
 
-LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
+LogicalResult circt::esi::exportCosimSchema(hw::HWDesignOp module,
                                             llvm::raw_ostream &os) {
   ExportCosimSchema schema(module, os);
   return schema.emit();
@@ -172,7 +172,7 @@ LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
 
 #else // Not CAPNP
 
-LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
+LogicalResult circt::esi::exportCosimSchema(hw::HWDesignOp module,
                                             llvm::raw_ostream &os) {
   return mlir::emitError(UnknownLoc::get(module.getContext()),
                          "Not compiled with CAPNP support");

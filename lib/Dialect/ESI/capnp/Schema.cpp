@@ -791,7 +791,7 @@ CapnpSegmentBuilder::build(::capnp::schema::Node::Struct::Reader cStruct,
 hw::HWModuleOp CapnpTypeSchemaImpl::buildEncoder(Value clk, Value valid,
                                                  Value operandVal) {
   Location loc = operandVal.getDefiningOp()->getLoc();
-  ModuleOp topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
+  auto topMod = operandVal.getDefiningOp()->getParentOfType<hw::HWDesignOp>();
   OpBuilder b = OpBuilder::atBlockEnd(topMod.getBody());
 
   SmallString<64> modName;
@@ -970,7 +970,7 @@ static GasketComponent decodeField(Type type,
 hw::HWModuleOp CapnpTypeSchemaImpl::buildDecoder(Value clk, Value valid,
                                                  Value operandVal) {
   auto loc = operandVal.getDefiningOp()->getLoc();
-  auto topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
+  auto topMod = operandVal.getDefiningOp()->getParentOfType<hw::HWDesignOp>();
   OpBuilder b = OpBuilder::atBlockEnd(topMod.getBody());
 
   SmallString<64> modName;

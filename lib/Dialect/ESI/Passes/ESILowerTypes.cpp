@@ -99,7 +99,7 @@ void ESILowerTypesPass::runOnOperation() {
     signalPassFailure();
 }
 
-std::unique_ptr<OperationPass<ModuleOp>>
+std::unique_ptr<OperationPass<hw::HWDesignOp>>
 circt::esi::createESITypeLoweringPass() {
   return std::make_unique<ESILowerTypesPass>();
 }

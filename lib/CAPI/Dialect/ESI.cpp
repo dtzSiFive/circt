@@ -68,6 +68,7 @@ MlirType circtESIListTypeGetElementType(MlirType list) {
 }
 
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
+  // TODO: ModuleOp ?
   ModuleOp modOp = unwrap(cMod);
   auto loadedMod =
       parseSourceFile<ModuleOp>(unwrap(filename), modOp.getContext());

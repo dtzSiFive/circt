@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_ESI_ESISERVICES_H
 
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/Pass/Pass.h"
@@ -53,7 +54,7 @@ private:
   bool failIfNotFound;
 };
 
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+std::unique_ptr<mlir::OperationPass<hw::HWDesignOp>>
 createESIConnectServicesPass();
 
 } // namespace esi
