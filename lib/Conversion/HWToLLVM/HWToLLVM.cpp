@@ -86,10 +86,19 @@ struct DesignOpConversion
   LogicalResult
   matchAndRewrite(hw::HWDesignOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // rewriter.inlineRegionBefore(op.getBodyRegion(), op->getBlock());
     auto module = rewriter.create<ModuleOp>(op.getLoc(), op.getName());
-    // TODO: How to do this w/rewriter? Clone?
-    module.getBodyRegion().takeBody(op.getBodyRegion());
-    rewriter.replaceOp(op, module);
+    //auto module = rewriter.create<ModuleOp>(op.getLoc(), TypeRange(), adaptor.getOperands(), op->getAttrs());
+    // rewriter.inlineRegionBefore(op.getBodyRegion(), module.getBody());
+    rewriter.inlineRegionBefore(op.getBodyRegion(), module.getRegion(), module.getRegion().end());
+    if (failed(rewriter.convertRegionTypes(&module.getRegion(),
+                                           *this->getTypeConverter())))
+    //  return failure();
+    // module.dump();
+    // // TODO: How to do this w/rewriter? Clone?
+    // module.getBodyRegion().takeBody(op.getBodyRegion());
+    // rewriter.replaceOp(op, module);
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -577,7 +586,7 @@ LogicalResult AggregateConstantOpConversion::matchAndRewrite(
     auto ipSave = rewriter.saveInsertionPoint();
 
     Operation *parent = op->getParentOp();
-    while (!isa<mlir::ModuleOp>(parent->getParentOp())) {
+    while (!isa<mlir::ModuleOp,hw::HWDesignOp>(parent->getParentOp())) {
     // while (!isa<hw::HWDesignOp>(parent->getParentOp())) {
       parent = parent->getParentOp();
     }
@@ -664,6 +673,7 @@ void circt::populateHWToLLVMConversionPatterns(
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
+  patterns.add<DesignOpConversion>(converter);
   patterns.add<HWConstantOpConversion>(ctx, converter);
   patterns.add<HWDynamicArrayCreateOpConversion, HWStructCreateOpConversion>(
       converter);
@@ -675,9 +685,8 @@ void circt::populateHWToLLVMConversionPatterns(
 
   // Extraction operation conversion patterns.
   patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
-               ArrayConcatOpConversion, DesignOpConversion,
-               StructExplodeOpConversion, StructExtractOpConversion,
-               StructInjectOpConversion>(converter);
+               ArrayConcatOpConversion, StructExplodeOpConversion,
+               StructExtractOpConversion, StructInjectOpConversion>(converter);
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {

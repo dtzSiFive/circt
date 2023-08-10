@@ -483,7 +483,8 @@ LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
   LLVMConversionTarget target(getContext());
   LLVMTypeConverter converter(&getContext());
   RewritePatternSet patterns(&getContext());
-  // target.addLegalOp<hw::HWDesignOp>();
+  target.addLegalOp<ModuleOp>();
+  //target.addIllegalOp<hw::HWDesignOp>();
   target.addIllegalOp<arc::ModelOp>();
   populateSCFToControlFlowConversionPatterns(patterns);
   populateFuncToLLVMConversionPatterns(converter, patterns);
