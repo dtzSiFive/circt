@@ -44,4 +44,3 @@ void circt::hw::registerHWDialectTranslation(MLIRContext &context) {
   registerHWDialectTranslation(registry);
   context.appendDialectRegistry(registry);
 }
-
