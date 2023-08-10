@@ -37,7 +37,7 @@ protected:
   DenseMap<Operation *, SmallVector<igraph::InstanceOpInterface, 1>>
       moduleInstantiations;
 
-  LogicalResult verifyInstances(ModuleOp topMod);
+  LogicalResult verifyInstances(Operation *topMod);
 
   // Find all the modules and use the partial order of the instantiation DAG
   // to sort them. If we use this order when "bubbling" up operations, we
@@ -45,7 +45,7 @@ protected:
   // instantiation sites mapping.
   //
   // Assumption (unchecked): there is not a cycle in the instantiation graph.
-  void getAndSortModules(ModuleOp topMod,
+  void getAndSortModules(Operation* topMod,
                          SmallVectorImpl<hw::HWModuleLike> &mods);
   void getAndSortModulesVisitor(hw::HWModuleLike mod,
                                 SmallVectorImpl<hw::HWModuleLike> &mods,

@@ -59,19 +59,19 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
   return "";
 }
 
-void PassCommon::getAndSortModules(ModuleOp topMod,
+void PassCommon::getAndSortModules(Operation *topMod,
                                    SmallVectorImpl<hw::HWModuleLike> &mods) {
   // Add here _before_ we go deeper to prevent infinite recursion.
   DenseSet<Operation *> modsSeen;
   mods.clear();
   moduleInstantiations.clear();
-  topMod.walk([&](hw::HWModuleLike mod) {
+  topMod->walk([&](hw::HWModuleLike mod) {
     getAndSortModulesVisitor(mod, mods, modsSeen);
   });
 }
 
-LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
-  WalkResult r = mod.walk([&](InstanceOp inst) {
+LogicalResult PassCommon::verifyInstances(Operation* mod) {
+  WalkResult r = mod->walk([&](InstanceOp inst) {
     Operation *modOp = topLevelSyms.getDefinition(inst.getModuleNameAttr());
     if (!isAnyModule(modOp))
       return WalkResult::interrupt();
