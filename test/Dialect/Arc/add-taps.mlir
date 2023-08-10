@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-add-taps | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @ObservePorts
 hw.module @ObservePorts(%x: i4, %y: i4) -> (u: i4, v: i4) {
   // CHECK-NEXT: arc.tap %x {name = "x"} : i4
@@ -38,4 +39,4 @@ hw.module @ObserveWires() {
   // CHECK-NEXT: hw.output
 }
 // CHECK-NEXT: }
-
+}

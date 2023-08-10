@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --verify-diagnostics | circt-opt | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: arc.define @Foo
 arc.define @Foo(%arg0: i42, %arg1: i9) -> (i42, i9) {
   %c-1_i42 = hw.constant -1 : i42
@@ -157,4 +158,5 @@ arc.define @identity2(%arg0: i32, %arg1: i32, %arg2: i1, %arg3: i32) -> (i32, i3
 }
 arc.define @identity3(%arg0: i32, %arg1: i32, %arg2: i32) -> (i32, i32, i32) {
   arc.output %arg0, %arg1, %arg2 : i32, i32, i32
+}
 }

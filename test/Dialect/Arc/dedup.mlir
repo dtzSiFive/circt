@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --arc-dedup | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: arc.define @SimpleA
 arc.define @SimpleA(%arg0: i4, %arg1: i4) -> i4 {
   %0 = comb.and %arg0, %arg1 {Simple} : i4
@@ -396,4 +397,5 @@ hw.module @OutlineRegression(%a: i1, %b: i3) {
   // CHECK-NEXT: arc.call @OutlineRegressionA(%a, [[K1]], %b) :
   arc.call @OutlineRegressionA(%a, %b) : (i1, i3) -> (i3, i3)
   arc.call @OutlineRegressionB(%a, %b) : (i1, i3) -> (i3, i3)
+}
 }

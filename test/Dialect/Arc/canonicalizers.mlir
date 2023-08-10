@@ -1,5 +1,6 @@
 // RUN: circt-opt --canonicalize %s | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @stateOpCanonicalizer
 hw.module @stateOpCanonicalizer(%clk: i1, %in: i32, %en: i1, %rst: i1) -> (out0: i32, out1: i32, out2: i32, out3: i32, out4: i32, out5: i32, out6: i32, out7: i32, out8: i32, out9: i32, out10: i32, out11: i32, out12: i32, out13: i32, out14: i32, out15: i32) {
   // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
@@ -149,4 +150,5 @@ arc.model "StorageGetCanonicalizers" {
   // CHECK-NEXT: [[V1:%.+]] = arc.storage.get %arg0[24] : !arc.storage<512> -> !arc.state<i64>
   // CHECK-NEXT: [[V2:%.+]] = arc.state_read [[V0]] : <i64>
   // CHECK-NEXT: arc.state_write [[V1]] = [[V2]] : <i64>
+}
 }

@@ -4,6 +4,7 @@
 // Remove Passthrough calls
 //===----------------------------------------------------------------------===//
 
+hw.design {
 // CHECK-LABEL: hw.module @passthoughChecks
 hw.module @passthoughChecks(%in0: i1, %in1: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1, out4: i1, out5: i1, out6: i1, out7: i1, out8: i1, out9: i1) {
   %0:2 = arc.call @passthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
@@ -269,3 +270,4 @@ hw.module @DontSinkDifferentConstants1(%x: i4) -> (out0: i4, out1: i4, out2: i4)
   hw.output %0, %1, %2 : i4, i4, i4
 }
 // CHECK-NEXT: }
+}
