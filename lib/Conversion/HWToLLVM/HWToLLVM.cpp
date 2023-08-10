@@ -76,6 +76,26 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
 }
 
 //===----------------------------------------------------------------------===//
+// Design operation conversion
+//===----------------------------------------------------------------------===//
+namespace {
+struct DesignOpConversion
+: public ConvertOpToLLVMPattern<hw::HWDesignOp> {
+  using ConvertOpToLLVMPattern<hw::HWDesignOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::HWDesignOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto module = rewriter.create<ModuleOp>(op.getLoc(), op.getName());
+    // TODO: How to do this w/rewriter? Clone?
+    module.getBodyRegion().takeBody(op.getBodyRegion());
+    rewriter.replaceOp(op, module);
+    return success();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Extraction operation conversions
 //===----------------------------------------------------------------------===//
 
@@ -655,8 +675,9 @@ void circt::populateHWToLLVMConversionPatterns(
 
   // Extraction operation conversion patterns.
   patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
-               ArrayConcatOpConversion, StructExplodeOpConversion,
-               StructExtractOpConversion, StructInjectOpConversion>(converter);
+               ArrayConcatOpConversion, DesignOpConversion,
+               StructExplodeOpConversion, StructExtractOpConversion,
+               StructInjectOpConversion>(converter);
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
@@ -680,7 +701,6 @@ void HWToLLVMLoweringPass::runOnOperation() {
   LLVMConversionTarget target(getContext());
   target.addLegalOp<UnrealizedConversionCastOp>();
   target.addLegalOp<ModuleOp>();
-  target.addLegalOp<hw::HWDesignOp>();
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addIllegalDialect<hw::HWDialect>();
 
