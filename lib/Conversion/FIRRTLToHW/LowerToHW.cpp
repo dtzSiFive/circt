@@ -702,7 +702,8 @@ void FIRRTLModuleLowering::lowerFileHeader(hw::HWDesignOp op,
                                            CircuitLoweringState &state) {
   // Intentionally pass an UnknownLoc here so we don't get line number
   // comments on the output of this boilerplate in generated Verilog.
-  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBodyRegion());
+  auto b = ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()),
+                                              op.getBody());
 
   StringSet<> emittedDecls;
 
