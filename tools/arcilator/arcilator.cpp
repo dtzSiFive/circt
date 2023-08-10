@@ -171,43 +171,44 @@ static void populatePipeline(PassManager &pm) {
   auto untilReached = [](Until until) {
     return until >= runUntilBefore || until > runUntilAfter;
   };
+  auto designPM = pm.nest<hw::HWDesignOp>();
 
   // Pre-process the input such that it no longer contains any SV dialect ops
   // and external modules that are relevant to the arc transformation are
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
-  pm.addNestedPass<hw::HWDesignOp>(createLowerFirMemPass());
-  pm.addPass(
+  designPM.addPass(createLowerFirMemPass());
+  designPM.addPass(
       arc::createAddTapsPass(observePorts, observeWires, observeNamedValues));
-  pm.addPass(arc::createStripSVPass());
-  pm.addPass(arc::createInferMemoriesPass(observePorts));
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  designPM.addPass(arc::createStripSVPass());
+  designPM.addPass(arc::createInferMemoriesPass(observePorts));
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))
     return;
-  pm.addPass(createConvertToArcsPass());
+  designPM.addPass(createConvertToArcsPass());
   if (shouldDedup)
-    pm.addPass(arc::createDedupPass());
-  pm.addPass(arc::createInlineModulesPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+    designPM.addPass(arc::createDedupPass());
+  designPM.addPass(arc::createInlineModulesPass());
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
 
   // Perform arc-level optimizations that are not specific to software
   // simulation.
   if (untilReached(UntilArcOpt))
     return;
-  pm.addPass(arc::createSplitLoopsPass());
+  designPM.addPass(arc::createSplitLoopsPass());
   if (shouldDedup)
-    pm.addPass(arc::createDedupPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+    designPM.addPass(arc::createDedupPass());
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
   if (shouldMakeLUTs)
-    pm.addPass(arc::createMakeTablesPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+    designPM.addPass(arc::createMakeTablesPass());
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
 
   // TODO: the following is commented out because the backend does not support
   // StateOp resets yet.
@@ -230,9 +231,9 @@ static void populatePipeline(PassManager &pm) {
   // Lower stateful arcs into explicit state reads and writes.
   if (untilReached(UntilStateLowering))
     return;
-  pm.addPass(arc::createLowerStatePass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  designPM.addPass(arc::createLowerStatePass());
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
 
   // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
   // (or nested regions in general) and thus errors out when muxes are also
@@ -242,33 +243,33 @@ static void populatePipeline(PassManager &pm) {
   // pm.addPass(arc::createMuxToControlFlowPass());
 
   if (shouldInline) {
-    pm.addPass(arc::createInlineArcsPass());
-    pm.addPass(arc::createArcCanonicalizerPass());
-    pm.addPass(createCSEPass());
+    designPM.addPass(arc::createInlineArcsPass());
+    designPM.addPass(arc::createArcCanonicalizerPass());
+    designPM.addPass(createCSEPass());
   }
 
-  pm.addPass(arc::createGroupResetsAndEnablesPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  designPM.addPass(arc::createGroupResetsAndEnablesPass());
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
 
   // Allocate states.
   if (untilReached(UntilStateAlloc))
     return;
-  pm.addPass(arc::createLegalizeStateUpdatePass());
-  pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
+  designPM.addPass(arc::createLegalizeStateUpdatePass());
+  designPM.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
   if (!stateFile.empty())
-    pm.addPass(arc::createPrintStateInfoPass(stateFile));
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+    designPM.addPass(arc::createPrintStateInfoPass(stateFile));
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
 
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))
     return;
-  pm.addPass(arc::createLowerClocksToFuncsPass());
-  pm.addPass(createConvertCombToArithPass());
-  pm.addPass(createLowerArcToLLVMPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  designPM.addPass(arc::createLowerClocksToFuncsPass());
+  designPM.addPass(createConvertCombToArithPass());
+  designPM.addPass(createLowerArcToLLVMPass());
+  designPM.addPass(createCSEPass());
+  designPM.addPass(arc::createArcCanonicalizerPass());
 }
 
 static LogicalResult processBuffer(
