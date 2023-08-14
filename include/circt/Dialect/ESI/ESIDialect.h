@@ -29,7 +29,7 @@ namespace esi {
 
 void registerESIPasses();
 void registerESITranslations();
-LogicalResult exportCosimSchema(hw::HWDesignOp module, llvm::raw_ostream &os);
+LogicalResult exportCosimSchema(mlir::Operation* module, llvm::raw_ostream &os);
 
 /// Name of dialect attribute which governs whether or not to bundle (i.e. use
 /// SystemVerilog interfaces) channel signal wires on external modules.

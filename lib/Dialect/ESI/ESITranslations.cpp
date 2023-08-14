@@ -52,9 +52,9 @@ struct ErrorCountingHandler : public mlir::ScopedDiagnosticHandler {
 };
 
 struct ExportCosimSchema {
-  ExportCosimSchema(hw::HWDesignOp module, llvm::raw_ostream &os)
-      : module(module), os(os), handler(module.getContext()),
-        unknown(UnknownLoc::get(module.getContext())) {}
+  ExportCosimSchema(Operation* module, llvm::raw_ostream &os)
+      : module(module), os(os), handler(module->getContext()),
+        unknown(UnknownLoc::get(module->getContext())) {}
 
   /// Emit the whole schema.
   LogicalResult emit();
@@ -64,7 +64,7 @@ struct ExportCosimSchema {
   LogicalResult visitEndpoint(CosimEndpointOp);
 
 private:
-  hw::HWDesignOp module;
+  Operation *module;
   llvm::raw_ostream &os;
   ErrorCountingHandler handler;
   const Location unknown;
@@ -123,7 +123,7 @@ LogicalResult ExportCosimSchema::emit() {
      << "#########################################################\n";
 
   // Walk and collect the type data.
-  auto walkResult = module.walk([this](CosimEndpointOp ep) {
+  auto walkResult = module->walk([this](CosimEndpointOp ep) {
     if (failed(visitEndpoint(ep)))
       return mlir::WalkResult::interrupt();
     return mlir::WalkResult::advance();
@@ -164,7 +164,7 @@ LogicalResult ExportCosimSchema::emit() {
   return success(handler.errorCount == 0);
 }
 
-LogicalResult circt::esi::exportCosimSchema(hw::HWDesignOp module,
+LogicalResult circt::esi::exportCosimSchema(Operation* module,
                                             llvm::raw_ostream &os) {
   ExportCosimSchema schema(module, os);
   return schema.emit();
@@ -172,7 +172,7 @@ LogicalResult circt::esi::exportCosimSchema(hw::HWDesignOp module,
 
 #else // Not CAPNP
 
-LogicalResult circt::esi::exportCosimSchema(hw::HWDesignOp module,
+LogicalResult circt::esi::exportCosimSchema(Operation* module,
                                             llvm::raw_ostream &os) {
   return mlir::emitError(UnknownLoc::get(module.getContext()),
                          "Not compiled with CAPNP support");
