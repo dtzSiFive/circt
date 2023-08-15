@@ -223,6 +223,29 @@ static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
     diag.attachNote() << "see current annotation: " << anno << "\n";
     return failure();
   }
+  Annotation a(anno);
+  if (a.getClass() == omirTrackerAnnoClass) {
+    auto type = target.ref.getType();
+    if (!type) {
+      //// llvm::errs() << "No type for tracker on target: \n\t" << target;
+      // llvm::errs() << "No type for tracker on target: \n\t"
+      //              << a.getMember("target") << "\n";
+      ////   << "\t\nref: " << target.ref << "\n";
+      //// assert(0);
+    } else if (!type.isGround()) {
+      auto fieldType =
+          type_cast<hw::FieldIDTypeInterface>(type).getFinalTypeByFieldID(
+              target.fieldIdx);
+      if (auto ftype = dyn_cast<FIRRTLType>(fieldType);
+          ftype && !ftype.isGround()) {
+        llvm::errs() << "Tracker on non-ground target: \n\t" << target
+                     << "\n\t(" << a.getMember("target")
+                     << ")\n\ttarget field type: " << ftype
+                     << "\n\ttarget type: " << type << "\n";
+      }
+    }
+  }
+
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno) {
     if (na.getName().getValue() != "target") {
