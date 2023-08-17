@@ -237,7 +237,7 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
     return; // Already executable.
 
   auto fmodule = cast<FModuleOp>(block->getParentOp());
-  if (fmodule.isPublic())
+  if (fmodule.isPublic() || fmodule.getConvention() != Convention::Internal)
     markAlive(fmodule);
 
   // Mark ports with don't touch as alive.
@@ -379,7 +379,7 @@ void IMDeadCodeElimPass::runOnOperation() {
 
   for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
     // Mark the ports of public modules as alive.
-    if (module.isPublic()) {
+    if (module.isPublic() || module.getConvention() != Convention::Internal) {
       markBlockExecutable(module.getBodyBlock());
       for (auto port : module.getBodyBlock()->getArguments())
         markAlive(port);
@@ -652,7 +652,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   }
 
   // Ports of public modules cannot be modified.
-  if (module.isPublic())
+  if (module.isPublic() || module.getConvention() != Convention::Internal)
     return;
 
   unsigned numOldPorts = module.getNumPorts();
@@ -769,7 +769,7 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
     return;
 
   // We cannot delete public modules so generate a warning.
-  if (module.isPublic()) {
+  if (module.isPublic() || module.getConvention() != Convention::Internal) {
     mlir::emitWarning(module.getLoc())
         << "module `" << module.getName()
         << "` is empty but cannot be removed because the module is public";
