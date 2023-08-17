@@ -247,7 +247,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       LLVM_DEBUG(llvm::dbgs()
                  << "Traversing module:" << module.getModuleNameAttr() << "\n");
 
-      if (module.isPublic())
+      if (module.isPublic() || module.getConvention() != Convention::Internal)
         publicModules.push_back(module);
 
       for (Operation &op : module.getBodyBlock()->getOperations())
