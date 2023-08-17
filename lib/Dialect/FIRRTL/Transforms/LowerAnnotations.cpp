@@ -344,7 +344,6 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
 
   if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
     moduleOp.setConvention(convention);
-    moduleOp.setPublic();
     return success();
   }
 
