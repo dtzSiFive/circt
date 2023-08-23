@@ -93,7 +93,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def HWDesignOp : HWOp<"design", [
     AffineScope,
     IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol,
-    OpAsmOpInterface
+    OpAsmOpInterface, InnerRefNamespace
   ] # GraphRegionNoTerminator.traits> {
   let summary = "HW container operation";
   let description = [{
