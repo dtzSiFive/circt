@@ -48,19 +48,4 @@ add_circt_library(CIRCTHWReductions
   MLIRIR
 )
 
-# add_circt_translation_library(CIRCTHWToLLVM
-#   HWTranslations.cpp
-# 
-#   LINK_COMPONENTS
-#   Core
-# 
-#   LINK_LIBS PUBLIC
-#   CIRCTHWDialect
-#   MLIRIR
-#   MLIRLLVMDialect
-#   MLIRSupport
-#   MLIRTargetLLVMIRExport
-#   )
-
 add_subdirectory(Transforms)
-# add_subdirectory(Translations)

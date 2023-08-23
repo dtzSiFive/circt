@@ -15,19 +15,13 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-// #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Target/ExportSystemC.h"
-
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
 #define CIRCT_INITALLTRANSLATIONS_H
 
 namespace circt {
-
-// namespace hw {
-// void registerToLLVMTranslation();
-// } // namespace hw
 
 // This function should be called before creating any MLIRContext if one
 // expects all the possible translations to be made available to the context
@@ -39,7 +33,6 @@ inline void registerAllTranslations() {
     firrtl::registerFromFIRFileTranslation();
     firrtl::registerToFIRFileTranslation();
     ExportSystemC::registerExportSystemCTranslation();
-    // hw::registerToLLVMTranslation();
     return true;
   }();
   (void)initOnce;
