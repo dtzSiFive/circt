@@ -16,6 +16,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
+// TODO: Use DesignOp in CAPI (and supporting methods?)
 // namespace circt::hw {
 // class HWDesignOp;
 // } // end namespace circt::hw

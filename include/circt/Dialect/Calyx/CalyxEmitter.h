@@ -23,6 +23,7 @@ struct LogicalResult;
 class ModuleOp;
 } // namespace mlir
 
+// TODO: Move CAPI and supporting methods?
 namespace circt::hw {
 class HWDesignOp;
 } // namespace circt::hw
