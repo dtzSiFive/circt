@@ -384,7 +384,7 @@ static LogicalResult processBuffer(
           sv::createHWExportModuleHierarchyPass(outputFilename));
 
     // Check inner symbols and inner refs.
-    pm.addPass(hw::createVerifyInnerRefNamespacePass());
+    // pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {

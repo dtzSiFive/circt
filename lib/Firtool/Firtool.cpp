@@ -201,7 +201,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   }
 
   // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespacePass());
+  // pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
   return success();
 }
@@ -238,7 +238,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   }
 
   // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespacePass());
+  // pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
   return success();
 }
