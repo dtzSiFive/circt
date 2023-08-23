@@ -1,6 +1,7 @@
 // RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=4' -export-verilog %s | FileCheck %s -check-prefixes=CHECK,MAX_8
 // RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=2' -export-verilog %s | FileCheck %s -check-prefixes=CHECK,MAX_4
 
+hw.design {
 hw.module @Baz(
   %a0: i1, %a1: i1, %a2: i1, %a3: i1,
   %a4: i1, %a5: i1, %a6: i1, %a7: i1,
@@ -17,6 +18,7 @@ hw.module @Baz(
   %7 = comb.and %a7, %b7 : i1
   %8 = comb.or %0, %1, %2, %3, %4, %5, %6, %7 : i1
   hw.output %8 : i1
+}
 }
 
 // CHECK-LABEL: module Baz

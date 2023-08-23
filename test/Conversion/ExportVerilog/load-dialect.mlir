@@ -7,6 +7,7 @@
 //   2. the IR must trigger ExportVerilog to create a sv.wire
 
 
+hw.design {
 hw.module @cyclic(%a: i1) -> (b: i1) {
   // Check that a wire temporary is created by export verilog. This wire is
   // for holding the value of %0.  If this wire is not emitted then this test
@@ -18,4 +19,5 @@ hw.module @cyclic(%a: i1) -> (b: i1) {
   %0 = comb.shl %a, %a : i1
   %2 = comb.add %1, %1 : i1
   hw.output %2 : i1
+}
 }

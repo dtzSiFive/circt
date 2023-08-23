@@ -38,12 +38,12 @@ using circt::igraph::InstancePath;
 namespace {
 
 struct ObjectModelIR {
-  ObjectModelIR(mlir::ModuleOp moduleOp) : moduleOp(moduleOp) {}
+  ObjectModelIR(firrtl::CircuitOp op) : circuitOp(op) {}
   void createMemorySchema() {
-    auto *context = moduleOp.getContext();
+    auto *context = circuitOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
-    auto builderOM =
-        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        unknownLoc, circuitOp.getBodyBlock());
 
     // Add all the properties of a memory as fields of the class.
     // The types must match exactly with the FMemModuleOp attribute type.
@@ -71,10 +71,10 @@ struct ObjectModelIR {
   }
 
   void createRetimeModulesSchema() {
-    auto *context = moduleOp.getContext();
+    auto *context = circuitOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
-    auto builderOM =
-        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        unknownLoc, circuitOp.getBodyBlock());
     Type classFieldTypes[] = {om::SymbolRefType::get(context)};
     retimeModulesSchemaClass = om::ClassOp::buildSimpleClassOp(
         builderOM, unknownLoc, "RetimeModulesSchema", retimeModulesParamNames,
@@ -99,10 +99,10 @@ struct ObjectModelIR {
   }
 
   void addBlackBoxModulesSchema() {
-    auto *context = moduleOp.getContext();
+    auto *context = circuitOp.getContext();
     auto unknownLoc = mlir::UnknownLoc::get(context);
-    auto builderOM =
-        mlir::ImplicitLocOpBuilder::atBlockEnd(unknownLoc, moduleOp.getBody());
+    auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+        unknownLoc, circuitOp.getBodyBlock());
     Type classFieldTypes[] = {om::SymbolRefType::get(context)};
     blackBoxModulesSchemaClass = om::ClassOp::buildSimpleClassOp(
         builderOM, unknownLoc, "SitestBlackBoxModulesSchema",
@@ -152,7 +152,7 @@ struct ObjectModelIR {
     builderOM.create<om::ClassFieldOp>(
         builderOM.getStringAttr("mem_" + mem.getName()), object);
   }
-  mlir::ModuleOp moduleOp;
+  firrtl::CircuitOp circuitOp;
   om::ClassOp memorySchemaClass;
   om::ClassOp memoryMetadataClass;
   om::ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
@@ -182,7 +182,6 @@ class CreateSiFiveMetadataPass
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
   // The design under test module.
   FModuleOp dutMod;
-  CircuitOp circuitOp;
 
 public:
   CreateSiFiveMetadataPass(bool replSeqMem, StringRef replSeqMemFile) {
@@ -199,6 +198,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
   if (!replSeqMem)
     return success();
 
+  CircuitOp circuitOp = getOperation();
   // The instance graph analysis will be required to print the hierarchy names
   // of the memory.
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
@@ -445,6 +445,7 @@ LogicalResult
 CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 
   auto *context = &getContext();
+  auto circuitOp = getOperation();
 
   // Get the filename, removing the annotation from the circuit.
   StringRef filename;
@@ -504,6 +505,7 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
       dataTapsBlackboxClass, memTapBlackboxClass};
 
   auto *context = &getContext();
+  auto circuitOp = getOperation();
 
   // Get the filenames from the annotations.
   StringRef dutFilename, testFilename;
@@ -599,17 +601,7 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 }
 
 void CreateSiFiveMetadataPass::runOnOperation() {
-
-  auto moduleOp = getOperation();
-  auto circuits = moduleOp.getOps<CircuitOp>();
-  if (circuits.empty())
-    return;
-  auto cIter = circuits.begin();
-  circuitOp = *cIter++;
-
-  assert(cIter == circuits.end() &&
-         "cannot handle more than one CircuitOp in a mlir::ModuleOp");
-
+  auto circuitOp = getOperation();
   auto *body = circuitOp.getBodyBlock();
 
   // Find the device under test and create a set of all modules underneath it.
@@ -625,7 +617,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
                      dutModuleSet.insert(node->getModule());
                    });
   }
-  ObjectModelIR omir(moduleOp);
+  ObjectModelIR omir(circuitOp);
 
   if (failed(emitRetimeModulesMetadata(omir)) ||
       failed(emitSitestBlackboxMetadata(omir)) ||
@@ -637,7 +629,6 @@ void CreateSiFiveMetadataPass::runOnOperation() {
 
   // Clear pass-global state as required by MLIR pass infrastructure.
   dutMod = {};
-  circuitOp = {};
   dutModuleSet.empty();
 }
 

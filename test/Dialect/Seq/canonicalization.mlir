@@ -1,5 +1,6 @@
 // RUN: circt-opt -canonicalize %s | FileCheck %s
 
+hw.design @canonicalize {
 hw.module.extern @Observe(%x: i32)
 
 // CHECK-LABEL: @FirReg
@@ -188,4 +189,5 @@ hw.module @FirMem(%addr: i4, %clock: i1, %data: i42) -> (out: i42) {
 
   %9 = comb.xor %1, %2, %3, %4, %5, %6, %7, %8 : i42
   hw.output %9 : i42
+}
 }

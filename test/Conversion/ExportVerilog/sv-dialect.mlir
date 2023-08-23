@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=explicitBitcast,maximumNumberOfTermsPerExpression=10,emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
@@ -1775,3 +1776,4 @@ sv.bind #hw.innerNameRef<@InlineBind::@foo2>
 // CHECK-LABEL:  hw.module @remoteInstDut
 // CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !hw.inout<i1>
 // CHECK:    %output = sv.reg  {hw.verilogName = "output_0"} : !hw.inout<i1>
+}

@@ -29,7 +29,7 @@ struct SeqFIRRTLInitToSVPass
 } // anonymous namespace
 
 void SeqFIRRTLInitToSVPass::runOnOperation() {
-  ModuleOp top = getOperation();
+  auto top = getOperation();
   OpBuilder builder(top.getBody(), top.getBody()->begin());
   // FIXME: getOrCreate
   builder.create<sv::MacroDeclOp>(top.getLoc(), "RANDOM", nullptr, nullptr);

@@ -159,7 +159,7 @@ static Value castFromFIRRTLType(Value val, Type type,
 }
 
 /// Move a ExtractTestCode related annotation from annotations to an attribute.
-static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
+static void moveVerifAnno(hw::HWDesignOp top, AnnotationSet &annos,
                           StringRef annoClass, StringRef attrBase) {
   auto anno = annos.getAnnotation(annoClass);
   auto ctx = top.getContext();
@@ -214,12 +214,12 @@ struct CircuitLoweringState {
       used_RANDOMIZE_MEM_INIT{false};
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
-  CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
+  CircuitLoweringState(CircuitOp circuitOp, Block *insertPoint, bool enableAnnotationWarning,
                        bool emitChiselAssertsAsSVA,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
+        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable), typeAliases(circuitOp, insertPoint) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -366,7 +366,7 @@ private:
   /// deteministic TypeDecls inside the global TypeScopeOp.
   struct RecordTypeAlias {
 
-    RecordTypeAlias(CircuitOp c) : circuitOp(c) {}
+    RecordTypeAlias(CircuitOp c, Block *insertPoint) : circuitOp(c), insertPoint(insertPoint) {}
 
     hw::TypeAliasType getTypedecl(BaseTypeAliasType firAlias) const {
       auto iter = firrtlTypeToAliasTypeMap.find(firAlias);
@@ -383,13 +383,13 @@ private:
                                   Location typeLoc) {
       assert(!frozen && "Record already frozen, cannot be updated");
 
+      // TODO: Fix this!
       if (!typeScope) {
-        auto b = ImplicitLocOpBuilder::atBlockBegin(
-            circuitOp.getLoc(),
-            &circuitOp->getParentRegion()->getBlocks().back());
+        auto b =
+            ImplicitLocOpBuilder::atBlockBegin(circuitOp.getLoc(), insertPoint);
         typeScope = b.create<hw::TypeScopeOp>(
             b.getStringAttr(circuitOp.getName() + "__TYPESCOPE_"));
-        typeScope.getBodyRegion().push_back(new Block());
+        typeScope.getBodyRegion().emplaceBlock();
       }
       auto typeName = firAlias.getName();
       // Get a unique typedecl name.
@@ -424,9 +424,10 @@ private:
     Namespace typeDeclNamespace;
 
     CircuitOp circuitOp;
+    Block *insertPoint;
   };
 
-  RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
+  RecordTypeAlias typeAliases;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -493,7 +494,7 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
 
 private:
-  void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
+  void lowerFileHeader(hw::HWDesignOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
                            Operation *moduleOp, StringRef moduleName,
@@ -540,11 +541,11 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // We run on the top level modules in the IR blob.  Start by finding the
   // firrtl.circuit within it.  If there is none, then there is nothing to do.
-  auto *topLevelModule = getOperation().getBody();
+  auto *topLevelModuleBlock = getOperation().getBody();
 
   // Find the single firrtl.circuit in the module.
   CircuitOp circuit;
-  for (auto &op : *topLevelModule) {
+  for (auto &op : *topLevelModuleBlock) {
     if ((circuit = dyn_cast<CircuitOp>(&op)))
       break;
   }
@@ -554,20 +555,24 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   auto *circuitBody = circuit.getBodyBlock();
 
+  OpBuilder builder(getOperation().getBodyRegion());
+  auto designOp = builder.create<hw::HWDesignOp>(circuit.getLoc(), circuit.getName());
+  auto *topLevelModule = designOp.getBody();
+
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
+      circuit, topLevelModule, enableAnnotationWarning, emitChiselAssertsAsSVA,
       &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
+  moveVerifAnno(designOp, circuitAnno, extractAssertAnnoClass,
                 "firrtl.extract.assert");
-  moveVerifAnno(getOperation(), circuitAnno, extractAssumeAnnoClass,
+  moveVerifAnno(designOp, circuitAnno, extractAssumeAnnoClass,
                 "firrtl.extract.assume");
-  moveVerifAnno(getOperation(), circuitAnno, extractCoverageAnnoClass,
+  moveVerifAnno(designOp, circuitAnno, extractCoverageAnnoClass,
                 "firrtl.extract.cover");
   circuitAnno.removeAnnotationsWithClass(
       extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
@@ -686,18 +691,18 @@ void FIRRTLModuleLowering::runOnOperation() {
     oldNew.first->erase();
 
   // Emit all the macros and preprocessor gunk at the start of the file.
-  lowerFileHeader(circuit, state);
+  lowerFileHeader(designOp, state);
 
   // Now that the modules are moved over, remove the Circuit.
   circuit.erase();
 }
 
 /// Emit the file header that defines a bunch of macros.
-void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
+void FIRRTLModuleLowering::lowerFileHeader(hw::HWDesignOp op,
                                            CircuitLoweringState &state) {
   // Intentionally pass an UnknownLoc here so we don't get line number
   // comments on the output of this boilerplate in generated Verilog.
-  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
+  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBodyRegion());
 
   StringSet<> emittedDecls;
 
@@ -706,7 +711,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
       return;
     emittedDecls.insert(name);
     OpBuilder::InsertionGuard guard(b);
-    b.setInsertionPointAfter(op);
+    b.setInsertionPointToEnd(op.getBody());
     b.create<sv::MacroDeclOp>(name, args, StringAttr());
   };
 

@@ -34,7 +34,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       Symbol, FunctionOpInterface, InnerSymbolTable,
-      OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
+      OpAsmOpInterface, ParentOneOf<["::circt::hw::HWDesignOp","::mlir::ModuleOp"]>]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
 
@@ -91,6 +91,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 }
 
 def HWDesignOp : HWOp<"design", [
+    AffineScope,
     IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol,
     OpAsmOpInterface
   ] # GraphRegionNoTerminator.traits> {
@@ -125,9 +126,9 @@ def HWDesignOp : HWOp<"design", [
     // OpAsmOpInterface Methods
     //===------------------------------------------------------------------===//
 
-    static ::llvm::StringRef getDefaultDialect() {
-      return "hw";
-    }
+    // static ::llvm::StringRef getDefaultDialect() {
+    //   return "hw";
+    // }
   }];
 
 //  let hasVerifier = 1;
@@ -141,7 +142,7 @@ def HWTestModuleOp : HWOp<"testmodule", [Symbol,
                                          DeclareOpInterfaceMethods<PortList>,
                                          DeclareOpInterfaceMethods<SymboledPortList>,
                                          OpAsmOpInterface, 
-                                         HasParent<"mlir::ModuleOp">, 
+                                         HasParent<"::circt::hw::HWDesignOp">, 
                                          IsolatedFromAbove,
                                          SingleBlockImplicitTerminator<"OutputOp">]> {
   let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
@@ -413,7 +414,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
 }
 
 def HWGeneratorSchemaOp : HWOp<"generator.schema",
-      [Symbol, HasParent<"mlir::ModuleOp">]> {
+      [Symbol, HasParent<"::circt::hw::HWDesignOp">]> {
   let summary = "HW Generator Schema declaration";
   let description = [{
     The "hw.generator.schema" operation declares a kind of generated module by

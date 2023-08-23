@@ -1,6 +1,7 @@
-// RUN: circt-opt %s -prepare-for-emission --split-input-file -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(hw.module(prepare-for-emission)))' --split-input-file -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s -export-verilog -split-input-file
 
+hw.design {
 // CHECK: @namehint_variadic
 hw.module @namehint_variadic(%a: i3) -> (b: i3) {
   // CHECK-NEXT: %0 = comb.add %a, %a : i3
@@ -44,10 +45,11 @@ hw.module @carryOverWireAttrs(%a: i1) -> (b: i1){
   %foo = hw.wire %a {magic, sv.attributes = []} : i1
   hw.output %foo : i1
 }
+}
 
 // -----
 
-module {
+hw.design {
   // CHECK-LABEL:  hw.module @SpillTemporaryInProceduralRegion
   hw.module @SpillTemporaryInProceduralRegion(%a: i4, %b: i4, %fd: i32) -> () {
     // CHECK-NEXT: %r = sv.reg
@@ -72,6 +74,7 @@ module {
 // -----
 
 module attributes {circt.loweringOptions = "disallowLocalVariables"} {
+hw.design {
   // CHECK: @test_hoist
   hw.module @test_hoist(%a: i3) -> () {
     // CHECK-NEXT: %reg = sv.reg
@@ -129,10 +132,12 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     hw.output %0, %0 : i4, i4
   }
 }
+}
 
 // -----
 
 module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
+hw.design {
  hw.module.extern @MyExtModule(%in: i8)
  // CHECK-LABEL: @MoveInstances
  hw.module @MoveInstances(%a_in: i8) -> (){
@@ -145,10 +150,12 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
   hw.instance "xyz3" @MyExtModule(in: %0: i8) -> ()
  }
 }
+}
 
 // -----
 module attributes {circt.loweringOptions =
                   "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingNamehintTermLimit=3"} {
+hw.design {
   // CHECK-LABEL: namehints
   hw.module @namehints(%a: i8) -> (b: i8) {
     // "foo" should be spilled because it has a meaningful name.
@@ -164,10 +171,12 @@ module attributes {circt.loweringOptions =
     hw.output %2 : i8
   }
 }
+}
 
 // -----
 module attributes {circt.loweringOptions =
                   "disallowMuxInlining"} {
+hw.design {
   // CHECK-LABEL: mux
   hw.module @mux(%c: i1, %b: i8, %a: i8) -> (d: i8, e: i8) {
     // CHECK:      %use_for_mux = sv.wire
@@ -184,11 +193,13 @@ module attributes {circt.loweringOptions =
     hw.output %1, %2 : i8, i8
   }
 }
+}
 
 // -----
 // CHECK: "wireSpillingHeuristic=spillLargeTermsWithNamehints,disallowMuxInlining"
 module attributes {circt.loweringOptions =
                   "wireSpillingHeuristic=spillLargeTermsWithNamehints,disallowMuxInlining"} {
+hw.design {
   hw.module @combine(%c: i1, %b: i8, %a: i8) -> (d: i8) {
     // Meaningful names should be spilled
     // CHECK: %foo = sv.wire
@@ -200,15 +211,18 @@ module attributes {circt.loweringOptions =
     hw.output %2 : i8
   }
 }
+}
 
 // -----
 module attributes {circt.loweringOptions = "maximumNumberOfTermsPerExpression=2"} {
+hw.design {
   // CHECK-NOT: sv.wire
   hw.module @Foo(%in_0: i4, %in_1: i4, %in_2: i4, %in_3: i4) -> (out: !hw.array<4xi4>) {
     %0 = comb.concat %in_0, %in_1, %in_2, %in_3 : i4, i4, i4, i4
     %1 = hw.bitcast %0 : (i16) -> !hw.array<4xi4>
     hw.output %1 : !hw.array<4xi4>
   }
+}
 }
 
 // -----
@@ -228,11 +242,13 @@ module attributes {circt.loweringOptions = "maximumNumberOfTermsPerExpression=2"
 // CHECK:         }
 !T = !hw.struct<a: i32>
 module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
+hw.design {
   hw.module @packed_struct_assignment(%in : i32) -> (out: !T, out2: !T, out3: !T)  {
       %0 = hw.struct_create (%in) : !T
       %1 = hw.aggregate_constant [1: i32] : !T
       hw.output %0, %0, %1 : !T, !T, !T
   }
+}
 }
 
 // -----
@@ -240,6 +256,7 @@ module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
 // wires, where they crash the PrepareForEmission pass. They are always emitted
 // inline, so no need to restructure the IR.
 // CHECK-LABEL: hw.module @Issue5613
+hw.design {
 hw.module @Issue5613(%a: i1, %b: i1) {
   verif.assert %2 : !ltl.sequence
   %0 = ltl.implication %2, %1 : !ltl.sequence, !ltl.property
@@ -248,6 +265,7 @@ hw.module @Issue5613(%a: i1, %b: i1) {
   %3 = ltl.not %b : i1
   %4 = ltl.delay %a, 42 : i1
   hw.output
+}
 }
 
 // -----
@@ -258,6 +276,7 @@ hw.module @Issue5613(%a: i1, %b: i1) {
 //
 // See: https://github.com/llvm/circt/issues/5605
 // CHECK-LABEL: hw.module @Issue5605
+hw.design {
 hw.module @Issue5605(%a: i1, %b: i1, %clock: i1, %reset: i1) {
   %0 = comb.concat %a, %b : i1, i1
   // CHECK:      %1 = sv.wire
@@ -272,4 +291,5 @@ hw.module @Issue5605(%a: i1, %b: i1, %clock: i1, %reset: i1) {
   // CHECK-NEXT: sv.assert.concurrent {{.*}}(%5)
   sv.assert.concurrent posedge %clock, %reset label "assert_1" message "bar"(%1) : i2
   hw.output
+}
 }

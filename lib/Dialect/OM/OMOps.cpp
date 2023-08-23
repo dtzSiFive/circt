@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/OM/OMOps.h"
 
+#include "circt/Dialect/HW/HWOps.h"
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
@@ -235,9 +237,6 @@ void circt::om::ObjectOp::build(::mlir::OpBuilder &odsBuilder,
 
 LogicalResult
 circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Get the containing ModuleOp.
-  auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
-
   // Verify the result type is the same as the referred-to class.
   StringAttr resultClassName = getResult().getType().getClassName().getAttr();
   StringAttr className = getClassNameAttr();
@@ -247,8 +246,8 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << className << ')';
 
   // Verify the referred to ClassOp exists.
-  auto classDef = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupSymbolIn(moduleOp, className));
+  auto classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
+      getOperation()->getParentOp(), className);
   if (!classDef)
     return emitOpError("refers to non-existant class (") << className << ')';
 
@@ -283,13 +282,10 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult
 circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Get the containing ModuleOp.
-  auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
-
   // Get the ObjectInstOp and the ClassLike it is an instance of.
   ObjectOp objectInst = getObject().getDefiningOp<ObjectOp>();
-  ClassLike classDef = cast<ClassLike>(
-      symbolTable.lookupSymbolIn(moduleOp, objectInst.getClassNameAttr()));
+  auto classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
+      getOperation()->getParentOp(), objectInst.getClassNameAttr());
 
   // Traverse the field path, verifying each field exists.
   ClassFieldLike finalField;
@@ -317,8 +313,8 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
       // The nested ClassOp must exist, since a field with ClassType must be
       // an ObjectInstOp, which already verifies the class exists.
-      classDef = cast<ClassLike>(
-          symbolTable.lookupSymbolIn(moduleOp, classType.getClassName()));
+      classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
+          getOperation()->getParentOp(), classType.getClassName());
 
       // Proceed to the next field in the path.
       continue;

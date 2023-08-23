@@ -1,5 +1,7 @@
 // RUN: circt-opt -cse %s | FileCheck %s
 
+hw.design @cse {
+
 sv.macro.decl @PRINTF_COND_ 
 
 // CHECK-LABEL: @cse_macro_ref()
@@ -23,4 +25,5 @@ hw.module @nocse_macro_ref() -> (out: i1) {
   %PRINTF_COND__1 = sv.macro.ref.se @PRINTF_COND_ () : () -> i1
   %0 = comb.and %PRINTF_COND__0, %PRINTF_COND__1 : i1
   hw.output %0 : i1
+}
 }

@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+hw.design {
 // CHECK: `ifndef _TYPESCOPE___hw_typedecls
 // CHECK: `define _TYPESCOPE___hw_typedecls
 hw.type_scope @__hw_typedecls {
@@ -109,4 +110,5 @@ hw.module @testEnumOps() -> (out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.en
   // CHECK: assign out1 = myEnum_A;
   %0 = hw.enum.constant A : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
+}
 }

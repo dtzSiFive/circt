@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i50) {
 hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i50) {
   // CHECK-NEXT:    %c42_i12 = hw.constant 42 : i12
@@ -191,9 +192,10 @@ hw.module @fileListTest(%arg1: i32) attributes {output_filelist = #hw.output_fil
 // CHECK-LABEL: hw.module @commentModule
 // CHECK-SAME: attributes {comment = "hello world"}
 hw.module @commentModule() attributes {comment = "hello world"} {}
+}
 
-module {
-// CHECK-LABEL: module {
+hw.design {
+// CHECK-LABEL: hw.design {
   hw.globalRef @glbl_B_M1 [#hw.innerNameRef<@A::@inst_1>, #hw.innerNameRef<@B::@memInst>]
   hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@memInst>]
   hw.globalRef @glbl_D_M2 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@SF>, #hw.innerNameRef<@F::@symA>]
@@ -228,7 +230,7 @@ module {
   }
 }
 
-module {
+hw.design {
   hw.testmodule @NewStyle (input %a : i3, output %b : i3, inout %c : i64 {hw.exportPort = #hw<innerSym@symA>}) {
     hw.output %a : i3
   }

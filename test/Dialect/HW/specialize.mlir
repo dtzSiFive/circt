@@ -2,7 +2,7 @@
 
 // Test two different ways of instantiating a generic module.
 
-module {
+hw.design {
 
 // CHECK-LABEL:   hw.module @addToFirst_N_4_X_8(
 // CHECK-SAME:                                  %[[VAL_0:.*]]: !hw.array<4xi8>,
@@ -54,7 +54,7 @@ module {
 
 // Test hw.param.value.
 
-module {
+hw.design {
 
 // CHECK-LABEL:   hw.module @constantGen_V_8() -> (out: i64) {
 // CHECK:           %[[VAL_0:.*]] = hw.constant 8 : i64
@@ -86,7 +86,7 @@ module {
 
 // Test two identical instances of the same module.
 
-module {
+hw.design {
 
   hw.module @constantGen<V: i64>() -> (out: i64) {
     %0 = hw.param.value i64 = #hw.param.decl.ref<"V">
@@ -109,7 +109,7 @@ module {
 
 // Test unique, non-aliasing module name generation.
 
-module {
+hw.design {
 
 // CHECK-LABEL:   hw.module @constantGen_V_5_1() -> (out: i64) {
   hw.module @constantGen<V: i64>() -> (out: i64) {
@@ -131,7 +131,7 @@ module {
 
 // Test a parent module instantiating parametric modules using its parameters
 
-module {
+hw.design {
   hw.module @constantGen<V: i32>() -> (out: i32) {
     %0 = hw.param.value i32 = #hw.param.decl.ref<"V">
     hw.output %0 : i32

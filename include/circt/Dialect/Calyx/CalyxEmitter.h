@@ -23,6 +23,10 @@ struct LogicalResult;
 class ModuleOp;
 } // namespace mlir
 
+namespace circt::hw {
+class HWDesignOp;
+} // namespace circt::hw
+
 namespace circt {
 namespace calyx {
 

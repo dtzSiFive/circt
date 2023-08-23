@@ -1,6 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=SV
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv='lower-to-always-ff=false' | FileCheck %s --check-prefix=ALWAYS
+hw.design {
 hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   %rv = hw.constant 0 : i32
 
@@ -99,4 +100,5 @@ hw.module @top_ce(%clk: i1, %rst: i1, %ce: i1, %i: i32) {
   // ALWAYS:     }
   // ALWAYS:   }
   // ALWAYS: }
+}
 }

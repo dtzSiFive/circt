@@ -7,6 +7,7 @@
 // CHECK-WITHOUT-TESTENABLE: hw.module.extern @VeryGate(%I: i1, %E: i1) -> (O: i1)
 
 // CHECK-LABEL: hw.module @Foo
+hw.design {
 hw.module @Foo(%clock: i1, %enable: i1, %test_enable: i1) {
   // CHECK-NOT: seq.clock_gate
   %cg0 = seq.clock_gate %clock, %enable
@@ -25,4 +26,5 @@ hw.module @Foo(%clock: i1, %enable: i1, %test_enable: i1) {
   // CHECK-WITHOUT-TESTENABLE: [[COMBINED_ENABLE:%.+]] = comb.or bin %enable, %test_enable : i1
   // CHECK-WITHOUT-TESTENABLE: hw.instance "ckg" @VeryGate(I: %clock: i1, E: [[COMBINED_ENABLE]]: i1) -> (O: i1)
   // CHECK-WITHOUT-TESTENABLE: hw.instance "ckg" sym @symbol @VeryGate(I: %clock: i1, E: %enable: i1) -> (O: i1)
+}
 }

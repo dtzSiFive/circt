@@ -1,6 +1,7 @@
 // RUN: circt-opt -allow-unregistered-dialect %s -mlir-print-debuginfo -mlir-print-local-scope -pass-pipeline='builtin.module(strip-debuginfo-with-pred{drop-suffix=txt})' | FileCheck %s
 // This test verifies that debug locations are stripped.
 
+hw.design {
 // CHECK-LABEL: func @inline_notation
 func.func @inline_notation() {
   // CHECK: "foo"() : () -> i32 loc(unknown)
@@ -19,3 +20,4 @@ hw.module @MyModule(%a : i1 loc("a.txt":0:0)) -> (b : i1 loc ("b.txt":0:0)) {
 
 // CHECK: hw.module.extern @MyExtModule(%a: i1 loc(unknown)) -> (b: i1 loc(unknown))
 hw.module.extern @MyExtModule(%a : i1 loc("a.txt":0:0)) -> (b : i1 loc ("b.txt":0:0))
+}

@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --test-apply-lowering-options="options=emittedLineLength=9001,verifLabels" --export-verilog --verify-diagnostics | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: module Labels
 hw.module @Labels(%a: i1) {
   // CHECK: foo1: assert property (a);
@@ -269,4 +270,6 @@ hw.module @Issue5763(%a: i3) {
   %1 = comb.icmp bin eq %a, %c-1_i3 : i3
   %2 = comb.and bin %1, %0 : i1
   verif.assert %2 : i1
+}
+
 }

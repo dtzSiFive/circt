@@ -5,16 +5,19 @@
 
 // CHECK{LITERAL}: //  {{
 // CHECK-NEXT: endmodule
+hw.design {
 hw.module @VerbatimWrapping(%clock : i1, %cond : i1, %val : i8, %a : i3, %b : i3) {
       %x = comb.add %a, %b : i3
       %y = comb.xor %a, %b : i3
       %arr = hw.array_create %x, %y, %x, %y, %x, %y, %x, %y, %x, %y, %x, %y : i3
       sv.verbatim "// {{0}}" (%arr) : !hw.array<12xi3>
 }
+}
 
 // -----
 // https://github.com/llvm/circt/issues/4182
 
+hw.design {
 // CHECK-LABEL: TestZero(
 
 // CHECK:      input  /*Zero Width*/      zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime
@@ -58,4 +61,5 @@ hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
  %c = comb.add %o2, %o2 : i0
 
   hw.output %o1, %c, %o3 : i4, i0, !hw.array<3xi0>
+}
 }

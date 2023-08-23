@@ -1590,7 +1590,7 @@ void HWModuleGeneratedOp::setHWModuleType(ModuleType type) {
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
 Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  auto topLevelModuleOp = (*this)->getParentOfType<hw::HWDesignOp>();
   return topLevelModuleOp.lookupSymbol(getGeneratorKind());
 }
 

@@ -1,5 +1,6 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
+hw.design @typedecls {
 // CHECK-LABEL: hw.type_scope @__hw_typedecls {
 hw.type_scope @__hw_typedecls {
   // CHECK: hw.typedecl @foo : i1
@@ -28,10 +29,12 @@ hw.module @testTypeAliasComb(
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
 }
+}
 
 // CHECK-LABEL: hw.module @testTypeAliasArray
 !Foo = !hw.typealias<@__hw_typedecls::@foo, i1>
 !FooArray = !hw.typealias<@__hw_typedecls::@fooArray, !hw.array<2x!Foo>>
+hw.design {
 hw.module @testTypeAliasArray(%arg0: !Foo, %arg1: !Foo, %arg2: !FooArray) {
   %c1 = hw.constant 1 : i1
   %0 = hw.array_create %arg0, %arg1 : !Foo
@@ -40,18 +43,23 @@ hw.module @testTypeAliasArray(%arg0: !Foo, %arg1: !Foo, %arg2: !FooArray) {
   %3 = hw.array_get %arg2[%c1] : !FooArray, i1
   %4 = hw.aggregate_constant [false, true] : !FooArray
 }
+}
 
 // CHECK-LABEL: hw.module @testTypeAliasStruct
 !FooStruct = !hw.typealias<@__hw_typedecls::@fooStruct, !hw.struct<a: i1>>
+hw.design {
 hw.module @testTypeAliasStruct(%arg0: !FooStruct, %arg1: i1) {
   %0 = hw.struct_extract %arg0["a"] : !FooStruct
   %1 = hw.struct_inject %arg0["a"], %arg1 : !FooStruct
   %2:1 = hw.struct_explode %arg0 : !FooStruct
   %3 = hw.aggregate_constant [false] : !FooStruct
 }
+}
 
 // CHECK-LABEL: hw.module @testTypeAliasUnion
 !FooUnion = !hw.typealias<@__hw_typedecls::@fooUnion, !hw.union<a: i1>>
+hw.design {
 hw.module @testTypeAliasUnion(%arg0: !FooUnion, %arg1: i1) {
   %0 = hw.union_extract %arg0["a"] : !FooUnion
+}
 }

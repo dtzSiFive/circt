@@ -40,7 +40,7 @@ struct HWGeneratorCalloutPass
 } // end anonymous namespace
 
 void HWGeneratorCalloutPass::runOnOperation() {
-  ModuleOp root = getOperation();
+  auto root = getOperation();
   SmallVector<StringRef> genOptions;
   StringRef extraGeneratorArgs(genExecArgs);
   extraGeneratorArgs.split(genOptions, ';');

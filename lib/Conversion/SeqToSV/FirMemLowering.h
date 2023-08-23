@@ -72,7 +72,7 @@ public:
   using MemoryConfig =
       std::tuple<FirMemConfig *, hw::HWModuleGeneratedOp, seq::FirMemOp>;
 
-  FirMemLowering(ModuleOp circuit);
+  FirMemLowering(hw::HWDesignOp circuit);
 
   /**
    * Groups memories by their kind from the whole design.
@@ -101,7 +101,7 @@ private:
 
 private:
   MLIRContext *context;
-  ModuleOp circuit;
+  hw::HWDesignOp circuit;
 
   SymbolCache symbolCache;
   Namespace globalNamespace;

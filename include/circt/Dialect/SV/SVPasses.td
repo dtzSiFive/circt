@@ -59,7 +59,7 @@ def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
 }
 
 def HWStubExternalModules : Pass<"hw-stub-external-modules",
-                                  "mlir::ModuleOp"> {
+                                  "::circt::hw::HWDesignOp"> {
   let summary = "transform external hw modules to empty hw modules";
   let description = [{
       This pass creates empty module bodies for external modules.  This is
@@ -70,7 +70,7 @@ def HWStubExternalModules : Pass<"hw-stub-external-modules",
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
-def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "ModuleOp"> {
+def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "::circt::hw::HWDesignOp"> {
   let summary = "Lower Generator Schema to external module";
   let description = [{
     This pass calls an external program for all the hw.module.generated nodes,
@@ -88,7 +88,7 @@ def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "ModuleOp"> {
    ];
 }
 
-def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
+def HWMemSimImpl : Pass<"hw-memory-sim", "::circt::hw::HWDesignOp"> {
   let summary = "Implement FIRRTMMem memories nodes with simulation model";
   let description = [{
     This pass replaces generated module nodes of type FIRRTLMem with a model
@@ -117,7 +117,7 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
    ];
 }
 
-def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
+def SVExtractTestCode : Pass<"sv-extract-test-code", "::circt::hw::HWDesignOp"> {
   let summary = "Extract simulation only constructs to modules and bind";
   let description = [{
     This pass extracts cover, assume, assert operations to a module, along with
@@ -141,7 +141,7 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   ];
 }
 
-def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
+def SVTraceIVerilog : Pass<"sv-trace-iverilog", "::circt::hw::HWDesignOp"> {
   let summary = "Add tracing to an iverilog simulated module";
   let description = [{
     This pass adds the necessary instrumentation to a HWModule to trigger
@@ -161,7 +161,7 @@ def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
 }
 
 def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
-                                   "mlir::ModuleOp"> {
+                                   "::circt::hw::HWDesignOp"> {
   let summary = "Export module and instance hierarchy information";
   let description = [{
     This pass exports the module and instance hierarchy tree for each module
@@ -174,7 +174,7 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
 }
 
 def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",
-                             "mlir::ModuleOp"> {
+                             "::circt::hw::HWDesignOp"> {
   let summary = "Raises usages of inout ports into explicit input and output ports";
   let description = [{
     This pass raises usages of inout ports into explicit in- and output ports.

@@ -20,7 +20,6 @@ firrtl.circuit "Foo" {
     firrtl.connect %instName_clockIn, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %wireName, %invalid_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
   }
-}
 
 // CHECK: ----- 8< -----
 sv.verbatim "----- 8< -----"
@@ -44,3 +43,4 @@ sv.verbatim "VERB regResetSym = `{{0}}`" {symbols = [#hw.innerNameRef<@Foo::@reg
 // CHECK-NEXT: VERB wireSym = `wireName`
 // CHECK-NEXT: VERB regSym = `regName`
 // CHECK-NEXT: VERB regResetSym = `regResetName`
+}

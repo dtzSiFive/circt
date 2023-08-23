@@ -1,4 +1,4 @@
-// RUN: circt-opt --firrtl-emit-metadata="repl-seq-mem=true repl-seq-mem-file='dut.conf'" -split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true repl-seq-mem-file="dut.conf"}))' --split-input-file %s | FileCheck %s
 
 firrtl.circuit "empty" {
   firrtl.module @empty() {
@@ -160,7 +160,7 @@ firrtl.circuit "top"
   firrtl.module @top() { }
   // When there are no memories, we still need to emit the memory metadata.
   // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata{{/|\\\\}}seq_mems.json", excludeFromFileList>}
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"'dut.conf'", excludeFromFileList>}
+  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"\22dut.conf\22", excludeFromFileList>}
 }
 
 // -----

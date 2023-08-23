@@ -9,6 +9,7 @@
 // RUN: FileCheck %s --check-prefix=VERILOG-CUSTOM-2 < %t/custom2.sv
 // RUN: FileCheck %s --check-prefix=LIST < %t/filelist.f
 
+hw.design {
 sv.verbatim "// I'm everywhere"
 sv.ifdef "VERILATOR" {
   sv.verbatim "// Hello"
@@ -45,6 +46,7 @@ hw.module.extern @inout_2 () -> ()
 
 sv.verbatim "// Foo" {output_file = #hw.output_file<"custom1.sv">}
 sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFileList>}
+}
 
 // LIST:      {{^}}foo.sv{{$}}
 // LIST-NEXT: {{^}}bar.sv{{$}}

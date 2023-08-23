@@ -318,7 +318,7 @@ static LogicalResult processBuffer(
   if (verbosePassExecutions)
     pm.addInstrumentation(
         std::make_unique<
-            VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
+            VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp, hw::HWDesignOp>>(
             "firtool"));
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
@@ -360,11 +360,11 @@ static LogicalResult processBuffer(
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
       outputFormat == OutputIRVerilog) {
     // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+    pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
     // Tidy up the IR to improve verilog emission quality.
     if (!firtoolOptions.disableOptimization)
-      pm.nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
+      pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
 
     if (stripFirDebugInfo)
       pm.addPass(
@@ -380,7 +380,8 @@ static LogicalResult processBuffer(
 
     // Emit module and testbench hierarchy JSON files.
     if (exportModuleHierarchy)
-      pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+      pm.nest<hw::HWDesignOp>().addPass(
+          sv::createHWExportModuleHierarchyPass(outputFilename));
 
     // Check inner symbols and inner refs.
     pm.addPass(hw::createVerifyInnerRefNamespacePass());
@@ -390,14 +391,14 @@ static LogicalResult processBuffer(
     default:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      pm.addPass(createExportVerilogPass((*outputFile)->os()));
+      pm.nest<hw::HWDesignOp>().addPass(createExportVerilogPass((*outputFile)->os()));
       break;
     case OutputSplitVerilog:
-      pm.addPass(createExportSplitVerilogPass(outputFilename));
+      pm.nest<hw::HWDesignOp>().addPass(createExportSplitVerilogPass(outputFilename));
       break;
     case OutputIRVerilog:
       // Run the ExportVerilog pass to get its lowering, but discard the output.
-      pm.addPass(createExportVerilogPass(llvm::nulls()));
+      pm.nest<hw::HWDesignOp>().addPass(createExportVerilogPass(llvm::nulls()));
       break;
     }
 

@@ -120,8 +120,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
-  pm.addPass(firrtl::createCreateSiFiveMetadataPass(opt.replSeqMem,
-                                                    opt.replSeqMemFile));
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCreateSiFiveMetadataPass(
+      opt.replSeqMem, opt.replSeqMemFile));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
@@ -195,7 +195,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
 
   if (!opt.disableOptimization) {
-    auto &modulePM = pm.nest<hw::HWModuleOp>();
+    auto &modulePM = pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>();
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
@@ -209,18 +209,19 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
   if (opt.extractTestCode)
-    pm.addPass(sv::createSVExtractTestCodePass(opt.etcDisableInstanceExtraction,
-                                               opt.etcDisableRegisterExtraction,
-                                               opt.etcDisableModuleInlining));
+    pm.nest<hw::HWDesignOp>().addPass(sv::createSVExtractTestCodePass(
+        opt.etcDisableInstanceExtraction, opt.etcDisableRegisterExtraction,
+        opt.etcDisableModuleInlining));
 
-  pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
-  pm.addPass(circt::createLowerSeqToSVPass(
+  pm.nest<hw::HWDesignOp>().addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
+  pm.nest<hw::HWDesignOp>().addPass(createLowerSeqToSVPass(
       {/*disableRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
        /*emitSeparateAlwaysBlocks=*/
        opt.emitSeparateAlwaysBlocks}));
-  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
-  pm.addPass(sv::createHWMemSimImplPass(
+  auto &modulePM = pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>();
+  modulePM.addPass(createLowerVerifToSVPass());
+  pm.nest<hw::HWDesignOp>().addPass(sv::createHWMemSimImplPass(
       opt.replSeqMem, opt.ignoreReadEnableMem, opt.addMuxPragmas,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
@@ -228,7 +229,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
 
   // If enabled, run the optimizer.
   if (!opt.disableOptimization) {
-    auto &modulePM = pm.nest<hw::HWModuleOp>();
+    auto &modulePM = pm.nest<hw::HWDesignOp>().nest<hw::HWModuleOp>();
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
     modulePM.addPass(mlir::createCSEPass());

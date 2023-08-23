@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --lower-comb | FileCheck %s
 
+hw.design {
 // CHECK-LABEL: hw.module @ex2in
 // CHECK:         [[R0:%.+]] = comb.mux %b, %true, %false : i1
 // CHECK:         [[R1:%.+]] = comb.mux %b, %false, %true : i1
@@ -16,4 +17,5 @@ hw.module @ex2in(%a: i1, %b: i1) -> (x: i1) {
 hw.module @ex0in() -> (x: i1) {
   %0 = comb.truth_table -> [true] {sv.namehint="lut1"}
   hw.output %0 : i1
+}
 }

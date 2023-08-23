@@ -143,7 +143,7 @@ static MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache,
     if (auto *result = cache->getDefinition(macroName.getAttr()))
       return cast<MacroDeclOp>(result);
 
-  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  auto topLevelModuleOp = op->getParentOfType<hw::HWDesignOp>();
   return topLevelModuleOp.lookupSymbol<MacroDeclOp>(macroName.getValue());
 }
 
@@ -1513,7 +1513,7 @@ InterfaceInstanceOp::getReferencedInterface(const hw::HWSymbolCache *cache) {
     if (auto *result = cache->getDefinition(interface))
       return result;
 
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  auto topLevelModuleOp = (*this)->getParentOfType<hw::HWDesignOp>();
   if (!topLevelModuleOp)
     return nullptr;
 
@@ -1788,7 +1788,7 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   }
 
   // Otherwise, resolve the instance by looking up the module ...
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  auto topLevelModuleOp = (*this)->getParentOfType<hw::HWDesignOp>();
   if (!topLevelModuleOp)
     return {};
 
@@ -1804,9 +1804,8 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto module = (*this)->getParentOfType<mlir::ModuleOp>();
-  auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      symbolTable.lookupSymbolIn(module, getInstance().getModule()));
+  auto hwModule = symbolTable.lookupNearestSymbolFrom<hw::HWModuleOp>(
+      *this, getInstance().getModule());
   if (!hwModule)
     return emitError("Referenced module doesn't exist ")
            << getInstance().getModule() << "::" << getInstance().getName();
@@ -1923,7 +1922,7 @@ hw::HierPathOp XMRRefOp::getReferencedPath(const hw::HWSymbolCache *cache) {
     if (auto *result = cache->getDefinition(getRefAttr().getAttr()))
       return cast<hw::HierPathOp>(result);
 
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  auto topLevelModuleOp = (*this)->getParentOfType<hw::HWDesignOp>();
   return topLevelModuleOp.lookupSymbol<hw::HierPathOp>(getRefAttr().getValue());
 }
 

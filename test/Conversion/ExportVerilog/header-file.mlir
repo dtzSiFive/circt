@@ -5,6 +5,7 @@
 
 
 module attributes {circt.loweringOptions = "emitReplicatedOpsToHeader"}{
+hw.design {
 
 // HEADER: `define HEADER
 // HEADER-EMPTY:
@@ -22,5 +23,6 @@ sv.verbatim "File2 should not include header" {output_file = #hw.output_file<"fi
 // FOO-NEXT: module Foo
 hw.module @Foo() -> () {
   hw.output
+}
 }
 }

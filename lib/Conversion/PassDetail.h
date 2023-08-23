@@ -102,6 +102,7 @@ class CombDialect;
 
 namespace hw {
 class HWDialect;
+class HWDesignOp;
 class HWModuleOp;
 } // namespace hw
 

@@ -1,6 +1,7 @@
-// RUN: circt-opt -split-input-file -hw-legalize-modules -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -split-input-file -pass-pipeline='builtin.module(hw.design(hw.module(hw-legalize-modules)))' -verify-diagnostics %s --split-input-file | FileCheck %s
 
 module attributes {circt.loweringOptions = "disallowPackedArrays"} {
+hw.design {
 hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
                          %arg3: i8, %sel: i2, %clock: i1)
    -> (a: !hw.array<4xi8>) {
@@ -18,9 +19,11 @@ hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
   hw.output %1 : !hw.array<4xi8>
 }
 }
+}
 
 // -----
 module attributes {circt.loweringOptions = "disallowPackedArrays"} {
+hw.design {
 // CHECK-LABEL: hw.module @array_create_get_comb
 hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
                                  %sel: i2)
@@ -109,6 +112,7 @@ hw.module @array_constant_get_comb(%sel: i2)
 
   // CHECK: hw.output %0 : i8
   hw.output %1 : i8
+}
 }
 
 }  // end builtin.module

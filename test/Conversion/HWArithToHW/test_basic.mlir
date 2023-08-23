@@ -4,15 +4,18 @@
 // CHECK:   %c0_i32 = hw.constant 0 : i32
 // CHECK:   hw.output %c0_i32 : i32
 
+hw.design {
 hw.module @constant() -> (out: i32) {
   %0 = hwarith.constant 0 : si32
   %out = hwarith.cast %0 : (si32) -> i32
   hw.output %out : i32
 }
+}
 
 // -----
 
 // CHECK: hw.module @add(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
+hw.design {
 hw.module @add(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
   %op0Signed = hwarith.cast %op0 : (i32) -> si32
   %op0Unsigned = hwarith.cast %op0 : (i32) -> ui32
@@ -61,10 +64,12 @@ hw.module @add(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
+}
 
 // -----
 
 // CHECK: hw.module @sub(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
+hw.design {
 hw.module @sub(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
   %op0Signed = hwarith.cast %op0 : (i32) -> si32
   %op0Unsigned = hwarith.cast %op0 : (i32) -> ui32
@@ -113,9 +118,11 @@ hw.module @sub(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
+}
 
 // -----
 
+hw.design {
 // CHECK: hw.module @mul(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
 hw.module @mul(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
 
@@ -168,9 +175,11 @@ hw.module @mul(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
+}
 
 // -----
 
+hw.design {
 // CHECK: hw.module @div(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
 hw.module @div(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: i32) {
   %op0Signed = hwarith.cast %op0 : (i32) -> si32
@@ -213,9 +222,11 @@ hw.module @div(%op0: i32, %op1: i32) -> (sisi: i32, siui: i32, uisi: i32, uiui: 
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_RES]], %[[UISI_OUT]], %[[UIUI_RES]] : i32, i32, i32, i32
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i32, i32, i32, i32
 }
+}
 
 // -----
 
+hw.design {
 // CHECK: hw.module @icmp(%op0: i32, %op1: i32) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
 hw.module @icmp(%op0: i32, %op1: i32) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
   %op0Signed = hwarith.cast %op0 : (i32) -> si32
@@ -251,9 +262,11 @@ hw.module @icmp(%op0: i32, %op1: i32) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
 }
+}
 
 // -----
 
+hw.design {
 // CHECK: hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
 hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1, uiui: i1) {
   %op0Signed = hwarith.cast %op0 : (i5) -> si5
@@ -293,9 +306,11 @@ hw.module @icmp_mixed_width(%op0: i5, %op1: i7) -> (sisi: i1, siui: i1, uisi: i1
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
   hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
 }
+}
 
 // -----
 
+hw.design {
 // Signature conversion and other-dialect operations using signedness values.
 // CHECK:      hw.module @sigAndOps(%a: i8, %b: i8, %cond: i1, %clk: i1) -> (out: i8) {
 // CHECK-NEXT:   %[[MUX_OUT:.*]] = comb.mux %cond, %a, %b : i8
@@ -307,9 +322,11 @@ hw.module @sigAndOps(%a: ui8, %b: ui8, %cond: i1, %clk : i1) -> (out: ui8)  {
     %1 = seq.compreg %0, %clk: ui8
     hw.output %1 : ui8
 }
+}
 
 // -----
 
+hw.design {
 // Type conversions of struct and array ops.
 // CHECK:      hw.module @structAndArrays(%a: i8, %b: i8) -> (out: !hw.struct<foo: !hw.array<2xi8>>) {
 // CHECK-NEXT:   %[[ARRAY:.*]] = hw.array_create %a, %b : i8
@@ -321,6 +338,7 @@ hw.module @structAndArrays(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<
     %3 = hw.struct_create (%2) : !hw.struct<foo: !hw.array<2xui8>>
     hw.output %3 : !hw.struct<foo: !hw.array<2xui8>>
 }
+}
 
 // -----
 
@@ -330,6 +348,7 @@ msft.module.extern @externModule(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.
 // -----
 
 
+hw.design {
 // CHECK-LABEL:   hw.module @backedges() {
 // CHECK-NEXT:      %[[VAL_0:.*]] = hw.constant false
 // CHECK-NEXT:      %[[VAL_1:.*]] = comb.concat %[[VAL_0]], %[[VAL_2:.*]] : i1, i1
@@ -343,9 +362,11 @@ hw.module @backedges() {
   %res = hwarith.add %arg, %arg : (ui1, ui1) -> ui2
   %arg = hwarith.constant 1 : ui1
 }
+}
 
 // -----
 
+hw.design {
 // CHECK-LABEL:   hw.module @wires() {
 // CHECK:           %[[VAL_0:.*]] = sv.wire  : !hw.inout<i2>
 // CHECK:           %[[VAL_1:.*]] = sv.reg  : !hw.inout<i2>
@@ -369,4 +390,5 @@ hw.module @wires () -> () {
   %c0_ui2 = hwarith.constant 2 : ui2
   sv.assign %r52, %c0_ui2 : ui2
   sv.assign %r53, %c0_ui2 : ui2
+}
 }

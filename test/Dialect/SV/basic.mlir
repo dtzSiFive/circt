@@ -1,6 +1,7 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
+hw.design {
 sv.macro.decl @RANDOM
 sv.macro.decl @PRINTF_COND_
 
@@ -382,4 +383,5 @@ hw.module @XMRRefOp() {
   %0 = sv.xmr.ref @ref : !hw.inout<i2>
   // CHECK: %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
   %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
+}
 }

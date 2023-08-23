@@ -4,6 +4,7 @@
 // RUN: circt-opt --test-apply-lowering-options='options=emittedLineLength=40,maximumNumberOfTermsPerExpression=16' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_SHORT
 // RUN: circt-opt --test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=32' --export-verilog %s | FileCheck %s --check-prefixes=CHECK,LIMIT_LONG
 
+hw.design {
 hw.module @longvariadic(%a: i8) -> (b: i8) {
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
@@ -70,3 +71,4 @@ hw.module @moduleWithComment()
 // LONG-LABEL:    // The quick brown fox jumps over the lazy dog.  The quick brown fox jumps over the lazy dog.
 // LONG-NEXT:     // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 // LONG-NEXT:     module moduleWithComment
+}

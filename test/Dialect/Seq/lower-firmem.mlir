@@ -3,6 +3,7 @@
 // CHECK: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
 
 // CHECK: sv.macro.decl @SomeMacro
+hw.design {
 sv.macro.decl @SomeMacro
 
 // CHECK: hw.module.generated @m0_mem1_12x42, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 42 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
@@ -104,4 +105,5 @@ hw.module @MemoryWritePortBehavior(%clock1: i1, %clock2: i1) {
   %m3_mem3 = seq.firmem 0, 1, undefined, port_order : <12 x 8>
   seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>
   seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>
+}
 }

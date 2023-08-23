@@ -13,6 +13,7 @@
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -119,7 +120,7 @@ void TestSchedulingAnalysisPass::runOnOperation() {
 
 namespace {
 struct InferTopModulePass
-    : public PassWrapper<InferTopModulePass, OperationPass<mlir::ModuleOp>> {
+    : public PassWrapper<InferTopModulePass, OperationPass<::circt::hw::HWDesignOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InferTopModulePass)
 
   void runOnOperation() override;

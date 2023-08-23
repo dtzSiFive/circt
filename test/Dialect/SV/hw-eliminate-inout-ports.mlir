@@ -1,5 +1,6 @@
-// RUN: circt-opt --hw-eliminate-inout-ports %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.design(hw-eliminate-inout-ports))' %s | FileCheck %s
 
+hw.design {
 // CHECK-LABEL:   hw.module @read(
 // CHECK-SAME:                    %[[VAL_0:.*]]: i42) -> (out: i42) {
 // CHECK:           hw.output %[[VAL_0]] : i42
@@ -69,3 +70,4 @@ hw.module @passthroughTwoLevels() {
   hw.instance "passthrough" @passthrough(a : %0 : !hw.inout<i42>) -> ()
 }
 
+}

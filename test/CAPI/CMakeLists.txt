@@ -27,6 +27,7 @@ target_link_libraries(circt-capi-om-test
 
   MLIRCAPIIR
   CIRCTCAPIOM
+  CIRCTCAPIHW
 )
 
 add_llvm_executable(circt-capi-firrtl-test

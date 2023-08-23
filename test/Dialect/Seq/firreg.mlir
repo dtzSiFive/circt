@@ -1,9 +1,10 @@
-// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-init-to-sv --lower-seq-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes SEPARATE
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.design(lower-seq-firrtl-init-to-sv, lower-seq-to-sv))" | FileCheck %s --check-prefixes=CHECK,COMMON
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.design(lower-seq-firrtl-init-to-sv, lower-seq-to-sv{disable-reg-randomization}))" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(hw.design(lower-seq-firrtl-init-to-sv, lower-seq-to-sv{emit-separate-always-blocks}))" | FileCheck %s --check-prefixes SEPARATE
 
 // COMMON-LABEL: hw.module @lowering
 // SEPARATE-LABEL: hw.module @lowering
+hw.design {
 hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
   %cst0 = hw.constant 0 : i32
 
@@ -741,4 +742,5 @@ hw.module @with_preset(%clock: i1, %reset: i1, %next32: i32, %next16: i16) -> ()
   // CHECK:     sv.bpassign %preset_42, %c42_i16 : i16
   // CHECK:   }
   // CHECK: }
+}
 }

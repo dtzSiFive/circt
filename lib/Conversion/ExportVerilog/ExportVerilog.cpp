@@ -813,7 +813,7 @@ namespace {
 /// various emitters.
 class VerilogEmitterState {
 public:
-  explicit VerilogEmitterState(ModuleOp designOp,
+  explicit VerilogEmitterState(hw::HWDesignOp designOp,
                                const SharedEmitterState &shared,
                                const LoweringOptions &options,
                                const HWSymbolCache &symbolCache,
@@ -824,8 +824,8 @@ public:
         pp(os, options.emittedLineLength) {
     pp.setListener(&saver);
   }
-  /// This is the root mlir::ModuleOp that holds the whole design being emitted.
-  ModuleOp designOp;
+  /// This is the root hw::HWDesignOp that holds the whole design being emitted.
+  hw::HWDesignOp designOp;
 
   const SharedEmitterState &shared;
 
@@ -5247,7 +5247,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp op) {
 
   auto instance = op.getReferencedInstance(&state.symbolCache);
   auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
-  auto *interface = op->getParentOfType<ModuleOp>().lookupSymbol(
+  auto *interface = op->getParentOfType<hw::HWDesignOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   startStatement();
   ps << "bind " << PPExtString(instantiator) << PP::nbsp
@@ -5898,8 +5898,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
-  LoweringOptions options(module);
+static LogicalResult exportVerilogImpl(hw::HWDesignOp module, llvm::raw_ostream &os) {
+  LoweringOptions options(module->getParentOfType<mlir::ModuleOp>());
   GlobalNameTable globalNames = legalizeGlobalNames(module, options);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
@@ -5945,7 +5945,10 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
           module->getContext(), modulesToPrepare,
           [&](auto op) { return prepareHWModule(op, options); })))
     return failure();
-  return exportVerilogImpl(module, os);
+  // TODO: do better
+  auto designs = module.getOps<HWDesignOp>();
+  assert(!designs.empty());
+  return exportVerilogImpl(*designs.begin(), os);
 }
 
 namespace {
@@ -5954,7 +5957,7 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
-    mlir::OpPassManager preparePM("builtin.module");
+    mlir::OpPassManager preparePM("hw.design");
     preparePM.addPass(createLegalizeAnonEnumsPass());
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
@@ -6029,11 +6032,11 @@ static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
   output->keep();
 }
 
-static LogicalResult exportSplitVerilogImpl(ModuleOp module,
+static LogicalResult exportSplitVerilogImpl(HWDesignOp module,
                                             StringRef dirname) {
   // Prepare the ops in the module for emission and legalize the names that will
   // end up in the output.
-  LoweringOptions options(module);
+  LoweringOptions options(module->getParentOfType<mlir::ModuleOp>());
   GlobalNameTable globalNames = legalizeGlobalNames(module, options);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
@@ -6102,7 +6105,10 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
           [&](auto op) { return prepareHWModule(op, options); })))
     return failure();
 
-  return exportSplitVerilogImpl(module, dirname);
+  // TODO: do better
+  auto designs = module.getOps<HWDesignOp>();
+  assert(!designs.empty());
+  return exportSplitVerilogImpl(*designs.begin(), dirname);
 }
 
 namespace {
@@ -6114,7 +6120,7 @@ struct ExportSplitVerilogPass
   }
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
-    mlir::OpPassManager preparePM("builtin.module");
+    mlir::OpPassManager preparePM("hw.design");
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))

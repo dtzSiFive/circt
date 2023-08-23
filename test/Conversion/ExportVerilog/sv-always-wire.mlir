@@ -1,6 +1,7 @@
-// RUN: circt-opt %s -prettify-verilog --export-verilog --verify-diagnostics -o %t | FileCheck %s --strict-whitespace
-// RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl' -prettify-verilog -export-verilog | FileCheck %s --check-prefix=INLINE
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.design(hw.module(prettify-verilog),export-verilog))' --verify-diagnostics -o %t | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s --pass-pipeline='builtin.module(test-apply-lowering-options{options=exprInEventControl},hw.design(hw.module(prettify-verilog),export-verilog))' | FileCheck %s --check-prefix=INLINE
 
+hw.design {
 // CHECK-LABEL: module AlwaysSpill(
 hw.module @AlwaysSpill(%port: i1) {
   %false = hw.constant false
@@ -53,4 +54,5 @@ hw.module @Foo(%reset0: i1, %reset1: i1) -> () {
     sv.if %1 {
     }
   }
+}
 }

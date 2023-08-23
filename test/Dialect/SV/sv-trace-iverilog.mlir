@@ -7,4 +7,6 @@
 // CHECK-NEXT:    #1;
 // CHECK-NEXT:  end
 
+hw.design {
 hw.module @top () {}
+}

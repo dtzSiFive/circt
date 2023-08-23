@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt | FileCheck %s
 
+hw.design @parameters {
 // CHECK-LABEL: hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
 hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
   hw.output %arg0 : i8
@@ -237,4 +238,5 @@ hw.module @NoneTypeParam<p1: none>() -> () {}
 // CHECK:         hw.instance "inst" @NoneTypeParam<p1: none = "top.child">() -> ()
 hw.module @ParamConcatInst() -> () {
   hw.instance "inst" @NoneTypeParam<p1: none = #hw.param.expr.str.concat<"top", ".", "child">>() -> ()
+}
 }

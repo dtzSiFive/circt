@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
+hw.design {
 hw.module @B(%a: i1) -> (nameOfPortInSV: i1, "": i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
@@ -53,3 +54,4 @@ hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_l
 hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {write_latency=1, read_latency=1, ports=["read","write"]}
 // CHECK-LABEL: hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
 // CHECK-NEXT: hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
+}

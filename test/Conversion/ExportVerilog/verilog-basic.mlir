@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+hw.design {
 
 hw.testmodule @NewStyle (input %a : i3, 
                          output %b : i3, 
@@ -743,3 +744,4 @@ sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-NEXT:  ._io_req_ready_output (1'h0)
 // CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
+}

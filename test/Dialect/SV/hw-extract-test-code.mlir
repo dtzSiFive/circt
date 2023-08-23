@@ -1,5 +1,5 @@
-// RUN:  circt-opt --sv-extract-test-code --split-input-file %s | FileCheck %s
-// CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
+// RUN:  circt-opt --pass-pipeline='builtin.module(hw.design(sv-extract-test-code))' --split-input-file %s | FileCheck %s
+// CHECK-LABEL: hw.design attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assume
@@ -32,7 +32,7 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assert>
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
   hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(%a : i1) attributes {"firrtl.extract.assert.extra"}
@@ -70,7 +70,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-LABEL: @AlreadyExtracted
 // CHECK-COUNT-1: doNotPrint
 // CHECK-NOT:     doNotPrint
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @AlreadyExtracted(%clock: i1) -> () {
     sv.always posedge %clock  {
       sv.assert %clock, immediate
@@ -87,7 +87,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 //
 // CHECK-NOT:  hw.module @ModuleInTestHarness_assert
 // CHECK-NOT:  firrtl.extract.do_not_extract
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @ModuleInTestHarness(%clock: i1) -> () attributes {"firrtl.extract.do_not_extract"} {
     sv.always posedge %clock  {
       sv.assert %clock, immediate
@@ -102,7 +102,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK:      hw.instance "[[name:.+]]_assert" sym @{{[^ ]+}} @[[name]]_assert
 // CHECK-NEXT: hw.instance "[[name:.+]]_assume" sym @{{[^ ]+}} @[[name]]_assume
 // CHECK-NEXT: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @InstanceName(%clock: i1, %cond: i1, %cond2: i1) -> () {
     sv.always posedge %clock  {
       sv.assert %cond, immediate
@@ -118,7 +118,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 
 // CHECK-LABEL: @MultiRead(
 // CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(foo: %0: i1, clock: %clock: i1)
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @MultiRead(%clock: i1, %cond: i1) -> () {
     %foo = sv.wire : !hw.inout<i1>
     sv.assign %foo, %cond : i1
@@ -138,7 +138,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 
 // CHECK-LABEL: @InstResult(
 // CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem.result_name: %{{[^ ]+}}: i1, mem.1: %{{[^ ]+}}: i1, clock: %clock: i1)
-module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+hw.design attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @Mem() -> (result_name: i1, "": i1) {
     %reg = sv.reg : !hw.inout<i1>
     %0 = sv.read_inout %reg : !hw.inout<i1>
@@ -179,7 +179,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-DAG: sv.bind <@Top::@[[input_only_cover]]>
 // CHECK-DAG: sv.bind <@InputOnlySym::@[[input_only_sym_cover]]>
 // CHECK-DAG: sv.bind <@Top::@[[already_bound]]>
-module {
+hw.design {
   hw.module private @AlreadyBound() -> () {}
 
   hw.module private @InputOnly(%clock: i1, %cond: i1) -> () {
@@ -291,7 +291,7 @@ module {
 // CHECK: hw.instance "non_testcode_and_instance0"
 // CHECK: hw.instance "non_testcode_and_instance1"
 
-module {
+hw.design {
   hw.module private @Foo(%a: i1) -> (b: i1) {
     hw.output %a : i1
   }
@@ -418,7 +418,7 @@ module {
 // -----
 // Check register extraction
 
-module {
+hw.design {
   // CHECK-LABEL: @RegExtracted_cover
   // CHECK-SAME: %designAndTestCode
   // CHECK: %testCode1 = seq.firreg
@@ -450,7 +450,7 @@ module {
 // -----
 // Check that constants are cloned freely.
 
-module {
+hw.design {
   // CHECK-LABEL: @ConstantCloned_cover(%in: i1, %clock: i1)
   // CHECK-NEXT:   %true = hw.constant true
   // CHECK-NEXT:   comb.xor bin %in, %true : i1
@@ -469,7 +469,7 @@ module {
 // -----
 // Check that input only modules are inlined properly.
 
-module {
+hw.design {
   // @ShouldNotBeInlined cannot be inlined because there is a wire with an inner sym
   // that is referred by hierpath op.
   hw.hierpath private @Foo [@ShouldNotBeInlined::@foo]

@@ -76,7 +76,7 @@ def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::
 //===----------------------------------------------------------------------===//
 
 def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
-                                   "mlir::ModuleOp"> {
+                                   "::mlir::ModuleOp"> {
   let summary = "Apply lowering options";
   let description = [{
     This pass allows overriding lowering options.  It is intended for test
@@ -85,14 +85,14 @@ def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
 
   let constructor = "createTestApplyLoweringOptionPass()";
   let dependentDialects = [
-    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
+    "circt::sv::SVDialect", "circt::comb::CombDialect", "::circt::hw::HWDialect"
   ];
   let options = [
     Option<"options", "options", "std::string", "", "Lowering Options">
   ];
 }
 
-def LegalizeAnonEnums : Pass<"legalize-anon-enums", "mlir::ModuleOp"> {
+def LegalizeAnonEnums : Pass<"legalize-anon-enums", "::circt::hw::HWDesignOp"> {
   let summary = "Prepare anonymous enumeration types for ExportVerilog";
   let description = [{
     This pass transforms all anonymous enumeration types into typedecls to work
@@ -119,7 +119,7 @@ def PrepareForEmission : Pass<"prepare-for-emission",
   ];
 }
 
-def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
+def ExportVerilog : Pass<"export-verilog", "::circt::hw::HWDesignOp"> {
   let summary = "Emit the IR to a (System)Verilog file";
   let description = [{
       This pass creates empty module bodies for external modules.  This is
@@ -132,7 +132,7 @@ def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
   ];
 }
 
-def ExportSplitVerilog : Pass<"export-split-verilog", "mlir::ModuleOp"> {
+def ExportSplitVerilog : Pass<"export-split-verilog", "::circt::hw::HWDesignOp"> {
   let summary = "Emit the IR to a (System)Verilog directory of files";
   let description = [{
     This pass generates (System)Verilog for the current design, mutating it
@@ -656,7 +656,7 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
 // ConvertSeqToSV
 //===----------------------------------------------------------------------===//
 
-def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
+def LowerSeqToSV: Pass<"lower-seq-to-sv",  "::circt::hw::HWDesignOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::createLowerSeqToSVPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
@@ -674,13 +674,13 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
   ];
 }
 
-def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
+def LowerFirMem : Pass<"lower-seq-firmem", "::circt::hw::HWDesignOp"> {
   let summary = "Lower seq.firmem ops to instances of hw.module.generated ops";
   let constructor = "circt::createLowerFirMemPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
-def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "mlir::ModuleOp"> {
+def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "::circt::hw::HWDesignOp"> {
   let summary = "Prep the module with macro definitions for firrtl registers.";
   let constructor = "circt::createLowerSeqFIRRTLInitToSV()";
   let dependentDialects = ["circt::sv::SVDialect"];

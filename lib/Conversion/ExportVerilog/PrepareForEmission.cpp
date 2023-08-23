@@ -1204,7 +1204,8 @@ struct PrepareForEmissionPass
     : public PrepareForEmissionBase<PrepareForEmissionPass> {
   void runOnOperation() override {
     HWModuleOp module = getOperation();
-    LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
+    LoweringOptions options(module->getParentOfType<mlir::ModuleOp>());
+    // LoweringOptions options(cast<hw::HWDesignOp>(module->getParentOp()));
     if (failed(prepareHWModule(module, options)))
       signalPassFailure();
   }
