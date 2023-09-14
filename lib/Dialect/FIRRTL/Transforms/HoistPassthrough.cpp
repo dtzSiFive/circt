@@ -22,6 +22,15 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/GraphWriter.h"
+
+#include "mlir/IR/Threading.h"
+#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/PointerIntPair.h"
+#include "llvm/Support/DOTGraphTraits.h"
+
+#include <deque>
 
 #define DEBUG_TYPE "firrtl-hoist-passthrough"
 
@@ -350,91 +359,645 @@ Value HWDriver::remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder) {
 }
 
 //===----------------------------------------------------------------------===//
-// MustDrivenBy analysis.
+/// FieldRefs Cache
 //===----------------------------------------------------------------------===//
 namespace {
-/// Driver analysis, tracking values that "must be driven" by the specified
-/// source (+fieldID), along with final complete driving connect.
-class MustDrivenBy {
+class FieldRefs {
+  /// Every block argument and result -> FieldRef.
+  /// Built during walk, cached for re-use and easier querying.
+  DenseMap<Value, FieldRef> valToFieldRef;
+
 public:
-  MustDrivenBy() = default;
-  MustDrivenBy(FModuleOp mod) { run(mod); }
-
-  /// Get direct driver, if computed, for the specified value.
-  Driver getDriverFor(Value v) const { return driverMap.lookup(v); }
-
-  /// Get combined driver for the specified value.
-  /// Walks the driver "graph" from the value to its ultimate source.
-  Driver getCombinedDriverFor(Value v) const {
-    Driver driver = driverMap.lookup(v);
-    if (!driver)
-      return driver;
-
-    // Chase and collapse.
-    Driver cur = driver;
-    size_t len = 1;
-    SmallPtrSet<Value, 8> seen;
-    while ((cur = driverMap.lookup(cur.source.getValue()))) {
-      // If re-encounter same value, bail.
-      if (!seen.insert(cur.source.getValue()).second)
-        return {};
-      driver.source = cur.source.getSubField(driver.source.getFieldID());
-      ++len;
-    }
-    (void)len;
-    LLVM_DEBUG(llvm::dbgs() << "Found driver for " << v << " (chain length = "
-                            << len << "): " << driver << "\n");
-    return driver;
+  FieldRef getFor(Value v) const { return valToFieldRef.lookup(v); }
+  FieldRef addRoot(Value v) {
+    auto ref = FieldRef(v, 0);
+    valToFieldRef.try_emplace(v, ref);
+    return ref;
   }
 
-  /// Analyze the given module's ports and chase simple storage.
-  void run(FModuleOp mod) {
-    SmallVector<Value, 64> worklist(mod.getArguments());
+  /// Add all results as roots.
+  void addDecl(Operation *op) {
+    for (auto result : op->getResults())
+      addRoot(result);
+  }
+  /// Add argument as root.
+  void addDecl(BlockArgument arg) { addRoot(arg); }
 
-    DenseSet<Value> enqueued;
-    enqueued.insert(worklist.begin(), worklist.end());
-    while (!worklist.empty()) {
-      auto val = worklist.pop_back_val();
-      auto driver = ignoreHWDrivers ? RefDriver::get(val) : Driver::get(val);
-      driverMap.insert({val, driver});
-      if (!driver)
-        continue;
-
-      auto sourceVal = driver.source.getValue();
-
-      // If already enqueued, ignore.
-      if (!enqueued.insert(sourceVal).second)
-        continue;
-
-      // Only chase through atomic values for now.
-      // Here, atomic implies must be driven entirely.
-      // This is true for HW types, and is true for RefType's because
-      // while they can be indexed into, only RHS can have indexing.
-      if (hw::FieldIdImpl::getMaxFieldID(sourceVal.getType()) != 0)
-        continue;
-
-      // Only through Wires, block arguments, instance results.
-      if (!isa<BlockArgument>(sourceVal) &&
-          !isa_and_nonnull<WireOp, InstanceOp>(sourceVal.getDefiningOp()))
-        continue;
-
-      worklist.push_back(sourceVal);
-    }
+  /// Record derived value (indexing).
+  FieldRef addDerived(Value input, Value derived, size_t fieldID) {
+    assert(!valToFieldRef.contains(derived));
+    auto inRef = getFor(input);
+    assert(inRef);
+    auto newRef = inRef.getSubField(fieldID);
+    valToFieldRef.try_emplace(derived, newRef);
+    return newRef;
   }
 
-  /// Clear out analysis results and storage.
-  void clear() { driverMap.clear(); }
+  /// Record subfield.
+  FieldRef addIndex(SubfieldOp op) {
+    auto access = op.getAccessedField();
+    assert(op.getInput() == access.getValue());
+    return addDerived(access.getValue(), op.getResult(), access.getFieldID());
+  }
 
-  /// Configure whether HW signals are analyzed.
-  void setIgnoreHWDrivers(bool ignore) { ignoreHWDrivers = ignore; }
+  /// Record subindex.
+  FieldRef addIndex(SubindexOp op) {
+    auto access = op.getAccessedField();
+    assert(op.getInput() == access.getValue());
+    return addDerived(access.getValue(), op.getResult(), access.getFieldID());
+  }
 
-private:
-  /// Map of values to their computed direct must-drive source.
-  DenseMap<Value, Driver> driverMap;
-  bool ignoreHWDrivers = false;
+  /// Record refsub.
+  FieldRef addIndex(RefSubOp op) {
+    auto input = op.getInput();
+    auto inputBaseType = input.getType().getType();
+    auto fieldID = hw::FieldIdImpl::getFieldID(inputBaseType, op.getIndex());
+    return addDerived(input, op.getResult(), fieldID);
+  }
+
+  /// Clear storage.
+  void clear() { valToFieldRef.clear(); }
+};
+} // end anonymous namespace
+
+/// Whether the type can be atomically driven source -> dest.
+static bool isAtomic(Type type) {
+  // Skip foreign types for now, probably could be handled.
+  if (!type_isa<FIRRTLType>(type))
+    return false;
+  // Refs, properties.
+  if (hw::FieldIdImpl::getMaxFieldID(type) == 0)
+    return true;
+  // For HW, restrict to passive.
+  FIRRTLBaseType baseType = type_dyn_cast<FIRRTLBaseType>(type);
+  return baseType && baseType.isPassive();
+}
+[[maybe_unused]] static bool isAtomic(FieldRef ref) {
+  return isAtomic(hw::FieldIdImpl::getFinalTypeByFieldID(
+      ref.getValue().getType(), ref.getFieldID()));
+}
+
+//===----------------------------------------------------------------------===//
+/// Connection graph.
+/// Designed primarily for tracking entirely-driven connections.
+//===----------------------------------------------------------------------===//
+namespace {
+/// Simple connectivity graph.
+struct ConnectionGraph {
+  class Node {
+  public:
+    using NodeRef = Node *;
+    /// Like a FieldRef but for a Node.
+    /// FieldID is always on LHS, if RHS node is invalidated.
+    using Edge = std::pair<NodeRef, size_t>;
+
+  private:
+    /// The definition represented by this node.
+    /// Steal bit for state tracking (invalid).
+    llvm::PointerIntPair<Value, 1, bool> defAndInvalid;
+    /// Driver edges.  For now, track all but invalid if > 1.
+    SmallVector<Edge, 1> drivenByEdges;
+
+  public:
+    Node(Value v) : defAndInvalid(v) {}
+
+    void invalidate() { defAndInvalid.setInt(true); }
+    bool isInvalid() const { return defAndInvalid.getInt(); }
+    Value getDefinition() const { return defAndInvalid.getPointer(); }
+
+    auto begin() { return drivenByEdges.begin(); }
+    auto end() { return drivenByEdges.end(); }
+    bool empty() { return drivenByEdges.empty(); }
+    auto size() { return drivenByEdges.size(); }
+
+    void addEdge(NodeRef node, size_t fieldID) {
+      drivenByEdges.emplace_back(node, fieldID);
+    }
+  };
+  using NodeRef = Node::NodeRef;
+  using Edge = Node::Edge;
+
+  /// Custom DenseMapInfo for looking up NodeRef's by mlir::Value.
+  /// Requires NodeRef's to be valid to dereference if not empty/tombstone.
+  struct NodeValueInfo {
+    using ValInfo = DenseMapInfo<mlir::Value>;
+    static inline NodeRef getEmptyKey() {
+      return reinterpret_cast<NodeRef>(
+          llvm::DenseMapInfo<void *>::getEmptyKey());
+    }
+    static inline NodeRef getTombstoneKey() {
+      return reinterpret_cast<NodeRef>(
+          llvm::DenseMapInfo<void *>::getTombstoneKey());
+    }
+
+    /// Forward to Value's hashing.
+    static inline unsigned getHashValue(mlir::Value val) {
+      return ValInfo::getHashValue(val);
+    }
+
+    /// Hash as-if is underlying definition, so val/node are hash-equivalent.
+    static inline unsigned getHashValue(NodeRef node) {
+      Value v;
+      if (node == getEmptyKey())
+        v = ValInfo::getEmptyKey();
+      else if (node == getTombstoneKey())
+        v = ValInfo::getTombstoneKey();
+      else {
+        v = node->getDefinition();
+        assert(v != ValInfo::getEmptyKey());
+        assert(v != ValInfo::getTombstoneKey());
+      }
+      return ValInfo::getHashValue(v);
+    }
+
+    /// Equality comparison for Value and NodeRef.
+    static inline bool isEqual(Value v, NodeRef node) {
+      if (node == getEmptyKey())
+        return v == ValInfo::getEmptyKey();
+      if (node == getTombstoneKey())
+        return v == ValInfo::getTombstoneKey();
+      if (v == ValInfo::getEmptyKey() || v == ValInfo::getTombstoneKey())
+        return false;
+      return node->getDefinition() == v;
+    }
+
+    /// Equality comparison between NodeRef's.
+    static inline bool isEqual(NodeRef lhs, NodeRef rhs) {
+      if (lhs == rhs)
+        return true;
+      if (lhs == getEmptyKey() || lhs == getTombstoneKey())
+        return false;
+      if (rhs == getEmptyKey() || rhs == getTombstoneKey())
+        return false;
+      assert(lhs->getDefinition() != ValInfo::getEmptyKey());
+      assert(lhs->getDefinition() != ValInfo::getTombstoneKey());
+      assert(rhs->getDefinition() != ValInfo::getEmptyKey());
+      assert(rhs->getDefinition() != ValInfo::getTombstoneKey());
+      return lhs->getDefinition() == rhs->getDefinition();
+    }
+  };
+
+  /// Set of nodes, searchable by Value.
+  /// (DenseMap<Value, NodeRef>).
+  /// Might make sense to just put nodes in here entirely,
+  /// especially if want to be able to delete nodes --
+  /// presently can't remove from storage without invalidating.
+  DenseSet<NodeRef, NodeValueInfo> nodeSet;
+
+  std::deque<Node> nodes;
+
+  NodeRef lookup(Value v) const {
+    auto it = nodeSet.find_as(v);
+    if (it != nodeSet.end())
+      return *it;
+    return nullptr;
+  }
+
+  bool contains(Value v) const { return nodeSet.find_as(v) != nodeSet.end(); }
+
+  NodeRef getOrCreateNode(Value v) {
+    // Expensive sanity check.  Consider moving to an expensive-checks-only
+    // verify().
+    // #ifndef NDEBUG
+    //     auto ref = getFieldRefFromValue(v);
+    //     if (ref.getValue() != v) {
+    //       ref.getValue().dump();
+    //       llvm::errs() << "fieldID: " << ref.getFieldID() << "\n";
+    //       v.dump();
+    //     }
+    //     assert(ref.getValue() == v);
+    //     assert(ref.getFieldID() == 0);
+    // #endif
+    auto node = lookup(v);
+    if (node)
+      return node;
+    nodes.emplace_back(v);
+    node = &nodes.back();
+    nodeSet.insert(node);
+    return node;
+  };
+
+  /// Add edge from src to dst.
+  void addEdge(FieldRef src, Value v) {
+    auto srcNode = getOrCreateNode(src.getValue());
+    auto dstNode = getOrCreateNode(v);
+
+    // Multiple drivers -> invalidate.
+    // (if not already empty, it now has > 1)
+    if (!dstNode->empty())
+      dstNode->invalidate();
+    dstNode->addEdge(srcNode, src.getFieldID());
+  }
 };
 
 } // end anonymous namespace
+
+/// Use a node as a "graph".  Useful for dfs, so on.
+template <>
+struct llvm::GraphTraits<ConnectionGraph::Node *> {
+  using NodeType = ConnectionGraph::Node;
+  using NodeRef = NodeType *;
+
+  static NodeRef getEntryNode(NodeRef node) { return node; }
+
+  static NodeRef getChild(const ConnectionGraph::Edge &edge) {
+    return edge.first;
+  }
+  using EdgeIterator =
+      std::invoke_result_t<decltype(&NodeType::begin), NodeType *>;
+  using ChildIteratorType =
+      llvm::mapped_iterator<EdgeIterator, decltype(&getChild)>;
+  static ChildIteratorType child_begin(NodeRef node) {
+    return {node->begin(), &getChild};
+  }
+  static ChildIteratorType child_end(NodeRef node) {
+    return {node->end(), &getChild};
+  }
+};
+
+//===----------------------------------------------------------------------===//
+/// AtomicDriverAnalysis
+/// Analyze modules and build graph of "atomic" connectivity.
+//===----------------------------------------------------------------------===//
+
+/// Find "source".  TODO: Clean up, less magic.
+static FieldRef getSource(ConnectionGraph::NodeRef node) {
+  // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
+  FieldRef ref(node->getDefinition(), 0);
+  for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
+    // llvm::errs() << "\t" << I->getDefinition() << "\n";
+    if (I->isInvalid())
+      return {};
+
+    // Exit early if derived from another port.  This can be hoisted
+    // even if the source port (current node) itself cannot.
+    // TODO: Restore, but handle better.
+    // TODO: Customization point for early exit, parameter/argument?
+    // if (isa<BlockArgument>(I->getDefinition()) && &*I != node)
+    //   break;
+
+    // Search over.  Bail before inspecting edge below.
+    if (I->empty()) {
+      assert(std::next(I) == E);
+      break;
+    }
+
+    // If multiple drivers, bail.
+    if (!llvm::hasSingleElement(**I)) {
+      assert(0 && "should be invalid or end if not single edge");
+      return {};
+    }
+    auto &edge = *I->begin();
+    if (I.nodeVisited(edge.first)) {
+      mlir::emitRemark(node->getDefinition().getLoc(), "driver cycle found")
+              .attachNote(edge.first->getDefinition().getLoc())
+          << "already visited this value";
+      return {};
+    }
+    // llvm::errs() << "\tIndex: " << edge.second << "\n";
+    ref = FieldRef(edge.first->getDefinition(), edge.second)
+              .getSubField(ref.getFieldID());
+  }
+  // if (ref.getValue() == node->getDefinition())
+  //   return {};
+  return ref;
+}
+
+namespace {
+
+// TODO: Optionally disable analysis for HW signals!
+
+class AtomicDriverAnalysis {
+  /// Connectivity graph built by analysis.
+  ConnectionGraph graph;
+  /// Special dummy node inserted as "entry" to graph.
+  /// "definition" is null value.
+  ConnectionGraph::Node *modEntryNode;
+
+  /// FieldRef cache, computed during analysis but cleared out when complete.
+  FieldRefs refs;
+
+public:
+  ConnectionGraph &getGraph() { return graph; }
+  ConnectionGraph::Node *getModEntryNode() { return modEntryNode; }
+
+  auto nodes_begin() { return graph.nodes.begin(); }
+  auto nodes_end() { return graph.nodes.end(); }
+
+  AtomicDriverAnalysis() = default;
+  AtomicDriverAnalysis(FModuleOp mod) {
+    // Add dummy node.
+    // TODO: Don't have null definition, set bit?.
+    graph.nodes.emplace_back(Value());
+    modEntryNode = &graph.nodes.back();
+
+    run(mod);
+  }
+
+  /// Simplify connectivity to only boundary values, collapsing chains of
+  /// single-drivers. Filter using provided predicate, and keep entry nodes
+  /// pointed to by modEntryNode.
+  /// TODO: Probably belongs on the ConnectionGraph, but maybe is a bit too
+  /// specific.
+  template <typename C>
+  void trim(C &&predicate) {
+    DenseSet<ConnectionGraph::NodeRef> keepSet;
+    for (auto &edge : *modEntryNode)
+      keepSet.insert(edge.first);
+
+    for (auto &node : graph.nodes) {
+      if (&node != modEntryNode && predicate(node.getDefinition()))
+        keepSet.insert(&node);
+    }
+
+    SmallVector<ConnectionGraph::NodeRef> keep(keepSet.begin(), keepSet.end());
+
+    ConnectionGraph reduced;
+    for (auto *node : keep) {
+      if (node->empty() || node->isInvalid()) {
+        auto copy = reduced.getOrCreateNode(node->getDefinition());
+        if (node->isInvalid())
+          copy->invalidate();
+        continue;
+      }
+      // TODO: Pass predicate to getSource.  Better to return a predicate source
+      // than to chase to, e.g., invalid.
+      auto source = getSource(node);
+      if (source && keepSet.contains(graph.lookup(source.getValue()))) {
+        if (source.getValue() == node->getDefinition()) {
+          assert(0 && "cycle?");
+          continue;
+        }
+
+        // Keep, simplify.
+        // llvm::errs() << "Simplifying " << node->getDefinition()
+        //              << " to : " << source.getValue() << " @ "
+        //              << source.getFieldID() << "\n";
+        reduced.addEdge(source, node->getDefinition());
+      } else {
+        // Origin is not kept, invalid.
+        // llvm::errs() << "Invalidating " << node->getDefinition();
+        reduced.getOrCreateNode(node->getDefinition())->invalidate();
+      }
+    }
+
+    /// New entry node.
+    reduced.nodes.emplace_back(Value());
+    auto *entryNode = &reduced.nodes.back();
+    for (auto &edge : *modEntryNode) {
+      entryNode->addEdge(reduced.lookup(edge.first->getDefinition()),
+                         edge.second);
+    }
+
+    // Replace our data.
+    modEntryNode = entryNode;
+    graph = std::move(reduced);
+  }
+
+private:
+  void invalidate(Value v) { return graph.getOrCreateNode(v)->invalidate(); }
+
+  void flow(FieldRef src, FieldRef dst) {
+    // Non-root RHS invalidates the destination node.
+    // We only want full connections.
+    if (dst.getFieldID() != 0)
+      return invalidate(dst.getValue());
+
+    auto srcType = src.getValue().getType();
+    auto dstType = dst.getValue().getType();
+
+    {
+      [[maybe_unused]] auto srcFType = type_dyn_cast<FIRRTLType>(srcType);
+      [[maybe_unused]] auto dstFType = type_dyn_cast<FIRRTLType>(dstType);
+      assert(!dstFType || srcFType && "FIRRTL type driven by non-FIRRTL type?");
+    }
+
+    auto srcBType = type_dyn_cast<FIRRTLBaseType>(srcType);
+    auto dstBType = type_dyn_cast<FIRRTLBaseType>(dstType);
+    if (srcBType) {
+      assert(dstBType);
+      // TODO: Maybe only portion of indexed type needs to be passive re:source.
+      // Bundle of a and flip b, can say something is must-driven by 'a'.
+      // For simplicity, only passive source and dest nodes for now.
+      // (not only portions being connected)
+      if (!srcBType.isPassive() || !dstBType.isPassive()) {
+        invalidate(src.getValue());
+        invalidate(dst.getValue());
+        return;
+      }
+    } else if (type_isa<RefType>(srcType)) {
+      assert(type_isa<RefType>(dstType));
+    } else {
+      // Everything else: invalidate source and destination, unhandled.
+      invalidate(src.getValue());
+      invalidate(dst.getValue());
+      return;
+    }
+
+    return graph.addEdge(src, dst.getValue());
+  }
+
+  /// Add specified value as root, marking invalid as appropriate and only
+  /// creating the node if needed to record invalid state.
+  /// No need to create node for every thing unless involved in connectivity.
+  void addLazyRoot(Value v, bool invalid = false) {
+    refs.addRoot(v);
+    if (invalid || !isAtomic(v.getType()) ||
+        (!v.getDefiningOp<InstanceOp>() && hasDontTouch(v)))
+      graph.getOrCreateNode(v)->invalidate();
+  }
+
+  /// Add results of operation as root declarations. marking invalid as
+  /// appropriate and only creating nodes if needed to record invalid state.
+  void addDecl(Operation *op) {
+    bool allInvalid = [&]() {
+      // TODO: hasDontTouch also checks inner symbols, which may not be quite
+      // what's wanted here.
+      if (!isa<InstanceOp>(op) && hasDontTouch(op))
+        return true;
+      if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable())
+        return true;
+      return false;
+    }();
+
+    for (auto result : op->getResults())
+      addLazyRoot(result, allInvalid);
+  }
+
+  void run(FModuleOp mod) {
+    /// Initialize with block arguments.
+    for (auto arg : mod.getArguments()) {
+      addLazyRoot(arg);
+      /// Add output ports to dummy node, with "FieldID" as port number.
+      if (mod.getPortDirection(arg.getArgNumber()) == Direction::Out)
+        modEntryNode->addEdge(graph.getOrCreateNode(arg), arg.getArgNumber());
+    }
+
+    /// TODO: Use visitor!
+
+    auto result =
+        mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) -> WalkResult {
+          auto result =
+              TypeSwitch<Operation *, LogicalResult>(op)
+                  .Case<SubfieldOp, SubindexOp, RefSubOp>([&](auto sub) {
+                    assert(refs.getFor(sub.getInput()) &&
+                           "indexing through unknown input");
+                    refs.addIndex(sub);
+                    return success();
+                  })
+                  .Case<SubaccessOp>([&](SubaccessOp access) {
+                    // Conservatively invalidate roots reaching subaccess.
+                    invalidate(refs.getFor(access.getInput()).getValue());
+                    addLazyRoot(access, true);
+                    return success();
+                  })
+                  .Case<RefCastOp>([&](RefCastOp op) {
+                    // Transparently index through refcast.
+                    // TODO: Verification comparing to getFieldRefFromValue will
+                    // disagree here!
+                    refs.addDerived(op.getInput(), op.getResult(), 0);
+                    return success();
+                  })
+                  .Case<NodeOp>([&](NodeOp node) {
+                    addDecl(node);
+                    auto inRef = refs.getFor(node.getInput());
+                    assert(inRef);
+                    flow(inRef, FieldRef(node.getResult(), 0));
+                    return success();
+                  })
+                  .Case<WireOp, InstanceOp>([&](auto declOp) {
+                    addDecl(declOp);
+                    return success();
+                  })
+                  .Case<Forceable, MemOp>([&](auto declOp) {
+                    // Registers, memories... invalid!
+                    addDecl(declOp);
+                    for (auto result : declOp->getResults())
+                      invalidate(result);
+                    return success();
+                  })
+                  .Case<FConnectLike>([&](FConnectLike connect) {
+                    auto srcRef = refs.getFor(connect.getSrc());
+                    auto dstRef = refs.getFor(connect.getDest());
+                    assert(srcRef);
+                    assert(dstRef);
+                    flow(srcRef, dstRef);
+
+                    // Invalidate based on block containing connect and
+                    // dest, based on connect "semantics".
+                    if (!connect.hasStaticSingleConnectBehavior()) {
+                      // Only support strict connect, and with all in same
+                      // block. Conservative for now, can connect into when
+                      // regions but not out.
+                      if (!isa<StrictConnectOp>(connect) ||
+                          connect->getBlock() !=
+                              srcRef.getValue().getParentBlock() ||
+                          connect->getBlock() !=
+                              dstRef.getValue().getParentBlock())
+                        invalidate(dstRef.getValue());
+                    }
+                    return success();
+                  })
+                  .Default([&](Operation *other) {
+                    // Everything else treat as undriven root.
+                    addDecl(other);
+
+                    // Presently, analysis assumes unhandled operations are
+                    // expressions -- with only 'connect' (through intermediate
+                    // indexing ops) using as lvalue.
+
+                    // TODO: Using visitor, support all expressions, and
+                    // declarations generically. Anything else we don't know,
+                    // mark all operands's roots as invalid. (?)
+
+                    return success();
+                  });
+          return result;
+        });
+
+    // TODO: Either plumb this appropriately or drop it and what feeds it.
+    (void)result;
+
+    /// Clear out computed field refs, no longer needed.
+    refs.clear();
+  };
+};
+static_assert(std::is_move_assignable_v<AtomicDriverAnalysis>);
+static_assert(std::is_move_constructible_v<AtomicDriverAnalysis>);
+
+} // end anonymous namespace
+
+/// Analysis as a graph, entry is dummy node "driven by" output ports.
+template <>
+struct llvm::GraphTraits<AtomicDriverAnalysis *>
+    : public llvm::GraphTraits<ConnectionGraph::Node *> {
+  static NodeRef getEntryNode(AtomicDriverAnalysis *graph) {
+    return graph->getModEntryNode();
+  }
+
+  using node_inner_iterator = decltype(ConnectionGraph::nodes)::iterator;
+  using nodes_iterator = llvm::pointer_iterator<node_inner_iterator>;
+  static nodes_iterator nodes_begin(AtomicDriverAnalysis *graph) {
+    return nodes_iterator(graph->getGraph().nodes.begin());
+  }
+  static nodes_iterator nodes_end(AtomicDriverAnalysis *graph) {
+    return nodes_iterator(graph->getGraph().nodes.end());
+  }
+};
+
+// Graph traits for DOT labeling.
+template <>
+struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
+    : public llvm::DefaultDOTGraphTraits {
+  using DefaultDOTGraphTraits::DefaultDOTGraphTraits;
+
+  static std::string getNodeLabel(const ConnectionGraph::Node *node,
+                                  AtomicDriverAnalysis *ada) {
+    if (node == ada->getModEntryNode()) {
+      return "Entry dummy node";
+    }
+    assert(node);
+    auto def = node->getDefinition();
+    assert(def);
+    // The name of the graph node is the module name.
+    SmallString<128> str;
+    llvm::raw_svector_ostream os(str);
+    auto [name, valid] = getFieldName(FieldRef(def, 0), true);
+    if (valid)
+      os << name;
+    else {
+      // XXX: lmao.
+      static mlir::AsmState asmState(def.getContext());
+      def.print(os, asmState);
+    }
+    if (node->isInvalid())
+      os << " INVALID";
+    return os.str().str();
+  }
+
+  // Optionally, hide invalid nodes.  Comment out to toggle behavior.
+#if 0
+  static bool isNodeHidden(const ConnectionGraph::Node *node, const AtomicDriverAnalysis*) {
+    return node->invalid;
+  }
+#endif
+
+  // TODO: (optionally) Edge dest labels! (+invert)
+
+  template <typename Iterator>
+  static std::string getEdgeAttributes(const ConnectionGraph::Node *node,
+                                       Iterator it,
+                                       const AtomicDriverAnalysis *) {
+    // Edge label is recorded fieldID (or argument number for edges from dummy
+    // entry).
+    auto *cur = it.getCurrent();
+    return ("label=" + Twine(cur->second)).str();
+  }
+
+  static std::string getGraphProperties(const AtomicDriverAnalysis *) {
+    return "\trankdir=\"LR\";";
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
@@ -462,17 +1025,152 @@ void HoistPassthroughPass::runOnOperation() {
           [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
       [](auto module) { return module; }));
 
-  MustDrivenBy driverAnalysis;
-  driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
+  // 1. Analyze entire design in parallel.
+  // Reduce connectivity graphs to relevant nodes for efficiency.
+  SmallVector<AtomicDriverAnalysis, 0> modAnalyses(modules.size());
+  mlir::parallelForEach(
+      &getContext(), llvm::seq<size_t>(0, modules.size()), [&](size_t idx) {
+        auto mod = modules[idx];
 
-  // For each module (PO)...
-  for (auto module : modules) {
-    // TODO: Public means can't reason down into, or remove ports.
-    // Does not mean cannot clone out wires or optimize w.r.t its contents.
+        // Per-module analysis, connectivity graph.
+        modAnalyses[idx] = AtomicDriverAnalysis(mod);
+
+        modAnalyses[idx].trim([&](Value val) {
+          // Reject HW nodes if requested to ignore.  Avoiding looking at these
+          // entirely while walking IR would be better but this works.
+          if (!hoistHWDrivers && type_isa<FIRRTLBaseType>(val.getType()))
+            return false;
+          return isa<BlockArgument>(val) || val.getDefiningOp<InstanceOp>();
+        });
+
+        // (XXX: Untested whether this is sane to call from threads)
+        // llvm::WriteGraph(&ada, module.getName());
+
+        // TODO: Compute and store statistics about graphs, and reduction?
+        return;
+      });
+
+// #define ADA_STATS
+#ifdef ADA_STATS
+  size_t totalNodes = 0;
+  size_t totalEdges = 0;
+  for (auto [idx, ada] : llvm::enumerate(modAnalyses)) {
+    size_t maxEdges = 0;
+    size_t numEdges = 0;
+    size_t invalids = 0;
+    for (auto &node : ada.getGraph().nodes) {
+      if (&node == ada.getModEntryNode())
+        continue;
+      numEdges += node.size();
+      maxEdges = std::max(maxEdges, node.size());
+      if (node.isInvalid())
+        ++invalids;
+    }
+    llvm::errs() << "Analysis for " << modules[idx].getNameAttr()
+                 << "\n\tnode count: " << ada.getGraph().nodes.size()
+                 << "\n\tmax incidence: " << maxEdges
+                 << "\n\tedges: " << numEdges
+                 << "\n\tinvalid nodes: " << invalids << "\n";
+    totalNodes += ada.getGraph().nodes.size();
+    totalEdges += numEdges;
+  }
+  llvm::errs() << "Total nodes: " << totalNodes << "\n";
+  llvm::errs() << "Total edges: " << totalEdges << "\n";
+  llvm::errs() << "------\n";
+#endif
+
+  /// Build lookup table for Module -> index.
+  DenseMap<Operation *, size_t> order;
+  {
+    size_t idx = 0;
+    for (auto module : modules)
+      order[module] = idx++;
+  }
+
+  // 2. Compute drivers bottom-up, using per-module connectivity analysis.
+  // Add synthetic edges to graphs of instantiating modules to record
+  // passthroughs that will hoisted.
+  // XXX: Probably can drop most of the Driver code -- we just need a simple
+  // dest + source and either find the connections during patch-up or just
+  // always inject wires.
+  SmallVector<SmallVector<Driver>, 0> modDrivers(modules.size());
+  for (auto [idx, module, ada, drivers] :
+       llvm::enumerate(modules, modAnalyses, modDrivers)) {
     if (module.isPublic())
       continue;
 
-    // 1. Analyze.
+    assert(&ada == &modAnalyses[idx]);
+
+    // 2a. Record Drivers for this module using reduced graph.
+    for (auto arg : module.getArguments()) {
+      auto node = ada.getGraph().lookup(arg);
+      if (!node)
+        continue;
+      auto source = getSource(node);
+      if (source) {
+        if (source.getValue() == arg) {
+          // Input or undriven.
+          LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
+        } else {
+          // XXX: $#@%@#$% clang-format likes to bork nice LLVM_DEBUG(...) bits
+          // :(.
+          //                          << " (chain length = TODO): "
+          //            << "(no connect tracking)"
+          //            << " source: " << source.getValue() << " @ "
+          //            << source.getFieldID() << "\n");
+          if (!isa<BlockArgument>(source.getValue()))
+            continue;
+
+          FConnectLike connect;
+          if (type_isa<RefType>(arg.getType()))
+            connect = getRefDefine(arg);
+          else
+            connect = getSingleConnectUserOf(arg);
+          if (!connect) {
+            arg.dump();
+            llvm::errs() << "source: " << source.getValue() << " @ "
+                         << source.getFieldID() << "\n";
+          }
+          assert(connect && "couldn't find connect??");
+
+          drivers.emplace_back(connect, source);
+        }
+      }
+    }
+
+    // 2b. Update analysis to reflect drivers that will be hoisted.
+    // Update graphs for instantiating modules with passthrough information.
+    // We want to complete all analysis before rewriting.
+    auto *igNode = instanceGraph.lookup(module);
+    for (auto *record : igNode->uses()) {
+      auto inst = cast<InstanceOp>(record->getInstance());
+
+      auto modWithInst = record->getParent()->getModule();
+      assert(order.contains(modWithInst));
+      assert(modules[order[modWithInst]] == modWithInst);
+      auto &graphToUpdate = modAnalyses[order[modWithInst]].getGraph();
+
+      for (auto &driver : drivers) {
+        auto destArg = driver.getDestBlockArg();
+        auto index = destArg.getArgNumber();
+        auto mappedDest = inst.getResult(index);
+        // Add (synthetic/derived) edge from dest to new source.
+        assert(graphToUpdate.getOrCreateNode(mappedDest)->empty());
+        assert(!graphToUpdate.getOrCreateNode(mappedDest)->isInvalid());
+        graphToUpdate.addEdge(
+            FieldRef(inst.getResult(Driver::getIndex(driver.source.getValue())),
+                     driver.source.getFieldID()),
+            mappedDest);
+      }
+    }
+  }
+
+  // 3. Rematerialize passthrough at instantiation sites and delete now-dead
+  // output ports.
+  for (auto [idx, module, ada, drivers] :
+       llvm::enumerate(modules, modAnalyses, modDrivers)) {
+    if (module.isPublic())
+      continue;
 
     // What ports to delete.
     // Hoisted drivers of output ports will be deleted.
@@ -481,27 +1179,20 @@ void HoistPassthroughPass::runOnOperation() {
     // Instance graph node, for walking instances of this module.
     auto *igNode = instanceGraph.lookup(module);
 
-    // Analyze all ports using current IR.
-    driverAnalysis.clear();
-    driverAnalysis.run(module);
-    auto notNullAndCanHoist = [](const Driver &d) -> bool {
-      return d && d.canHoist();
-    };
-    SmallVector<Driver, 16> drivers(llvm::make_filter_range(
-        llvm::map_range(module.getArguments(),
-                        [&driverAnalysis](auto val) {
-                          return driverAnalysis.getCombinedDriverFor(val);
-                        }),
-        notNullAndCanHoist));
-
-    // 2. Rematerialize must-driven ports at instantiation sites.
-
+    // 3a. Rematerialize at all instantiation sites.
     // Do this first, keep alive Driver state pointing to module.
     for (auto &driver : drivers) {
       std::optional<size_t> deadPort;
       {
         auto destArg = driver.getDestBlockArg();
         auto index = destArg.getArgNumber();
+#if 0
+        (mlir::emitRemark(module.getPortLocation(index)) << " replacing")
+                .attachNote(driver.source.getValue().getLoc())
+            << "with value derived from this";
+        destArg.dump();
+        driver.source.getValue().dump();
+#endif
 
         // Replace dest in all instantiations.
         for (auto *record : igNode->uses()) {
@@ -528,7 +1219,7 @@ void HoistPassthroughPass::runOnOperation() {
           .Case<HWDriver>([&](auto *) { ++numHWDrivers; });
     }
 
-    // 3. Finalize stage.  Ensure remat'd dest is unused on original side.
+    // 3b. Finalize stage.  Ensure remat'd dest is unused on original side.
 
     ImplicitLocOpBuilder builder(module.getLoc(), module.getBody());
     for (auto &driver : drivers) {
@@ -541,7 +1232,7 @@ void HoistPassthroughPass::runOnOperation() {
     if (deadPorts.none())
       continue;
 
-    // 4. Delete newly dead ports.
+    // 3c. Delete newly dead ports.
 
     // Drop dead ports at instantiation sites.
     for (auto *record : llvm::make_early_inc_range(igNode->uses())) {

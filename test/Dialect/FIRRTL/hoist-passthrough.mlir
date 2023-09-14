@@ -494,18 +494,17 @@ firrtl.circuit "AggSourceHW" {
 
 // -----
 
-// Reject non-ground dest (for now).
+// Non-ground dest: HW.
 
-// CHECK-LABEL: "AggHW"
-firrtl.circuit "AggHW" {
-  // CHECK:      module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>, out %out
-  // CHECK-NEXT:   firrtl.strictconnect
+// CHECK-LABEL: "AggDestHW"
+firrtl.circuit "AggDestHW" {
+  // CHECK:      module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>) {
   // CHECK-NEXT: }
   firrtl.module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>,
                                out %out : !firrtl.vector<uint<1>, 5>) {
     firrtl.strictconnect %out, %in : !firrtl.vector<uint<1>, 5>
   }
-  firrtl.module @AggHW(in %in : !firrtl.vector<uint<1>, 5>, out %out : !firrtl.vector<uint<1>, 5>) {
+  firrtl.module @AggDestHW(in %in : !firrtl.vector<uint<1>, 5>, out %out : !firrtl.vector<uint<1>, 5>) {
     %u_in, %u_out = firrtl.instance u @UTurn(in in : !firrtl.vector<uint<1>, 5>,
                                              out out : !firrtl.vector<uint<1>, 5>)
     firrtl.strictconnect %u_in, %in : !firrtl.vector<uint<1>, 5>
@@ -666,3 +665,13 @@ firrtl.circuit "SimpleForeign" {
     firrtl.strictconnect %out, %u_out : i1
   }
 }
+
+// -----
+
+// Registers.
+
+// -----
+
+// Memories.
+
+// -----
