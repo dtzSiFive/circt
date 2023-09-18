@@ -520,6 +520,8 @@ struct ConnectionGraph {
     assert(isAtomic(dst) && "graph only supports atomic destinations");
     assert(dst.getFieldID() == 0 && "graph only supports driving roots");
 
+    // auto srcNode = getNode(src);
+    // auto dstNode = getNode(dst);
     auto srcNode = getOrCreateNode(src);
     auto dstNode = getOrCreateNode(dst);
 
@@ -564,19 +566,31 @@ private:
     // Otherwise, track 
   }
 
-  void addRoot(Value v) {
-    refs.addRoot(v);
-    graph.getOrCreateNode(FieldRef(v, 0));
+  std::pair<FieldRef, ConnectionGraph::NodeRef> addRoot(Value v) {
+    auto ref = refs.addRoot(v);
+    auto node = graph.getOrCreateNode(ref);
+    return {ref, node};
+  }
+
+  void getOrCreateNode(Value v) {
+    if (auto arg = isa<BlockArgument>(v)) {
+      // Reject if 
+    }
   }
 
   void run(FModuleOp mod) {
     /// Initialize with block arguments.
 
     for (auto arg : mod.getArguments()) {
-      // TODO: What do non-atomic source Node's look like?
-      // What edges reach them?
-      addRoot(arg);
-      graph.entryNodes.push_back(graph.getNode(FieldRef(arg, 0)));
+      if (mod.getPortDirection(arg.getArgNumber()) == Direction::In) {
+        // auto [ref, node] = addRoot(arg);
+        addRoot(arg);
+      } else if (isAtomic(arg.getType())) {
+        auto [ref, node] = addRoot(arg);
+        graph.entryNodes.push_back(node);
+      } else {
+        refs.addRoot(arg);
+      }
     }
 
     /// TODO: Use visitor!
@@ -591,28 +605,36 @@ private:
                     auto ref = refs.addIndex(sub);
                     return success();
                   })
-                  .Case<NodeOp>([&](NodeOp node) {
-                    auto result = refs.addRoot(node.getResult());
-                    assert(result);
-                    auto inRef = refs.getFor(node.getInput());
-                    assert(inRef);
-                    flow(inRef, result);
+                  .Case<RefCastOp>([&](RefCastOp op) {
+                    // Transparently reference through refcast.
+                    refs.addDerived(op.getInput(), op.getResult(), 0);
                     return success();
                   })
-                  // .Case<Forceable>([&](Forceable fop) {
-                  //   refs.addDecl(fop);
-                  //   // auto result = refs.addRoot(fop.getDataRaw());
-                  //   // graph.flow(FieldRef(node.getInput(), 0),
-                  //   //            FieldRef(node.getResult(), 0));
-                  //   return success();
-                  // })
-                  // .Case<InstanceOp>([&](InstanceOp op) {
-                  //   // FieldRef root decls, graph nodes.
-                  //   for (auto result : op->getResults())
-                  //     graph.getOrCreateNode(refs.addRoot(result));
-                  //   // Output ports: record for instance inlining?
-                  //   return success();
-                  // })
+                  .Case<NodeOp>([&](NodeOp node) {
+                    auto [resultRef, resultNode] = addRoot(node.getResult());
+                    assert(resultRef);
+                    auto inRef = refs.getFor(node.getInput());
+                    assert(inRef);
+                    // node.getInput().dump();
+                    flow(inRef, resultRef);
+                    return success();
+                  })
+                  .Case<Forceable>([&](Forceable fop) {
+                    refs.addDecl(fop);
+                    // graph.getOrCreateNode(
+                    // TODO: Insert graph node and mark as bad.
+                    // auto result = refs.addRoot(fop.getDataRaw());
+                    // graph.flow(FieldRef(node.getInput(), 0),
+                    //            FieldRef(node.getResult(), 0));
+                    return success();
+                  })
+                  .Case<InstanceOp>([&](InstanceOp op) {
+                    // FieldRef root decls, graph nodes.
+                    for (auto result : op->getResults())
+                      graph.getOrCreateNode(refs.addRoot(result));
+                    // Output ports: record for instance inlining?
+                    return success();
+                  })
                   .Case<FConnectLike>([&](FConnectLike connect) {
                     // Invalidate based on block containing connect and
                     // dest, based on connect "semantics".
@@ -626,20 +648,21 @@ private:
                     }
                     // assert(srcRef);
                     // assert(dstRef);
+                    connect.dump();
                     flow(refs.getFor(connect.getSrc()),
                          refs.getFor(connect.getDest()));
                     return success();
                   })
                   .Default([&](Operation *other) {
-                    refs.addDecl(other);
+                    // refs.addDecl(other);
 
                     // Check op -- mark node as invalid if:
                     // dontTouch
                     // Forceable
                     //
                     // Everything else treat as undriven root.
-                    // for (auto result : op->getResults())
-                    //   graph.getOrCreateNode(refs.addRoot(result));
+                    for (auto result : op->getResults())
+                      graph.getOrCreateNode(refs.addRoot(result));
                     return success();
                   });
           return result;
@@ -700,6 +723,13 @@ void HoistPassthroughPass::runOnOperation() {
     driverAnalysis.run(module);
 
     AtomicDriverAnalysis ada(module);
+    for (auto &node : ada.getGraph().nodes) {
+      llvm::errs() << (void*)&node << ":\n"
+<< "\tval: " << node.storage.getValue() << " @ " << node.storage.getFieldID()
+<< "\tdrivers (" << node.drivenByEdges.size() << "):\n";
+      for (auto *drivenBy : node.drivenByEdges)
+        llvm::errs() << "\t- " << (void *)drivenBy << "\n";
+    }
 
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
       return d && d.canHoist();
