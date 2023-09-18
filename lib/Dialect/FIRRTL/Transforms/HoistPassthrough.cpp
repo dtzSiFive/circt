@@ -23,6 +23,8 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
 
+#include <deque>
+
 #define DEBUG_TYPE "firrtl-hoist-passthrough"
 
 using namespace circt;
@@ -410,6 +412,202 @@ private:
   DenseMap<Value, Driver> driverMap;
   bool ignoreHWDrivers = false;
 };
+
+/// FieldRef cache.
+struct FieldRefs {
+  /// Every block argument and result -> FieldRef.
+  /// Built during walk, cached for re-use and easier querying.
+  DenseMap<Value, FieldRef> valToFieldRef;
+
+  FieldRef getFor(Value v) const {
+    return valToFieldRef.lookup(v);
+  }
+  FieldRef addRoot(Value v) {
+    auto ref = FieldRef(v, 0);
+    valToFieldRef.try_emplace(v, ref);
+    return ref;
+  }
+
+  /// Add all results as roots.
+  FieldRef addDecl(Operation *op) {
+    for (auto result : op->getResults())
+      addRoot(result);
+  }
+  FieldRef addDecl(BlockArgument arg) {
+    addRoot(arg);
+  }
+  FieldRef addDerived(Value input, Value derived, size_t fieldID) {
+    assert(!valToFieldRef.contains(derived));
+    auto inRef = getFor(input);
+    assert(inRef);
+    auto newRef = inRef.getSubField(fieldID);
+    valToFieldRef.try_emplace(derived, newRef);
+    return newRef;
+  }
+
+  FieldRef addIndex(SubfieldOp op) {
+    auto access = op.getAccessedField();
+    assert(op.getInput() == access.getValue());
+    return addDerived(access.getValue(), op.getResult(), access.getFieldID());
+  }
+  FieldRef addIndex(SubindexOp op) {
+    auto access = op.getAccessedField();
+    assert(op.getInput() == access.getValue());
+    return addDerived(access.getValue(), op.getResult(), access.getFieldID());
+  }
+  FieldRef addIndex(RefSubOp op) {
+    auto input = op.getInput();
+    auto fieldID = hw::FieldIdImpl::getFieldID(input.getType(), op.getIndex());
+    return addDerived(input, op.getResult(), fieldID);
+  }
+};
+
+static bool isAtomic(Type type) {
+  return hw::FieldIdImpl::getMaxFieldID(type) == 0;
+};
+static bool isAtomic(FieldRef ref) {
+  return isAtomic(hw::FieldIdImpl::getFinalTypeByFieldID(
+      ref.getValue().getType(), ref.getFieldID()));
+}
+
+/// Simple connectivity graph.
+/// All nodes are "atomic" (leaf ground-types or probes)
+/// that are singly-driven or nothing can be assumed.
+struct ConnectionGraph {
+  /// Nodes.
+  struct Node;
+  using NodeRef = Node*;
+  struct Node {
+    Node(FieldRef ref) : storage(ref) {}
+
+    FieldRef storage; // "atomic" only
+
+    SmallVector<NodeRef, 1> drivenByEdges;
+    // ConnectionGraph *parent;
+
+    // bool invalid = false;
+    // void invalidate() { invalid = true; }
+  };
+
+  // Find node for given atomic destination or origin, if any.
+  DenseMap<FieldRef, NodeRef> nodeForRef;
+
+  // SpecificBumpPtrAllocator<Node>
+  std::deque<Node> nodes;
+
+  /// Entry nodes.
+  SmallVector<NodeRef> entryNodes;
+
+  NodeRef getNode(FieldRef ref) const {
+    auto it = nodeForRef.find(ref);
+    assert(it != nodeForRef.end());
+    return it->second;
+  };
+  // NodeRef getOrCreateNode(FieldRef ref) const {
+  //   return nodeForLeafRef.lookup(ref);
+  // };
+  NodeRef getOrCreateNode(FieldRef ref) {
+    auto [it, inserted] = nodeForRef.try_emplace(ref, nullptr);
+    if (!inserted)
+      return it->second;
+    nodes.emplace_back(ref);
+    return it->second = &nodes.back();
+  };
+
+  /// Add edge from src to dst.
+  void addEdge(FieldRef src, FieldRef dst) {
+    // Sanity check usage.
+    assert(isAtomic(dst) && "graph only supports atomic destinations");
+    assert(dst.getFieldID() == 0 && "graph only supports driving roots");
+
+    auto srcNode = getOrCreateNode(src);
+    auto dstNode = getOrCreateNode(dst);
+
+    dstNode->drivenByEdges.push_back(srcNode);
+  }
+};
+
+class AtomicDriverAnalysis {
+  ConnectionGraph graph;
+  FieldRefs refs;
+public:
+  const ConnectionGraph & getGraph() const { return graph; }
+
+  AtomicDriverAnalysis(FModuleOp mod) { run(mod); }
+
+private:
+
+  void flow(FieldRef src, FieldRef dst) {
+    auto srcFType = type_dyn_cast<FIRRTLType>(src.getValue().getType());
+    auto dstFType = type_dyn_cast<FIRRTLType>(dst.getValue().getType());
+    if (!dstFType)
+      return;
+    assert(srcFType && "FIRRTL type driven by non-FIRRTL type?");
+
+    auto srcBType = type_dyn_cast<FIRRTLBaseType>(srcFType);
+    auto dstBType = type_dyn_cast<FIRRTLBaseType>(dstFType);
+    if (srcBType) {
+      assert(dstBType);
+      // TODO: I think only indexed type needs to be passive re:source.
+      if (!srcBType.isPassive() || !dstBType.isPassive())
+        return;
+    } else if (type_isa<RefType>(srcFType)) {
+      assert(type_isa<RefType>(dstFType));
+    }
+    else
+      return;
+
+    // Only driving atomic destination directly to root.
+    if (isAtomic(dstFType) && dst.getFieldID() == 0)
+      return graph.addEdge(src, dst);
+ 
+    // Otherwise, track 
+  }
+
+  void addRoot(Value v) {
+    refs.addRoot(v);
+    graph.getOrCreateNode(FieldRef(v, 0));
+  }
+
+  void run(FModuleOp mod) {
+    /// Initialize with block arguments.
+
+    for (auto arg : mod.getArguments()) {
+      // TODO: What do non-atomic source Node's look like?
+      // What edges reach them?
+      addRoot(arg);
+      graph.entryNodes.push_back(graph.getNode(FieldRef(arg, 0)));
+    }
+
+    /// TODO: Use visitor!
+
+    mod.walk([&](Operation *op) {
+      TypeSwitch<Operation *>(op)
+          .Case<SubindexOp, SubfieldOp, RefSubOp>([&](auto sub) {
+            assert(graph.getNode(sub.getInput() &&
+                                 "indexing through unknown input"));
+            (void)refs.addIndex(sub);
+          })
+          .Case<NodeOp>([&](NodeOp node) {
+            auto result = refs.addRoot(node.getResult());
+            flow(FieldRef(node.getInput(), 0), result);
+          })
+          .Case<Forceable>([&](Forceable fop) {
+           auto result = refs.addRoot(fop.getDataRaw());
+            // graph.flow(FieldRef(node.getInput(), 0),
+            //            FieldRef(node.getResult(), 0));
+          })
+          .Case<FConnectLike>([&](FConnectLike connect) {
+            // Invalidate based on block containing connect and dest,
+            // based on connect "semantics".
+            flow(refs.getFor(connect.getSrc()), refs.getFor(connect.getDest()));
+          });
+      return success();
+    });
+  };
+
+};
+
 
 } // end anonymous namespace
 
