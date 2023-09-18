@@ -622,15 +622,15 @@ private:
                     flow(inRef, resultRef);
                     return success();
                   })
-                  .Case<Forceable>([&](Forceable fop) {
-                    refs.addDecl(fop);
-                    // graph.getOrCreateNode(
-                    // TODO: Insert graph node and mark as bad.
-                    // auto result = refs.addRoot(fop.getDataRaw());
-                    // graph.flow(FieldRef(node.getInput(), 0),
-                    //            FieldRef(node.getResult(), 0));
-                    return success();
-                  })
+                  // .Case<Forceable>([&](Forceable fop) {
+                  //   refs.addDecl(fop);
+                  //   // graph.getOrCreateNode(
+                  //   // TODO: Insert graph node and mark as bad.
+                  //   // auto result = refs.addRoot(fop.getDataRaw());
+                  //   // graph.flow(FieldRef(node.getInput(), 0),
+                  //   //            FieldRef(node.getResult(), 0));
+                  //   return success();
+                  // })
                   .Case<InstanceOp>([&](InstanceOp op) {
                     // FieldRef root decls, graph nodes.
                     for (auto result : op->getResults())
