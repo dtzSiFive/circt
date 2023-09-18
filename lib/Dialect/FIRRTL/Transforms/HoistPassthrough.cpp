@@ -626,6 +626,7 @@ private:
                     if (!isAtomic(op.getDataRaw().getType()))
                       for (auto result : op->getResults())
                         graph.getOrCreateNode(refs.addRoot(result));
+                    return success();
                   })
                   // .Case<Forceable>([&](Forceable fop) {
                   //   refs.addDecl(fop);
