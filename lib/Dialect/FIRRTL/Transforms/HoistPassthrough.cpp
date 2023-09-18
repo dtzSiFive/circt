@@ -429,11 +429,11 @@ struct FieldRefs {
   }
 
   /// Add all results as roots.
-  FieldRef addDecl(Operation *op) {
+  void addDecl(Operation *op) {
     for (auto result : op->getResults())
       addRoot(result);
   }
-  FieldRef addDecl(BlockArgument arg) {
+  void addDecl(BlockArgument arg) {
     addRoot(arg);
   }
   FieldRef addDerived(Value input, Value derived, size_t fieldID) {
@@ -581,36 +581,39 @@ private:
 
     /// TODO: Use visitor!
 
-    auto result = mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
-      auto result = TypeSwitch<Operation *, LogicalResult>(op)
-                        .Case<SubindexOp, SubfieldOp, RefSubOp>([&](auto sub) {
-                          assert(refs.getFor(sub.getInput()) &&
-                                 "indexing through unknown input");
-                          auto ref = refs.addIndex(sub);
-                          return success();
-                        })
-                        .Case<NodeOp>([&](NodeOp node) {
-                          auto result = refs.addRoot(node.getResult());
-                          flow(FieldRef(node.getInput(), 0), result);
-                          return success();
-                        })
-                        .Case<Forceable>([&](Forceable fop) {
-                          auto result = refs.addRoot(fop.getDataRaw());
-                          // graph.flow(FieldRef(node.getInput(), 0),
-                          //            FieldRef(node.getResult(), 0));
-                          return success();
-                        })
-                        .Case<FConnectLike>([&](FConnectLike connect) {
-                          // Invalidate based on block containing connect and
-                          // dest, based on connect "semantics".
-                          flow(refs.getFor(connect.getSrc()),
-                               refs.getFor(connect.getDest()));
-                          return success();
-                        })
-                        .Default(success());
-      return result;
-    });
+    auto result = mod.walk<mlir::WalkOrder::PreOrder>(
+        [&](Operation *op) -> WalkResult {
+          auto result =
+              TypeSwitch<Operation *, LogicalResult>(op)
+                  .Case<SubindexOp, SubfieldOp, RefSubOp>([&](auto sub) {
+                    assert(refs.getFor(sub.getInput()) &&
+                           "indexing through unknown input");
+                    auto ref = refs.addIndex(sub);
+                    return success();
+                  })
+                  .Case<NodeOp>([&](NodeOp node) {
+                    auto result = refs.addRoot(node.getResult());
+                    flow(FieldRef(node.getInput(), 0), result);
+                    return success();
+                  })
+                  .Case<Forceable>([&](Forceable fop) {
+                    auto result = refs.addRoot(fop.getDataRaw());
+                    // graph.flow(FieldRef(node.getInput(), 0),
+                    //            FieldRef(node.getResult(), 0));
+                    return success();
+                  })
+                  .Case<FConnectLike>([&](FConnectLike connect) {
+                    // Invalidate based on block containing connect and
+                    // dest, based on connect "semantics".
+                    flow(refs.getFor(connect.getSrc()),
+                         refs.getFor(connect.getDest()));
+                    return success();
+                  })
+                  .Default(success());
+          return result;
+        });
     // return result;
+    (void)result;
   };
 
 };
