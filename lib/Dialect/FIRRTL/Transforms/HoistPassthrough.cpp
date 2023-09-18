@@ -583,7 +583,6 @@ private:
 
     for (auto arg : mod.getArguments()) {
       if (mod.getPortDirection(arg.getArgNumber()) == Direction::In) {
-        // auto [ref, node] = addRoot(arg);
         addRoot(arg);
       } else if (isAtomic(arg.getType())) {
         auto [ref, node] = addRoot(arg);
