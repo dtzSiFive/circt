@@ -581,8 +581,8 @@ private:
 
     /// TODO: Use visitor!
 
-    auto result = mod.walk<mlir::WalkOrder::PreOrder>(
-        [&](Operation *op) -> WalkResult {
+    auto result =
+        mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) -> WalkResult {
           auto result =
               TypeSwitch<Operation *, LogicalResult>(op)
                   .Case<SubindexOp, SubfieldOp, RefSubOp>([&](auto sub) {
@@ -603,6 +603,13 @@ private:
                     //            FieldRef(node.getResult(), 0));
                     return success();
                   })
+                  .Case<InstanceOp>([&](InstanceOp op) {
+                    // FieldRef root decls, graph nodes.
+                    for (auto result : op->getResults())
+                      graph.getOrCreateNode(refs.addRoot(result));
+                    // Output ports: record for instance inlining?
+                    return success();
+                  })
                   .Case<FConnectLike>([&](FConnectLike connect) {
                     // Invalidate based on block containing connect and
                     // dest, based on connect "semantics".
@@ -619,7 +626,12 @@ private:
                          refs.getFor(connect.getDest()));
                     return success();
                   })
-                  .Default(success());
+                  .Default([&](Operation *other) {
+                    // Everything else treat as undriven root.
+                    for (auto result : op->getResults())
+                      graph.getOrCreateNode(refs.addRoot(result));
+                    return success();
+                  });
           return result;
         });
     // return result;
