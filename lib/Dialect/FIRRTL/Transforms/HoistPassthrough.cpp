@@ -730,7 +730,7 @@ void HoistPassthroughPass::runOnOperation() {
     driverAnalysis.clear();
     driverAnalysis.run(module);
 
-    AtomicDriverAnalysis ada(module);
+    // AtomicDriverAnalysis ada(module);
     // for (auto &node : ada.getGraph().nodes) {
     //   llvm::errs() << (void *)&node << ":\n"
     //                << "\tval: " << node.storage.getValue() << " @ "
