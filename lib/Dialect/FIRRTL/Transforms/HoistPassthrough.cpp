@@ -593,6 +593,7 @@ private:
                   })
                   .Case<NodeOp>([&](NodeOp node) {
                     auto result = refs.addRoot(node.getResult());
+                    assert(result);
                     flow(FieldRef(node.getInput(), 0), result);
                     return success();
                   })
@@ -605,6 +606,15 @@ private:
                   .Case<FConnectLike>([&](FConnectLike connect) {
                     // Invalidate based on block containing connect and
                     // dest, based on connect "semantics".
+                    auto srcRef = refs.getFor(connect.getSrc());
+                    auto dstRef = refs.getFor(connect.getDest());
+                    if (!srcRef || !dstRef) {
+                      connect.dump();
+                      connect.getSrc().dump();
+                      connect.getDest().dump();
+                    }
+                    assert(srcRef);
+                    assert(dstRef);
                     flow(refs.getFor(connect.getSrc()),
                          refs.getFor(connect.getDest()));
                     return success();
