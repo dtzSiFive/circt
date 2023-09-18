@@ -581,29 +581,36 @@ private:
 
     /// TODO: Use visitor!
 
-    mod.walk([&](Operation *op) {
-      TypeSwitch<Operation *>(op)
-          .Case<SubindexOp, SubfieldOp, RefSubOp>([&](auto sub) {
-            assert(graph.getNode(sub.getInput() &&
-                                 "indexing through unknown input"));
-            (void)refs.addIndex(sub);
-          })
-          .Case<NodeOp>([&](NodeOp node) {
-            auto result = refs.addRoot(node.getResult());
-            flow(FieldRef(node.getInput(), 0), result);
-          })
-          .Case<Forceable>([&](Forceable fop) {
-           auto result = refs.addRoot(fop.getDataRaw());
-            // graph.flow(FieldRef(node.getInput(), 0),
-            //            FieldRef(node.getResult(), 0));
-          })
-          .Case<FConnectLike>([&](FConnectLike connect) {
-            // Invalidate based on block containing connect and dest,
-            // based on connect "semantics".
-            flow(refs.getFor(connect.getSrc()), refs.getFor(connect.getDest()));
-          });
-      return success();
+    auto result = mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+      auto result = TypeSwitch<Operation *, LogicalResult>(op)
+                        .Case<SubindexOp, SubfieldOp, RefSubOp>([&](auto sub) {
+                          assert(refs.getFor(sub.getInput()) &&
+                                 "indexing through unknown input");
+                          auto ref = refs.addIndex(sub);
+                          return success();
+                        })
+                        .Case<NodeOp>([&](NodeOp node) {
+                          auto result = refs.addRoot(node.getResult());
+                          flow(FieldRef(node.getInput(), 0), result);
+                          return success();
+                        })
+                        .Case<Forceable>([&](Forceable fop) {
+                          auto result = refs.addRoot(fop.getDataRaw());
+                          // graph.flow(FieldRef(node.getInput(), 0),
+                          //            FieldRef(node.getResult(), 0));
+                          return success();
+                        })
+                        .Case<FConnectLike>([&](FConnectLike connect) {
+                          // Invalidate based on block containing connect and
+                          // dest, based on connect "semantics".
+                          flow(refs.getFor(connect.getSrc()),
+                               refs.getFor(connect.getDest()));
+                          return success();
+                        })
+                        .Default(success());
+      return result;
     });
+    // return result;
   };
 
 };
@@ -656,6 +663,9 @@ void HoistPassthroughPass::runOnOperation() {
     // Analyze all ports using current IR.
     driverAnalysis.clear();
     driverAnalysis.run(module);
+
+    AtomicDriverAnalysis ada(module);
+
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
       return d && d.canHoist();
     };
