@@ -651,7 +651,7 @@ private:
                     }
                     // assert(srcRef);
                     // assert(dstRef);
-                    connect.dump();
+                    // connect.dump();
                     flow(refs.getFor(connect.getSrc()),
                          refs.getFor(connect.getDest()));
                     return success();
@@ -726,13 +726,14 @@ void HoistPassthroughPass::runOnOperation() {
     driverAnalysis.run(module);
 
     AtomicDriverAnalysis ada(module);
-    for (auto &node : ada.getGraph().nodes) {
-      llvm::errs() << (void*)&node << ":\n"
-<< "\tval: " << node.storage.getValue() << " @ " << node.storage.getFieldID()
-<< "\tdrivers (" << node.drivenByEdges.size() << "):\n";
-      for (auto *drivenBy : node.drivenByEdges)
-        llvm::errs() << "\t- " << (void *)drivenBy << "\n";
-    }
+    // for (auto &node : ada.getGraph().nodes) {
+    //   llvm::errs() << (void *)&node << ":\n"
+    //                << "\tval: " << node.storage.getValue() << " @ "
+    //                << node.storage.getFieldID() << "\tdrivers ("
+    //                << node.drivenByEdges.size() << "):\n";
+    //   for (auto *drivenBy : node.drivenByEdges)
+    //     llvm::errs() << "\t- " << (void *)drivenBy << "\n";
+    // }
 
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
       return d && d.canHoist();
