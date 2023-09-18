@@ -594,11 +594,14 @@ private:
                   .Case<NodeOp>([&](NodeOp node) {
                     auto result = refs.addRoot(node.getResult());
                     assert(result);
-                    flow(FieldRef(node.getInput(), 0), result);
+                    auto inRef = refs.getFor(node.getInput());
+                    assert(inRef);
+                    flow(inRef, result);
                     return success();
                   })
                   // .Case<Forceable>([&](Forceable fop) {
-                  //   auto result = refs.addRoot(fop.getDataRaw());
+                  //   refs.addDecl(fop);
+                  //   // auto result = refs.addRoot(fop.getDataRaw());
                   //   // graph.flow(FieldRef(node.getInput(), 0),
                   //   //            FieldRef(node.getResult(), 0));
                   //   return success();
@@ -629,6 +632,11 @@ private:
                   })
                   .Default([&](Operation *other) {
                     refs.addDecl(other);
+
+                    // Check op -- mark node as invalid if:
+                    // dontTouch
+                    // Forceable
+                    //
                     // Everything else treat as undriven root.
                     // for (auto result : op->getResults())
                     //   graph.getOrCreateNode(refs.addRoot(result));
