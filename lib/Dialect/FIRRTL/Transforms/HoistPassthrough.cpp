@@ -597,19 +597,19 @@ private:
                     flow(FieldRef(node.getInput(), 0), result);
                     return success();
                   })
-                  .Case<Forceable>([&](Forceable fop) {
-                    auto result = refs.addRoot(fop.getDataRaw());
-                    // graph.flow(FieldRef(node.getInput(), 0),
-                    //            FieldRef(node.getResult(), 0));
-                    return success();
-                  })
-                  .Case<InstanceOp>([&](InstanceOp op) {
-                    // FieldRef root decls, graph nodes.
-                    for (auto result : op->getResults())
-                      graph.getOrCreateNode(refs.addRoot(result));
-                    // Output ports: record for instance inlining?
-                    return success();
-                  })
+                  // .Case<Forceable>([&](Forceable fop) {
+                  //   auto result = refs.addRoot(fop.getDataRaw());
+                  //   // graph.flow(FieldRef(node.getInput(), 0),
+                  //   //            FieldRef(node.getResult(), 0));
+                  //   return success();
+                  // })
+                  // .Case<InstanceOp>([&](InstanceOp op) {
+                  //   // FieldRef root decls, graph nodes.
+                  //   for (auto result : op->getResults())
+                  //     graph.getOrCreateNode(refs.addRoot(result));
+                  //   // Output ports: record for instance inlining?
+                  //   return success();
+                  // })
                   .Case<FConnectLike>([&](FConnectLike connect) {
                     // Invalidate based on block containing connect and
                     // dest, based on connect "semantics".
@@ -619,17 +619,19 @@ private:
                       connect.dump();
                       connect.getSrc().dump();
                       connect.getDest().dump();
+                      return success();
                     }
-                    assert(srcRef);
-                    assert(dstRef);
+                    // assert(srcRef);
+                    // assert(dstRef);
                     flow(refs.getFor(connect.getSrc()),
                          refs.getFor(connect.getDest()));
                     return success();
                   })
                   .Default([&](Operation *other) {
+                    refs.addDecl(other);
                     // Everything else treat as undriven root.
-                    for (auto result : op->getResults())
-                      graph.getOrCreateNode(refs.addRoot(result));
+                    // for (auto result : op->getResults())
+                    //   graph.getOrCreateNode(refs.addRoot(result));
                     return success();
                   });
           return result;
