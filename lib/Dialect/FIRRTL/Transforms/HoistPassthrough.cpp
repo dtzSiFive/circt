@@ -500,6 +500,10 @@ struct ConnectionGraph {
 
   NodeRef getNode(FieldRef ref) const {
     auto it = nodeForRef.find(ref);
+    if (it == nodeForRef.end()) {
+      llvm::errs() << "Node not found for ref: " << ref.getValue() << " @ "
+                   << ref.getFieldID() << "\n";
+    }
     assert(it != nodeForRef.end());
     return it->second;
   };
@@ -521,9 +525,9 @@ struct ConnectionGraph {
     assert(dst.getFieldID() == 0 && "graph only supports driving roots");
 
     // auto srcNode = getNode(src);
-    // auto dstNode = getNode(dst);
     auto srcNode = getOrCreateNode(src);
-    auto dstNode = getOrCreateNode(dst);
+    auto dstNode = getNode(dst);
+    // auto dstNode = getOrCreateNode(dst);
 
     dstNode->drivenByEdges.push_back(srcNode);
   }
