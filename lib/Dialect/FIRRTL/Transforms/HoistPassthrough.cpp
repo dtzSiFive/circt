@@ -622,6 +622,11 @@ private:
                     flow(inRef, resultRef);
                     return success();
                   })
+                  .Case<WireOp>([&](WireOp op) {
+                    if (!isAtomic(op.getDataRaw().getType()))
+                      for (auto result : op->getResults())
+                        graph.getOrCreateNode(refs.addRoot(result));
+                  })
                   // .Case<Forceable>([&](Forceable fop) {
                   //   refs.addDecl(fop);
                   //   // graph.getOrCreateNode(
