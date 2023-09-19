@@ -950,7 +950,6 @@ void HoistPassthroughPass::runOnOperation() {
     };
 
     SmallVector<Driver> drivers;
-    if (true) {
       for (auto arg : module.getArguments()) {
         auto node = ada.getGraph().lookup(arg);
         if (!node)
@@ -960,7 +959,7 @@ void HoistPassthroughPass::runOnOperation() {
           if (source.getValue() == arg) {
             // Input or undriven.
             LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
-          } else
+          } else {
             LLVM_DEBUG(llvm::dbgs() << "Found driver for " << arg
                                     << " (chain length = TODO): "
                                     << "(no connect tracking)"
@@ -974,8 +973,21 @@ void HoistPassthroughPass::runOnOperation() {
             connect = getRefDefine(arg);
           else
             connect = getSingleConnectUserOf(arg);
+          if (!connect) {
+           arg.dump();
+           llvm::errs() << "source: " << source.getValue() << " @ "
+                        << source.getFieldID() << "\n";
+          }
           assert(connect && "couldn't find connect??");
-          drivers.emplace_back(connect, source);
+          if (source.getValue().getType() != arg.getType()) {
+            llvm::errs() << "source: " << source.getValue() << " @ "
+                         << source.getFieldID() << "\n";
+            arg.dump();
+          }
+
+          // If source is different block argument, can hoist.
+          if (isa<BlockArgument>(source.getValue()))
+            drivers.emplace_back(connect, source);
         }
       }
     }
