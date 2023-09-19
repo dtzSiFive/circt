@@ -533,3 +533,31 @@ firrtl.circuit "HWForceable" {
     firrtl.strictconnect %out, %u_out : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Multiple layers of probe aggregate.
+
+// CHECK-LABEL: "AggAgg"
+firrtl.circuit "AggAgg" {
+  // CHECK-NOT: out %out
+  firrtl.module private @IndexIndex(in %in : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>, out %out : !firrtl.probe<uint<1>>) {
+    %vec_sel = firrtl.ref.sub %in[1] : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>
+    %vec_wire = firrtl.wire : !firrtl.probe<vector<uint<1>, 5>>
+    firrtl.ref.define %vec_wire, %vec_sel: !firrtl.probe<vector<uint<1>, 5>>
+    %sel = firrtl.ref.sub %vec_wire[3] : !firrtl.probe<vector<uint<1>, 5>>
+    firrtl.ref.define %out, %sel : !firrtl.probe<uint<1>>
+  }
+  // CHECK: @AggAgg
+  firrtl.module @AggAgg(in %in : !firrtl.vector<vector<uint<1>, 5>, 5>, out %out : !firrtl.uint<1>) {
+    %ref = firrtl.ref.send %in : !firrtl.vector<vector<uint<1>, 5>, 5>
+    // CHECK: %[[IN:.+]] = firrtl.instance
+    %ii_in, %ii_out = firrtl.instance ii @IndexIndex(in in : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>, out out : !firrtl.probe<uint<1>>)
+    firrtl.ref.define %ii_in, %ref : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>
+    // CHECK: %[[IN_1:.+]] = firrtl.ref.sub %[[IN]][1]
+    // CHECK: %[[IN_1_3:.+]] = firrtl.ref.sub %[[IN_1]][3]
+    // CHECK: ref.resolve %[[IN_1_3]]
+    %read = firrtl.ref.resolve %ii_out : !firrtl.probe<uint<1>>
+    firrtl.strictconnect %out, %read : !firrtl.uint<1>
+  }
+}
