@@ -450,11 +450,11 @@ firrtl.circuit "AggSourceHW" {
 
 // -----
 
-// Reject non-ground dest (for now).
+// Non-ground dest: HW.
 
 // CHECK-LABEL: "AggDestHW"
 firrtl.circuit "AggDestHW" {
-  // CHECK:      module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>, out %out
+  // CHECK:      module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>) {
   // CHECK-NEXT:   firrtl.strictconnect
   // CHECK-NEXT: }
   firrtl.module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>,
@@ -586,3 +586,10 @@ firrtl.circuit "AggAgg" {
     firrtl.strictconnect %out, %read : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Registers.
+// Memories.
+// Property types.
+// Foreign.
