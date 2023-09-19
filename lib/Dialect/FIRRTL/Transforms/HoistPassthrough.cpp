@@ -903,10 +903,14 @@ void HoistPassthroughPass::runOnOperation() {
              ++I) {
           if (I->invalid)
             return {};
-          // Only one driver.  Should be handled...
-          // if (!I->drivenByEdges.empty() &&
-          //     !llvm::hasSingleElement(I->drivenByEdges))
-          //   return {};
+          // Search over.  Bail before inspecting edge below.
+          if (I->drivenByEdges.empty()) {
+            assert(std::next(I) == E);
+            break;
+          }
+          // If multiple drivers, bail.  Should already be invalid.
+          if (!llvm::hasSingleElement(I->drivenByEdges))
+            return {};
           auto &edge = I->drivenByEdges.front();
           if (I.nodeVisited(edge.first)) {
             mlir::emitRemark(node->definition.getLoc(), "driver cycle found")
