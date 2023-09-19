@@ -899,19 +899,23 @@ void HoistPassthroughPass::runOnOperation() {
      // llvm::WriteGraph(&ada, module.getName());
 
       auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
+        llvm::errs() << "Walking for: " << node->definition << "\n";
         FieldRef ref(node->definition, 0);
-        for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E;
-             ++I) {
+        for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
+          llvm::errs() << "\t" << I->definition << "\n";
           if (I->invalid)
             return {};
+
           // Search over.  Bail before inspecting edge below.
           if (I->drivenByEdges.empty()) {
             assert(std::next(I) == E);
             break;
           }
-          // If multiple drivers, bail.  Should already be invalid.
-          if (!llvm::hasSingleElement(I->drivenByEdges))
+          // If multiple drivers, bail.
+          if (!llvm::hasSingleElement(I->drivenByEdges)) {
+            assert(0 && "should be invalid or end if not single edge");
             return {};
+          }
           auto &edge = I->drivenByEdges.front();
           if (I.nodeVisited(edge.first)) {
             mlir::emitRemark(node->definition.getLoc(), "driver cycle found")
@@ -919,6 +923,7 @@ void HoistPassthroughPass::runOnOperation() {
                 << "already visited this value";
             return {};
           }
+          llvm::errs() << "Index: " << edge.second << "\n";
           ref = FieldRef(edge.first->definition, edge.second)
                     .getSubField(ref.getFieldID());
         }
@@ -933,6 +938,10 @@ void HoistPassthroughPass::runOnOperation() {
           continue;
         auto source = getSource(node);
         if (source) {
+          if (source.getValue() == arg) {
+            // Undriven or input port.
+            // llvm::errs() << "self-source for : " << arg << "\n";
+          } else
           llvm::errs() << "Found driver for " << arg
                        << " (chain length = TODO): "
                        << "(no connect tracking)"
