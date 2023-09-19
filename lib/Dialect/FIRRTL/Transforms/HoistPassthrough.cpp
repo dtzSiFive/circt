@@ -671,7 +671,7 @@ private:
                   .Case<SubfieldOp, SubindexOp, RefSubOp>([&](auto sub) {
                     assert(refs.getFor(sub.getInput()) &&
                            "indexing through unknown input");
-                    auto ref = refs.addIndex(sub);
+                    refs.addIndex(sub);
                     return success();
                   })
                   .Case<SubaccessOp>([&](SubaccessOp access) {
