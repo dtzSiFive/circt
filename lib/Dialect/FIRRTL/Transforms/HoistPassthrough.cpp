@@ -524,8 +524,8 @@ struct ConnectionGraph {
     // assert(isAtomic(dst) && "graph only supports atomic destinations");
     // assert(dst.getFieldID() == 0 && "graph only supports driving roots");
 
-    // auto srcNode = getNode(src);
-    auto srcNode = getOrCreateNode(src);
+    auto srcNode = getNode(src);
+    // auto srcNode = getOrCreateNode(src);
     auto dstNode = getNode(dst);
     // auto dstNode = getOrCreateNode(dst);
 
@@ -731,15 +731,15 @@ void HoistPassthroughPass::runOnOperation() {
     driverAnalysis.clear();
     driverAnalysis.run(module);
 
-    // AtomicDriverAnalysis ada(module);
-    // for (auto &node : ada.getGraph().nodes) {
-    //   llvm::errs() << (void *)&node << ":\n"
-    //                << "\tval: " << node.storage.getValue() << " @ "
-    //                << node.storage.getFieldID() << "\tdrivers ("
-    //                << node.drivenByEdges.size() << "):\n";
-    //   for (auto *drivenBy : node.drivenByEdges)
-    //     llvm::errs() << "\t- " << (void *)drivenBy << "\n";
-    // }
+    AtomicDriverAnalysis ada(module);
+    for (auto &node : ada.getGraph().nodes) {
+      llvm::errs() << (void *)&node << ":\n"
+                   << "\tval: " << node.storage.getValue() << " @ "
+                   << node.storage.getFieldID() << "\tdrivers ("
+                   << node.drivenByEdges.size() << "):\n";
+      for (auto *drivenBy : node.drivenByEdges)
+        llvm::errs() << "\t- " << (void *)drivenBy << "\n";
+    }
 
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
       return d && d.canHoist();
