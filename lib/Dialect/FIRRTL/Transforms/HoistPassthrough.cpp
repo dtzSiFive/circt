@@ -367,8 +367,8 @@ public:
       ++len;
     }
     (void)len;
-    LLVM_DEBUG(llvm::dbgs() << "Found driver for " << v << " (chain length = " << len
-                 << "): " << driver << "\n");
+    llvm::dbgs() << "Found driver for " << v << " (chain length = " << len
+                 << "): " << driver << "\n";
     return driver;
   }
 
@@ -896,8 +896,8 @@ void HoistPassthroughPass::runOnOperation() {
           [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
       [](auto module) { return module; }));
 
-  MustDrivenBy driverAnalysis;
-  driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
+  // MustDrivenBy driverAnalysis;
+  // driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
   // For each module (PO)...
   for (auto module : modules) {
@@ -913,11 +913,10 @@ void HoistPassthroughPass::runOnOperation() {
     BitVector deadPorts(module.getNumPorts());
 
     // Analyze all ports using current IR.
-    driverAnalysis.clear();
-    LLVM_DEBUG(llvm::dbgs() << "Analyzing: " << module.getName() << "\n");
-    driverAnalysis.run(module);
+    // driverAnalysis.clear();
+    // driverAnalysis.run(module);
 
-#if 0
+    LLVM_DEBUG(llvm::dbgs() << "Analyzing: " << module.getName() << "\n");
     AtomicDriverAnalysis ada(module);
 
     // llvm::WriteGraph(&ada, module.getName());
@@ -999,19 +998,18 @@ void HoistPassthroughPass::runOnOperation() {
         }
       }
     }
- #endif
 
-    auto notNullAndCanHoist = [](const Driver &d) -> bool {
-      return d && d.canHoist();
-    };
+    // auto notNullAndCanHoist = [](const Driver &d) -> bool {
+    //   return d && d.canHoist();
+    // };
 
 
-    SmallVector<Driver, 16> drivers(llvm::make_filter_range(
-        llvm::map_range(module.getArguments(),
-                        [&driverAnalysis](auto val) {
-                          return driverAnalysis.getCombinedDriverFor(val);
-                        }),
-        notNullAndCanHoist));
+    // SmallVector<Driver, 16> drivers(llvm::make_filter_range(
+    //     llvm::map_range(module.getArguments(),
+    //                     [&driverAnalysis](auto val) {
+    //                       return driverAnalysis.getCombinedDriverFor(val);
+    //                     }),
+    //     notNullAndCanHoist));
 
     // 2. Rematerialize must-driven ports at instantiation sites.
 
