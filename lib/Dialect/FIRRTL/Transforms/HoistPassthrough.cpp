@@ -22,6 +22,10 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/GraphWriter.h"
+
+#include "llvm/ADT/GraphTraits.h"
+#include "llvm/Support/DOTGraphTraits.h"
 
 #include <deque>
 
@@ -473,7 +477,7 @@ static bool isAtomic(Type type) {
   // For HW, restrict to passive.
   FIRRTLBaseType baseType = type_dyn_cast<FIRRTLBaseType>(type);
   return baseType && baseType.isPassive();
-};
+}
 static bool isAtomic(FieldRef ref) {
   return isAtomic(hw::FieldIdImpl::getFinalTypeByFieldID(
       ref.getValue().getType(), ref.getFieldID()));
@@ -556,13 +560,25 @@ struct ConnectionGraph {
   }
 };
 
+} // end anonymous namespace
+
+namespace {
 class AtomicDriverAnalysis {
   ConnectionGraph graph;
+  ConnectionGraph::Node modEntryNode = ConnectionGraph::Node(Value());
   FieldRefs refs;
 public:
-  const ConnectionGraph & getGraph() const { return graph; }
+  ConnectionGraph &getGraph() { return graph; }
+  const ConnectionGraph::Node *getModEntryNode() const { return &modEntryNode; }
 
-  AtomicDriverAnalysis(FModuleOp mod) { run(mod); }
+  AtomicDriverAnalysis(FModuleOp mod) {
+    run(mod);
+    modEntryNode = ConnectionGraph::Node(Value());
+    // TODO: Hoist entryNodes out, since we inject them ourselves anyway!
+    // TODO: Don't have null definition :( .
+    for (auto [idx, node] : llvm::enumerate(graph.entryNodes))
+      modEntryNode.drivenByEdges.emplace_back(node, idx);
+  }
 
 private:
 
@@ -719,6 +735,69 @@ private:
 
 } // end anonymous namespace
 
+template <>
+struct llvm::GraphTraits<AtomicDriverAnalysis*> {
+  using NodeType = const ConnectionGraph::Node;
+  using NodeRef = NodeType *;
+
+  static NodeRef getEntryNode(AtomicDriverAnalysis *graph) {
+    return graph->getModEntryNode();
+  }
+
+  static NodeRef getChild(const ConnectionGraph::Edge &edge) {
+    return edge.first;
+  }
+  using EdgeIterator = decltype(NodeType::drivenByEdges)::const_iterator;
+  using ChildIteratorType = llvm::mapped_iterator<EdgeIterator,decltype(&getChild)>;
+  static ChildIteratorType child_begin(NodeRef node) {
+    return {node->drivenByEdges.begin(), &getChild};
+  }
+  static ChildIteratorType child_end(NodeRef node) {
+    return {node->drivenByEdges.end(), &getChild};
+  }
+
+  using node_inner_iterator = decltype(ConnectionGraph::nodes)::const_iterator;
+  using nodes_iterator = llvm::pointer_iterator<node_inner_iterator>;
+  static nodes_iterator nodes_begin(AtomicDriverAnalysis *graph) {
+    return nodes_iterator(graph->getGraph().nodes.begin());
+  }
+  static nodes_iterator nodes_end(AtomicDriverAnalysis *graph) {
+    return nodes_iterator(graph->getGraph().nodes.end());
+  }
+};
+
+// Graph traits for DOT labeling.
+template <>
+struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
+    : public llvm::DefaultDOTGraphTraits {
+  using DefaultDOTGraphTraits::DefaultDOTGraphTraits;
+
+  static std::string getNodeLabel(const ConnectionGraph::Node *node,
+                                  const AtomicDriverAnalysis *ada) {
+    if (node == ada->getModEntryNode()) {
+      return "Entry dummy node";
+    }
+    assert(node);
+    assert(node->definition);
+    // The name of the graph node is the module name.
+    SmallString<128> str;
+    llvm::raw_svector_ostream os(str);
+    Value v = node->definition;
+    v.print(os);
+    return os.str().str();
+  }
+
+  // TODO: Edge dest labels!
+
+  template <typename Iterator>
+  static std::string getEdgeAttributes(const ConnectionGraph::Node *node, Iterator it,
+                                       const AtomicDriverAnalysis *) {
+    // Edge label is fieldID .
+    return Twine(Twine("label=") + it->second).str();
+  }
+};
+
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -767,15 +846,16 @@ void HoistPassthroughPass::runOnOperation() {
 
     if (true) {
       AtomicDriverAnalysis ada(module);
-      for (auto &node : ada.getGraph().nodes) {
-        llvm::errs() << (void *)&node << ":\n"
-                     << "\tval: " << node.definition << "\n\tinvalid? "
-                     << node.invalid << "\n\tdrivers ("
-                     << node.drivenByEdges.size() << "):\n";
-        for (auto [node, fieldID] : node.drivenByEdges)
-          llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
-                       << "\n";
-      }
+     // for (auto &node : ada.getGraph().nodes) {
+     //   llvm::errs() << (void *)&node << ":\n"
+     //                << "\tval: " << node.definition << "\n\tinvalid? "
+     //                << node.invalid << "\n\tdrivers ("
+     //                << node.drivenByEdges.size() << "):\n";
+     //   for (auto [node, fieldID] : node.drivenByEdges)
+     //     llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
+     //                  << "\n";
+     // }
+      llvm::WriteGraph(llvm::errs(), &ada);
     }
 
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
