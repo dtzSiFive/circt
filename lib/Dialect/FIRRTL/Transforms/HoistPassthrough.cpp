@@ -711,8 +711,15 @@ private:
                     flow(inRef, FieldRef(node.getResult(), 0));
                     return success();
                   })
-                  .Case<Forceable, InstanceOp>([&](auto declOp) {
+                  .Case<WireOp, InstanceOp>([&](auto declOp) {
                     addDecl(declOp);
+                    return success();
+                  })
+                  .Case<Forceable,MemOp>([&](auto declOp) {
+                    // Registers, memories... invalid!
+                    addDecl(declOp);
+                    for (auto result : declOp->getResults())
+                      invalidate(result);
                     return success();
                   })
                   .Case<FConnectLike>([&](FConnectLike connect) {
