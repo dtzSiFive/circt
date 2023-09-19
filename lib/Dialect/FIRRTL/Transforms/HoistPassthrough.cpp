@@ -515,15 +515,20 @@ struct ConnectionGraph {
   /// Entry nodes.
   SmallVector<NodeRef> entryNodes;
 
-  // NodeRef getNode(FieldRef ref) const {
-  //   auto it = nodeForRef.find(ref);
-  //   if (it == nodeForRef.end()) {
-  //     llvm::errs() << "Node not found for ref: " << ref.getValue() << " @ "
-  //                  << ref.getFieldID() << "\n";
-  //   }
-  //   assert(it != nodeForRef.end());
-  //   return it->second;
-  // };
+  NodeRef lookup(Value v) const {
+    return valToNode.lookup(v);
+  }
+
+  bool contains(Value v) const { return valToNode.contains(v); }
+
+  //NodeRef getNode(Value v) const {
+  //  auto it = valToNode.find(v);
+  //  if (it == valToNode.end()) {
+  //    llvm::errs() << "Node not found for value: " << v << "\n";
+  //  }
+  //  assert(it != valToNode.end());
+  //  return it->second;
+  //};
   // NodeRef getOrCreateNode(FieldRef ref) const {
   //   return nodeForLeafRef.lookup(ref);
   // };
@@ -618,13 +623,16 @@ private:
     return graph.addEdge(src, dst.getValue());
   }
 
-  ConnectionGraph::NodeRef addRoot(Value v, bool invalid = false) {
+  void addLazyRoot(Value v, bool invalid = false) {
     refs.addRoot(v);
-    auto node = graph.getOrCreateNode(v);
     if (invalid || !isAtomic(v.getType()) || hasDontTouch(v))
-      node->invalidate();
-    return node;
+      graph.getOrCreateNode(v)->invalidate();
   }
+
+  // ConnectionGraph::NodeRef addRoot(Value v, bool invalid = false) {
+  //   addLazyRoot(v, invalid);
+  //   return graph.getOrCreateNode(v);
+  // }
 
   /// Add results of operation as root declarations.
   /// Invalidate as appropriate.
@@ -638,17 +646,16 @@ private:
     }();
 
     for (auto result : op->getResults())
-      addRoot(result, allInvalid);
+      addLazyRoot(result, allInvalid);
   }
 
   void run(FModuleOp mod) {
     /// Initialize with block arguments.
 
     for (auto arg : mod.getArguments()) {
-      if (mod.getPortDirection(arg.getArgNumber()) == Direction::In) {
-        addRoot(arg);
-      } else {
-        auto node = addRoot(arg);
+      addLazyRoot(arg);
+      if (mod.getPortDirection(arg.getArgNumber()) == Direction::Out) {
+        auto node = graph.getOrCreateNode(arg);
         graph.entryNodes.push_back(node);
       }
     }
@@ -667,7 +674,7 @@ private:
                   })
                   .Case<SubaccessOp>([&](SubaccessOp access) {
                     invalidate(access.getInput());
-                    addRoot(access, true);
+                    addLazyRoot(access, true);
                     return success();
                   })
                   .Case<RefCastOp>([&](RefCastOp op) {
@@ -717,6 +724,8 @@ private:
                   })
                   .Default([&](Operation *other) {
                     // Everything else treat as undriven root.
+                    // addDecl(other);
+                    // refs.addDecl(other);
                     addDecl(other);
 
                     // TODO: Using visitor, support all expressions, and
