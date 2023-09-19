@@ -876,6 +876,13 @@ void HoistPassthroughPass::runOnOperation() {
                              "------------------------------------------===\n");
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 
+
+  // TODO: Compute ADA's in parallel, walk IG post-order without mutating IR,
+  // adding new edges (TODO: track these as synthetic/derived information) and
+  // after complete walk, rewrite all modules in parallel.
+
+  // For now, do this one module at a time.
+
   SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
       llvm::map_range(
           llvm::post_order(&instanceGraph),
