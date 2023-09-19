@@ -895,15 +895,7 @@ void HoistPassthroughPass::runOnOperation() {
     LLVM_DEBUG(llvm::dbgs() << "Analyzing: " << module.getName() << "\n");
     if (true) {
       AtomicDriverAnalysis ada(module);
-     // for (auto &node : ada.getGraph().nodes) {
-     //   llvm::errs() << (void *)&node << ":\n"
-     //                << "\tval: " << node.definition << "\n\tinvalid? "
-     //                << node.invalid << "\n\tdrivers ("
-     //                << node.drivenByEdges.size() << "):\n";
-     //   for (auto [node, fieldID] : node.drivenByEdges)
-     //     llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
-     //                  << "\n";
-     // }
+
      // llvm::WriteGraph(&ada, module.getName());
 
       auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
