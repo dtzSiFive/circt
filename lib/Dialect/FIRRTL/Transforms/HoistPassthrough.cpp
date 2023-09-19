@@ -26,6 +26,7 @@
 
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/Support/DOTGraphTraits.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 
 #include <deque>
 
@@ -365,8 +366,8 @@ public:
       ++len;
     }
     (void)len;
-    LLVM_DEBUG(llvm::dbgs() << "Found driver for " << v << " (chain length = "
-                            << len << "): " << driver << "\n");
+    llvm::dbgs() << "Found driver for " << v << " (chain length = "
+                            << len << "): " << driver << "\n";
     return driver;
   }
 
@@ -549,6 +550,10 @@ struct ConnectionGraph {
     // auto dstNode = getOrCreateNode(dst);
 
     dstNode->drivenByEdges.emplace_back(srcNode, src.getFieldID());
+    // Multiple drivers -> invalidate.
+    // if (llvm::hasNItemsOrMore(dstNode->drivenByEdges, 2))
+    if (!dstNode->drivenByEdges.empty() && !llvm::hasSingleElement(dstNode->drivenByEdges))
+      dstNode->invalidate();
   }
 };
 
@@ -735,20 +740,17 @@ private:
     // return result;
     (void)result;
   };
-
 };
 
 
 } // end anonymous namespace
 
 template <>
-struct llvm::GraphTraits<AtomicDriverAnalysis*> {
+struct llvm::GraphTraits<ConnectionGraph::Node*> {
   using NodeType = ConnectionGraph::Node;
   using NodeRef = NodeType *;
 
-  static NodeRef getEntryNode(AtomicDriverAnalysis *graph) {
-    return graph->getModEntryNode();
-  }
+  static NodeRef getEntryNode(NodeRef node) { return node; }
 
   static NodeRef getChild(const ConnectionGraph::Edge &edge) {
     return edge.first;
@@ -760,6 +762,13 @@ struct llvm::GraphTraits<AtomicDriverAnalysis*> {
   }
   static ChildIteratorType child_end(NodeRef node) {
     return {node->drivenByEdges.end(), &getChild};
+  }
+};
+
+template <>
+struct llvm::GraphTraits<AtomicDriverAnalysis*> : public llvm::GraphTraits<ConnectionGraph::Node*> {
+  static NodeRef getEntryNode(AtomicDriverAnalysis *graph) {
+    return graph->getModEntryNode();
   }
 
   //using nodes_iterator =
@@ -886,12 +895,51 @@ void HoistPassthroughPass::runOnOperation() {
      //     llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
      //                  << "\n";
      // }
-      llvm::WriteGraph(&ada, module.getName());
+      // llvm::WriteGraph(&ada, module.getName());
+
+      auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
+        FieldRef ref(node->definition, 0);
+        for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E;
+             ++I) {
+          if (I->invalid)
+            return {};
+          if (!llvm::hasSingleElement(I->drivenByEdges))
+            return {};
+          auto &edge = I->drivenByEdges.front();
+          if (I.nodeVisited(edge.first)) {
+            mlir::emitRemark(node->definition.getLoc(), "driver cycle found")
+                    .attachNote(edge.first->definition.getLoc())
+                << "already visited this value";
+            return {};
+          }
+          ref = FieldRef(edge.first->definition, edge.second)
+                    .getSubField(ref.getFieldID());
+        }
+        // if (ref.getValue() == node->definition)
+        //   return {};
+        return ref;
+      };
+
+      for (auto arg : module.getArguments()) {
+        auto node = ada.getGraph().lookup(arg);
+        if (!node)
+          continue;
+        auto source = getSource(node);
+        if (source) {
+          llvm::errs() << "Found driver for " << arg
+                       << " (chain length = TODO): "
+                       << "(no connect tracking)"
+                       << " source: " << source.getValue() << " @ "
+                       << source.getFieldID() << "\n";
+        }
+      }
     }
 
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
       return d && d.canHoist();
     };
+
+
     SmallVector<Driver, 16> drivers(llvm::make_filter_range(
         llvm::map_range(module.getArguments(),
                         [&driverAnalysis](auto val) {
