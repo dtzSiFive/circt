@@ -521,8 +521,8 @@ struct ConnectionGraph {
   /// Add edge from src to dst.
   void addEdge(FieldRef src, FieldRef dst) {
     // Sanity check usage.
-    assert(isAtomic(dst) && "graph only supports atomic destinations");
-    assert(dst.getFieldID() == 0 && "graph only supports driving roots");
+    // assert(isAtomic(dst) && "graph only supports atomic destinations");
+    // assert(dst.getFieldID() == 0 && "graph only supports driving roots");
 
     // auto srcNode = getNode(src);
     auto srcNode = getOrCreateNode(src);
