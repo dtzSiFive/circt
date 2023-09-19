@@ -810,6 +810,13 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
     return os.str().str();
   }
 
+  // Optionally, hide invalid nodes.  Comment out to toggle behavior.
+#if 0
+  static bool isNodeHidden(const ConnectionGraph::Node *node, const AtomicDriverAnalysis*) {
+    return node->invalid;
+  }
+#endif
+
   // TODO: Edge dest labels!
 
   template <typename Iterator>
@@ -818,6 +825,10 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
     // Edge label is fieldID .
     auto *cur = it.getCurrent();
     return ("label=" + Twine(cur->second)).str();
+  }
+
+  static std::string getGraphProperties(const AtomicDriverAnalysis*) {
+    return "\trankdir=\"LR\";";
   }
 };
 
