@@ -440,7 +440,10 @@ public:
     for (auto result : op->getResults())
       addRoot(result);
   }
+  /// Add argument as root.
   void addDecl(BlockArgument arg) { addRoot(arg); }
+
+  /// Record derived value (indexing).
   FieldRef addDerived(Value input, Value derived, size_t fieldID) {
     assert(!valToFieldRef.contains(derived));
     auto inRef = getFor(input);
@@ -450,16 +453,21 @@ public:
     return newRef;
   }
 
+  /// Record subfield.
   FieldRef addIndex(SubfieldOp op) {
     auto access = op.getAccessedField();
     assert(op.getInput() == access.getValue());
     return addDerived(access.getValue(), op.getResult(), access.getFieldID());
   }
+
+  /// Record subindex.
   FieldRef addIndex(SubindexOp op) {
     auto access = op.getAccessedField();
     assert(op.getInput() == access.getValue());
     return addDerived(access.getValue(), op.getResult(), access.getFieldID());
   }
+
+  /// Record refsub.
   FieldRef addIndex(RefSubOp op) {
     auto input = op.getInput();
     auto inputBaseType = input.getType().getType();
@@ -467,6 +475,7 @@ public:
     return addDerived(input, op.getResult(), fieldID);
   }
 
+  /// Clear storage.
   void clear() { valToFieldRef.clear(); }
 };
 } // end anonymous namespace
@@ -570,6 +579,9 @@ struct ConnectionGraph {
 } // end anonymous namespace
 
 namespace {
+
+// TODO: Optionally disable analysis for HW signals!
+
 class AtomicDriverAnalysis {
   /// Connectivity graph built by analysis.
   ConnectionGraph graph;
@@ -753,6 +765,7 @@ private:
 
 } // end anonymous namespace
 
+/// Use a node as a "graph".  Useful for dfs, so on.
 template <>
 struct llvm::GraphTraits<ConnectionGraph::Node*> {
   using NodeType = ConnectionGraph::Node;
@@ -773,15 +786,12 @@ struct llvm::GraphTraits<ConnectionGraph::Node*> {
   }
 };
 
+/// Analysis as a graph, entry is dummy node "driven by" output ports.
 template <>
 struct llvm::GraphTraits<AtomicDriverAnalysis*> : public llvm::GraphTraits<ConnectionGraph::Node*> {
   static NodeRef getEntryNode(AtomicDriverAnalysis *graph) {
     return graph->getModEntryNode();
   }
-
-  //using nodes_iterator =
-  //    std::invoke_result_t<decltype(&AtomicDriverAnalysis::nodes_begin),
-  //                         AtomicDriverAnalysis *>;
 
   using node_inner_iterator = decltype(ConnectionGraph::nodes)::iterator;
   using nodes_iterator = llvm::pointer_iterator<node_inner_iterator>;
@@ -830,12 +840,12 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
   }
 #endif
 
-  // TODO: Edge dest labels!
+  // TODO: (optionally) Edge dest labels! (+invert)
 
   template <typename Iterator>
   static std::string getEdgeAttributes(const ConnectionGraph::Node *node, Iterator it,
                                        const AtomicDriverAnalysis *) {
-    // Edge label is fieldID .
+    // Edge label is recorded fieldID (or argument number for edges from dummy entry).
     auto *cur = it.getCurrent();
     return ("label=" + Twine(cur->second)).str();
   }
