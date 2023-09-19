@@ -650,6 +650,11 @@ private:
                     auto ref = refs.addIndex(sub);
                     return success();
                   })
+                  .Case<SubaccessOp>([&](SubaccessOp access) {
+                    invalidate(access.getInput());
+                    addRoot(access, true);
+                    return success();
+                  })
                   .Case<RefCastOp>([&](RefCastOp op) {
                     // Transparently reference through refcast.
                     refs.addDerived(op.getInput(), op.getResult(), 0);
@@ -693,6 +698,10 @@ private:
                   .Default([&](Operation *other) {
                     // Everything else treat as undriven root.
                     addDecl(other);
+
+                    // TODO: Using visitor, support all expressions, and
+                    // declarations. Anything else we don't know, mark all
+                    // operands's roots as invalid.
                     return success();
                   });
           return result;
