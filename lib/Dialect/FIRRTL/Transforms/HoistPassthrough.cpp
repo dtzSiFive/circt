@@ -782,8 +782,13 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
     // The name of the graph node is the module name.
     SmallString<128> str;
     llvm::raw_svector_ostream os(str);
-    Value v = node->definition;
-    v.print(os);
+    auto [name, valid] = getFieldName(FieldRef(node->definition, 0), true);
+    if (valid)
+      os << name;
+    else
+      os << "(" << node->definition << ")";
+    if (node->invalid)
+      os << " INVALID";
     return os.str().str();
   }
 
@@ -856,7 +861,7 @@ void HoistPassthroughPass::runOnOperation() {
      //     llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
      //                  << "\n";
      // }
-      llvm::errs() << llvm::WriteGraph(&ada, module.getName());
+      llvm::WriteGraph(&ada, module.getName());
     }
 
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
