@@ -564,7 +564,8 @@ private:
       return;
 
     // Only driving atomic destination directly to root.
-    if (isAtomic(dstFType) && dst.getFieldID() == 0)
+    // if (isAtomic(dstFType) && dst.getFieldID() == 0)
+    if (dst.getFieldID() == 0)
       return graph.addEdge(src, dst);
  
     // Otherwise, track 
