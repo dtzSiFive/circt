@@ -575,19 +575,28 @@ struct ConnectionGraph {
 namespace {
 class AtomicDriverAnalysis {
   ConnectionGraph graph;
-  ConnectionGraph::Node modEntryNode = ConnectionGraph::Node(Value());
+  ConnectionGraph::Node *modEntryNode;
   FieldRefs refs;
 public:
   ConnectionGraph &getGraph() { return graph; }
-  ConnectionGraph::Node *getModEntryNode() { return &modEntryNode; }
+  ConnectionGraph::Node *getModEntryNode() { return modEntryNode; }
+
+  // auto nodes_range() {
+  //   return llvm::concat<ConnectionGraph::Node *>(
+  //       MutableArrayRef<ConnectionGraph::Node *>(modEntryNode),
+  //       llvm::make_pointer_range(graph.nodes));
+  // }
+  auto nodes_begin() { return graph.nodes.begin(); }
+  auto nodes_end() { return graph.nodes.end(); }
 
   AtomicDriverAnalysis(FModuleOp mod) {
     run(mod);
-    modEntryNode = ConnectionGraph::Node(Value());
+    graph.nodes.emplace_back(Value());
+    modEntryNode = &graph.nodes.back();
     // TODO: Hoist entryNodes out, since we inject them ourselves anyway!
     // TODO: Don't have null definition :( .
     for (auto [idx, node] : llvm::enumerate(graph.entryNodes))
-      modEntryNode.drivenByEdges.emplace_back(node, idx);
+      modEntryNode->drivenByEdges.emplace_back(node, idx);
   }
 
 private:
@@ -769,6 +778,10 @@ struct llvm::GraphTraits<AtomicDriverAnalysis*> {
   static ChildIteratorType child_end(NodeRef node) {
     return {node->drivenByEdges.end(), &getChild};
   }
+
+  //using nodes_iterator =
+  //    std::invoke_result_t<decltype(&AtomicDriverAnalysis::nodes_begin),
+  //                         AtomicDriverAnalysis *>;
 
   using node_inner_iterator = decltype(ConnectionGraph::nodes)::iterator;
   using nodes_iterator = llvm::pointer_iterator<node_inner_iterator>;
