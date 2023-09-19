@@ -478,7 +478,7 @@ static bool isAtomic(Type type) {
   FIRRTLBaseType baseType = type_dyn_cast<FIRRTLBaseType>(type);
   return baseType && baseType.isPassive();
 }
-static bool isAtomic(FieldRef ref) {
+[[maybe_unused]] static bool isAtomic(FieldRef ref) {
   return isAtomic(hw::FieldIdImpl::getFinalTypeByFieldID(
       ref.getValue().getType(), ref.getFieldID()));
 }
@@ -521,24 +521,6 @@ struct ConnectionGraph {
 
   bool contains(Value v) const { return valToNode.contains(v); }
 
-  //NodeRef getNode(Value v) const {
-  //  auto it = valToNode.find(v);
-  //  if (it == valToNode.end()) {
-  //    llvm::errs() << "Node not found for value: " << v << "\n";
-  //  }
-  //  assert(it != valToNode.end());
-  //  return it->second;
-  //};
-  // NodeRef getOrCreateNode(FieldRef ref) const {
-  //   return nodeForLeafRef.lookup(ref);
-  // };
-  // NodeRef getOrCreateNode(FieldRef ref) {
-  //   auto [it, inserted] = nodeForRef.try_emplace(ref, nullptr);
-  //   if (!inserted)
-  //     return it->second;
-  //   nodes.emplace_back(ref);
-  //   return it->second = &nodes.back();
-  // };
   NodeRef getOrCreateNode(Value v) {
     // Expensive sanity check.  Consider moving to an expensive-checks-only verify().
 #ifndef NDEBUG
@@ -627,6 +609,7 @@ private:
       if (!srcBType.isPassive() || !dstBType.isPassive()) {
         invalidate(src.getValue());
         invalidate(dst.getValue());
+        return;
       }
     } else if (type_isa<RefType>(srcFType)) {
       assert(type_isa<RefType>(dstFType));
@@ -637,19 +620,18 @@ private:
     return graph.addEdge(src, dst.getValue());
   }
 
+  /// Add specified value as root, marking invalid as appropriate
+  /// and only creating the node if needed to record invalid state.
   void addLazyRoot(Value v, bool invalid = false) {
     refs.addRoot(v);
     if (invalid || !isAtomic(v.getType()) || hasDontTouch(v))
       graph.getOrCreateNode(v)->invalidate();
   }
 
-  // ConnectionGraph::NodeRef addRoot(Value v, bool invalid = false) {
-  //   addLazyRoot(v, invalid);
-  //   return graph.getOrCreateNode(v);
-  // }
-
   /// Add results of operation as root declarations.
   /// Invalidate as appropriate.
+  /// Nodes only created if known to be invalid,
+  /// otherwise let them be lazily created on-demand.
   void addDecl(Operation *op) {
     bool allInvalid = [&]() {
       if (hasDontTouch(op))
@@ -723,16 +705,14 @@ private:
                     // Invalidate based on block containing connect and
                     // dest, based on connect "semantics".
                     if (!connect.hasStaticSingleConnectBehavior()) {
+                      // Only support strict connect, and with all in same block.
+                      // Conservative for now.
                       if (!isa<StrictConnectOp>(connect) ||
                           connect->getBlock() !=
                               srcRef.getValue().getParentBlock() ||
                           connect->getBlock() !=
                               dstRef.getValue().getParentBlock())
                         invalidate(dstRef.getValue());
-                    }
-                    if (!isa<StrictConnectOp,RefDefineOp>(connect)) {
-                      invalidate(dstRef.getValue());
-                    } else {
                     }
                     return success();
                   })
@@ -745,6 +725,9 @@ private:
                     // TODO: Using visitor, support all expressions, and
                     // declarations. Anything else we don't know, mark all
                     // operands's roots as invalid.
+
+                    // Presently, analysis assumes unhandled operations are expressions
+                    // (with only 'connect' (through intermediate indexing ops) using as lvalue)
                     return success();
                   });
           return result;
