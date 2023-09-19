@@ -473,7 +473,7 @@ static bool isAtomic(Type type) {
   if (!type_isa<FIRRTLType>(type))
     return false;
   // Refs, properties.
-  if (hw::FieldIdImpl::getMaxFieldID(type))
+  if (hw::FieldIdImpl::getMaxFieldID(type) == 0)
     return true;
   // For HW, restrict to passive.
   FIRRTLBaseType baseType = type_dyn_cast<FIRRTLBaseType>(type);
@@ -549,11 +549,11 @@ struct ConnectionGraph {
     auto dstNode = getOrCreateNode(v);
     // auto dstNode = getOrCreateNode(dst);
 
-    dstNode->drivenByEdges.emplace_back(srcNode, src.getFieldID());
     // Multiple drivers -> invalidate.
-    // if (llvm::hasNItemsOrMore(dstNode->drivenByEdges, 2))
-    if (!dstNode->drivenByEdges.empty() && !llvm::hasSingleElement(dstNode->drivenByEdges))
+    // (if not already empty, it now has > 1)
+    if (!dstNode->drivenByEdges.empty())
       dstNode->invalidate();
+    dstNode->drivenByEdges.emplace_back(srcNode, src.getFieldID());
   }
 };
 
@@ -895,7 +895,7 @@ void HoistPassthroughPass::runOnOperation() {
      //     llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
      //                  << "\n";
      // }
-      // llvm::WriteGraph(&ada, module.getName());
+     // llvm::WriteGraph(&ada, module.getName());
 
       auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
         FieldRef ref(node->definition, 0);
