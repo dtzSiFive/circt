@@ -462,8 +462,17 @@ struct FieldRefs {
   }
 };
 
+/// Whether the type can be atomically driven source -> dest.
 static bool isAtomic(Type type) {
-  return hw::FieldIdImpl::getMaxFieldID(type) == 0;
+  // Skip foreign types for now, probably could be handled.
+  if (!type_isa<FIRRTLType>(type))
+    return false;
+  // Refs, properties.
+  if (hw::FieldIdImpl::getMaxFieldID(type))
+    return true;
+  // For HW, restrict to passive.
+  FIRRTLBaseType baseType = type_dyn_cast<FIRRTLBaseType>(type);
+  return baseType && baseType.isPassive();
 };
 static bool isAtomic(FieldRef ref) {
   return isAtomic(hw::FieldIdImpl::getFinalTypeByFieldID(
@@ -471,26 +480,30 @@ static bool isAtomic(FieldRef ref) {
 }
 
 /// Simple connectivity graph.
-/// All nodes are "atomic" (leaf ground-types or probes)
-/// that are singly-driven or nothing can be assumed.
 struct ConnectionGraph {
   /// Nodes.
   struct Node;
   using NodeRef = Node*;
+  /// Like a FieldRef but for a Node.
+  /// FieldID is always on LHS, if RHS node is invalidated.
+  using Edge = std::pair<NodeRef, size_t>;
   struct Node {
-    Node(FieldRef ref) : storage(ref) {}
+    Node(Value v) : definition(v) {}
 
-    FieldRef storage; // "atomic" only
+    /// The definition represented by this node.
+    Value definition;
 
-    SmallVector<NodeRef, 1> drivenByEdges;
+    SmallVector<Edge, 1> drivenByEdges;
     // ConnectionGraph *parent;
 
-    // bool invalid = false;
-    // void invalidate() { invalid = true; }
+    // TODO: PointerIntPair<Value,2,ClassificationEnum> or so.
+    bool invalid = false;
+    void invalidate() { invalid = true; }
   };
 
-  // Find node for given atomic destination or origin, if any.
-  DenseMap<FieldRef, NodeRef> nodeForRef;
+  // Lookup node for given value.
+  // Node is basically value + edges, reconsider datastructure.
+  DenseMap<Value, NodeRef> valToNode;
 
   // SpecificBumpPtrAllocator<Node>
   std::deque<Node> nodes;
@@ -498,38 +511,48 @@ struct ConnectionGraph {
   /// Entry nodes.
   SmallVector<NodeRef> entryNodes;
 
-  NodeRef getNode(FieldRef ref) const {
-    auto it = nodeForRef.find(ref);
-    if (it == nodeForRef.end()) {
-      llvm::errs() << "Node not found for ref: " << ref.getValue() << " @ "
-                   << ref.getFieldID() << "\n";
-    }
-    assert(it != nodeForRef.end());
-    return it->second;
-  };
+  // NodeRef getNode(FieldRef ref) const {
+  //   auto it = nodeForRef.find(ref);
+  //   if (it == nodeForRef.end()) {
+  //     llvm::errs() << "Node not found for ref: " << ref.getValue() << " @ "
+  //                  << ref.getFieldID() << "\n";
+  //   }
+  //   assert(it != nodeForRef.end());
+  //   return it->second;
+  // };
   // NodeRef getOrCreateNode(FieldRef ref) const {
   //   return nodeForLeafRef.lookup(ref);
   // };
-  NodeRef getOrCreateNode(FieldRef ref) {
-    auto [it, inserted] = nodeForRef.try_emplace(ref, nullptr);
+  // NodeRef getOrCreateNode(FieldRef ref) {
+  //   auto [it, inserted] = nodeForRef.try_emplace(ref, nullptr);
+  //   if (!inserted)
+  //     return it->second;
+  //   nodes.emplace_back(ref);
+  //   return it->second = &nodes.back();
+  // };
+  NodeRef getOrCreateNode(Value v) {
+    // Expensive sanity check.  Consider moving to an expensive-checks-only verify().
+#ifndef NDEBUG
+    auto ref = getFieldRefFromValue(v);
+    assert(ref.getValue() == v);
+    assert(ref.getFieldID() == 0);
+#endif
+    auto [it, inserted] = valToNode.try_emplace(v, nullptr);
     if (!inserted)
       return it->second;
-    nodes.emplace_back(ref);
+    nodes.emplace_back(v);
     return it->second = &nodes.back();
   };
 
   /// Add edge from src to dst.
-  void addEdge(FieldRef src, FieldRef dst) {
-    // Sanity check usage.
-    // assert(isAtomic(dst) && "graph only supports atomic destinations");
-    // assert(dst.getFieldID() == 0 && "graph only supports driving roots");
-
-    auto srcNode = getNode(src);
+  void addEdge(FieldRef src, Value v) {
+    // auto srcNode = getNode(src.getValue());
+    auto srcNode = getOrCreateNode(src.getValue());
     // auto srcNode = getOrCreateNode(src);
-    auto dstNode = getNode(dst);
+    auto dstNode = getOrCreateNode(v);
     // auto dstNode = getOrCreateNode(dst);
 
-    dstNode->drivenByEdges.push_back(srcNode);
+    dstNode->drivenByEdges.emplace_back(srcNode, src.getFieldID());
   }
 };
 
@@ -543,6 +566,10 @@ public:
 
 private:
 
+  void invalidate(Value v) {
+    return graph.getOrCreateNode(v)->invalidate();
+  }
+
   void flow(FieldRef src, FieldRef dst) {
     auto srcFType = type_dyn_cast<FIRRTLType>(src.getValue().getType());
     auto dstFType = type_dyn_cast<FIRRTLType>(dst.getValue().getType());
@@ -550,37 +577,52 @@ private:
       return;
     assert(srcFType && "FIRRTL type driven by non-FIRRTL type?");
 
+    // Non-root RHS invalidates the destination node.
+    // We only want full connections.
+    if (dst.getFieldID() != 0)
+      return invalidate(dst.getValue());
+
     auto srcBType = type_dyn_cast<FIRRTLBaseType>(srcFType);
     auto dstBType = type_dyn_cast<FIRRTLBaseType>(dstFType);
     if (srcBType) {
       assert(dstBType);
-      // TODO: I think only indexed type needs to be passive re:source.
-      if (!srcBType.isPassive() || !dstBType.isPassive())
-        return;
+      // TODO: Maybe only portion of indexed type needs to be passive re:source.
+      // Bundle of a and flip b, can say something is must-driven by 'a'.
+      // For simplicity, only passive nodes for now.
+      if (!srcBType.isPassive() || !dstBType.isPassive()) {
+        invalidate(src.getValue());
+        invalidate(dst.getValue());
+      }
     } else if (type_isa<RefType>(srcFType)) {
       assert(type_isa<RefType>(dstFType));
     }
     else
       return;
 
-    // Only driving atomic destination directly to root.
-    // if (isAtomic(dstFType) && dst.getFieldID() == 0)
-    if (dst.getFieldID() == 0)
-      return graph.addEdge(src, dst);
- 
-    // Otherwise, track 
+    return graph.addEdge(src, dst.getValue());
   }
 
-  std::pair<FieldRef, ConnectionGraph::NodeRef> addRoot(Value v) {
-    auto ref = refs.addRoot(v);
-    auto node = graph.getOrCreateNode(ref);
-    return {ref, node};
+  ConnectionGraph::NodeRef addRoot(Value v, bool invalid = false) {
+    refs.addRoot(v);
+    auto node = graph.getOrCreateNode(v);
+    if (invalid || !isAtomic(v.getType()) || hasDontTouch(v))
+      node->invalidate();
+    return node;
   }
 
-  void getOrCreateNode(Value v) {
-    if (auto arg = isa<BlockArgument>(v)) {
-      // Reject if 
-    }
+  /// Add results of operation as root declarations.
+  /// Invalidate as appropriate.
+  void addDecl(Operation *op) {
+    bool allInvalid = [&]() {
+      if (hasDontTouch(op))
+        return true;
+      if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable())
+        return true;
+      return false;
+    }();
+
+    for (auto result : op->getResults())
+      addRoot(result, allInvalid);
   }
 
   void run(FModuleOp mod) {
@@ -589,11 +631,9 @@ private:
     for (auto arg : mod.getArguments()) {
       if (mod.getPortDirection(arg.getArgNumber()) == Direction::In) {
         addRoot(arg);
-      } else if (isAtomic(arg.getType())) {
-        auto [ref, node] = addRoot(arg);
-        graph.entryNodes.push_back(node);
       } else {
-        refs.addRoot(arg);
+        auto node = addRoot(arg);
+        graph.entryNodes.push_back(node);
       }
     }
 
@@ -603,7 +643,8 @@ private:
         mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) -> WalkResult {
           auto result =
               TypeSwitch<Operation *, LogicalResult>(op)
-                  .Case<SubindexOp, SubfieldOp, RefSubOp>([&](auto sub) {
+                  .Case<SubfieldOp, SubindexOp, RefSubOp, OpenSubfieldOp,
+                        OpenSubindexOp>([&](auto sub) {
                     assert(refs.getFor(sub.getInput()) &&
                            "indexing through unknown input");
                     auto ref = refs.addIndex(sub);
@@ -615,64 +656,43 @@ private:
                     return success();
                   })
                   .Case<NodeOp>([&](NodeOp node) {
-                    auto [resultRef, resultNode] = addRoot(node.getResult());
-                    assert(resultRef);
+                    addRoot(node.getResult());
                     auto inRef = refs.getFor(node.getInput());
                     assert(inRef);
-                    // node.getInput().dump();
-                    flow(inRef, resultRef);
+                    flow(inRef, FieldRef(node.getResult(), 0));
                     return success();
                   })
-                  .Case<WireOp>([&](WireOp op) {
-                    if (!isAtomic(op.getDataRaw().getType()))
-                      for (auto result : op->getResults())
-                        graph.getOrCreateNode(refs.addRoot(result));
-                    return success();
-                  })
-                  // .Case<Forceable>([&](Forceable fop) {
-                  //   refs.addDecl(fop);
-                  //   // graph.getOrCreateNode(
-                  //   // TODO: Insert graph node and mark as bad.
-                  //   // auto result = refs.addRoot(fop.getDataRaw());
-                  //   // graph.flow(FieldRef(node.getInput(), 0),
-                  //   //            FieldRef(node.getResult(), 0));
-                  //   return success();
-                  // })
-                  .Case<InstanceOp>([&](InstanceOp op) {
-                    // FieldRef root decls, graph nodes.
-                    for (auto result : op->getResults())
-                      graph.getOrCreateNode(refs.addRoot(result));
-                    // Output ports: record for instance inlining?
+                  .Case<Forceable, InstanceOp>([&](auto declOp) {
+                    addDecl(declOp);
                     return success();
                   })
                   .Case<FConnectLike>([&](FConnectLike connect) {
-                    // Invalidate based on block containing connect and
-                    // dest, based on connect "semantics".
                     auto srcRef = refs.getFor(connect.getSrc());
                     auto dstRef = refs.getFor(connect.getDest());
-                    if (!srcRef || !dstRef) {
-                      connect.dump();
-                      connect.getSrc().dump();
-                      connect.getDest().dump();
-                      return success();
-                    }
-                    // assert(srcRef);
-                    // assert(dstRef);
+                    assert(srcRef);
+                    assert(dstRef);
                     // connect.dump();
-                    flow(refs.getFor(connect.getSrc()),
-                         refs.getFor(connect.getDest()));
+                    flow(srcRef, dstRef);
+
+                    // Invalidate based on block containing connect and
+                    // dest, based on connect "semantics".
+                    if (!connect.hasStaticSingleConnectBehavior()) {
+                      if (!isa<StrictConnectOp>(connect) ||
+                          connect->getBlock() !=
+                              srcRef.getValue().getParentBlock() ||
+                          connect->getBlock() !=
+                              dstRef.getValue().getParentBlock())
+                        invalidate(dstRef.getValue());
+                    }
+                    if (!isa<StrictConnectOp,RefDefineOp>(connect)) {
+                      invalidate(dstRef.getValue());
+                    } else {
+                    }
                     return success();
                   })
                   .Default([&](Operation *other) {
-                    // refs.addDecl(other);
-
-                    // Check op -- mark node as invalid if:
-                    // dontTouch
-                    // Forceable
-                    //
                     // Everything else treat as undriven root.
-                    for (auto result : op->getResults())
-                      graph.getOrCreateNode(refs.addRoot(result));
+                    addDecl(other);
                     return success();
                   });
           return result;
@@ -732,15 +752,16 @@ void HoistPassthroughPass::runOnOperation() {
     driverAnalysis.clear();
     driverAnalysis.run(module);
 
-    if (false) {
+    if (true) {
       AtomicDriverAnalysis ada(module);
       for (auto &node : ada.getGraph().nodes) {
         llvm::errs() << (void *)&node << ":\n"
-                     << "\tval: " << node.storage.getValue() << " @ "
-                     << node.storage.getFieldID() << "\tdrivers ("
+                     << "\tval: " << node.definition << "\n\tinvalid? "
+                     << node.invalid << "\n\tdrivers ("
                      << node.drivenByEdges.size() << "):\n";
-        for (auto *drivenBy : node.drivenByEdges)
-          llvm::errs() << "\t- " << (void *)drivenBy << "\n";
+        for (auto [node, fieldID] : node.drivenByEdges)
+          llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
+                       << "\n";
       }
     }
 
