@@ -903,8 +903,10 @@ void HoistPassthroughPass::runOnOperation() {
              ++I) {
           if (I->invalid)
             return {};
-          if (!llvm::hasSingleElement(I->drivenByEdges))
-            return {};
+          // Only one driver.  Should be handled...
+          // if (!I->drivenByEdges.empty() &&
+          //     !llvm::hasSingleElement(I->drivenByEdges))
+          //   return {};
           auto &edge = I->drivenByEdges.front();
           if (I.nodeVisited(edge.first)) {
             mlir::emitRemark(node->definition.getLoc(), "driver cycle found")
