@@ -569,7 +569,7 @@ class AtomicDriverAnalysis {
   FieldRefs refs;
 public:
   ConnectionGraph &getGraph() { return graph; }
-  const ConnectionGraph::Node *getModEntryNode() const { return &modEntryNode; }
+  ConnectionGraph::Node *getModEntryNode() { return &modEntryNode; }
 
   AtomicDriverAnalysis(FModuleOp mod) {
     run(mod);
@@ -737,7 +737,7 @@ private:
 
 template <>
 struct llvm::GraphTraits<AtomicDriverAnalysis*> {
-  using NodeType = const ConnectionGraph::Node;
+  using NodeType = ConnectionGraph::Node;
   using NodeRef = NodeType *;
 
   static NodeRef getEntryNode(AtomicDriverAnalysis *graph) {
@@ -747,7 +747,7 @@ struct llvm::GraphTraits<AtomicDriverAnalysis*> {
   static NodeRef getChild(const ConnectionGraph::Edge &edge) {
     return edge.first;
   }
-  using EdgeIterator = decltype(NodeType::drivenByEdges)::const_iterator;
+  using EdgeIterator = decltype(NodeType::drivenByEdges)::iterator;
   using ChildIteratorType = llvm::mapped_iterator<EdgeIterator,decltype(&getChild)>;
   static ChildIteratorType child_begin(NodeRef node) {
     return {node->drivenByEdges.begin(), &getChild};
@@ -756,7 +756,7 @@ struct llvm::GraphTraits<AtomicDriverAnalysis*> {
     return {node->drivenByEdges.end(), &getChild};
   }
 
-  using node_inner_iterator = decltype(ConnectionGraph::nodes)::const_iterator;
+  using node_inner_iterator = decltype(ConnectionGraph::nodes)::iterator;
   using nodes_iterator = llvm::pointer_iterator<node_inner_iterator>;
   static nodes_iterator nodes_begin(AtomicDriverAnalysis *graph) {
     return nodes_iterator(graph->getGraph().nodes.begin());
@@ -773,7 +773,7 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
   using DefaultDOTGraphTraits::DefaultDOTGraphTraits;
 
   static std::string getNodeLabel(const ConnectionGraph::Node *node,
-                                  const AtomicDriverAnalysis *ada) {
+                                  AtomicDriverAnalysis *ada) {
     if (node == ada->getModEntryNode()) {
       return "Entry dummy node";
     }
@@ -793,7 +793,8 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
   static std::string getEdgeAttributes(const ConnectionGraph::Node *node, Iterator it,
                                        const AtomicDriverAnalysis *) {
     // Edge label is fieldID .
-    return Twine(Twine("label=") + it->second).str();
+    auto *cur = it.getCurrent();
+    return ("label=" + Twine(cur->second)).str();
   }
 };
 
@@ -855,7 +856,7 @@ void HoistPassthroughPass::runOnOperation() {
      //     llvm::errs() << "\t- (" << node->definition << ") @ " << fieldID
      //                  << "\n";
      // }
-      llvm::WriteGraph(llvm::errs(), &ada);
+      llvm::errs() << llvm::WriteGraph(&ada, module.getName());
     }
 
     auto notNullAndCanHoist = [](const Driver &d) -> bool {
