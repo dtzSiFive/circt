@@ -660,7 +660,7 @@ private:
                     return success();
                   })
                   .Case<NodeOp>([&](NodeOp node) {
-                    addRoot(node.getResult());
+                    addDecl(node);
                     auto inRef = refs.getFor(node.getInput());
                     assert(inRef);
                     flow(inRef, FieldRef(node.getResult(), 0));
@@ -673,6 +673,11 @@ private:
                   .Case<FConnectLike>([&](FConnectLike connect) {
                     auto srcRef = refs.getFor(connect.getSrc());
                     auto dstRef = refs.getFor(connect.getDest());
+                    if (!srcRef || !dstRef) {
+                      connect.getSrc().dump();
+                      connect.getDest().dump();
+                      connect.dump();
+                    }
                     assert(srcRef);
                     assert(dstRef);
                     // connect.dump();
