@@ -889,8 +889,8 @@ void HoistPassthroughPass::runOnOperation() {
           [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
       [](auto module) { return module; }));
 
-  MustDrivenBy driverAnalysis;
-  driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
+  // MustDrivenBy driverAnalysis;
+  // driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
   // For each module (PO)...
   for (auto module : modules) {
@@ -906,50 +906,51 @@ void HoistPassthroughPass::runOnOperation() {
     BitVector deadPorts(module.getNumPorts());
 
     // Analyze all ports using current IR.
-    driverAnalysis.clear();
-    driverAnalysis.run(module);
+    // driverAnalysis.clear();
+    // driverAnalysis.run(module);
 
     LLVM_DEBUG(llvm::dbgs() << "Analyzing: " << module.getName() << "\n");
-    if (true) {
-      AtomicDriverAnalysis ada(module);
+    AtomicDriverAnalysis ada(module);
 
-     // llvm::WriteGraph(&ada, module.getName());
+    // llvm::WriteGraph(&ada, module.getName());
 
-      auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
-        // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
-        FieldRef ref(node->getDefinition(), 0);
-        for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
-          // llvm::errs() << "\t" << I->getDefinition() << "\n";
-          if (I->isInvalid())
-            return {};
+    auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
+      // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
+      FieldRef ref(node->getDefinition(), 0);
+      for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
+        // llvm::errs() << "\t" << I->getDefinition() << "\n";
+        if (I->isInvalid())
+          return {};
 
-          // Search over.  Bail before inspecting edge below.
-          if (I->empty()) {
-            assert(std::next(I) == E);
-            break;
-          }
-          // If multiple drivers, bail.
-          if (!llvm::hasSingleElement(**I)) {
-            assert(0 && "should be invalid or end if not single edge");
-            return {};
-          }
-          auto &edge = *I->begin();
-          if (I.nodeVisited(edge.first)) {
-            mlir::emitRemark(node->getDefinition().getLoc(),
-                             "driver cycle found")
-                    .attachNote(edge.first->getDefinition().getLoc())
-                << "already visited this value";
-            return {};
-          }
-          // llvm::errs() << "\tIndex: " << edge.second << "\n";
-          ref = FieldRef(edge.first->getDefinition(), edge.second)
-                    .getSubField(ref.getFieldID());
+        // Search over.  Bail before inspecting edge below.
+        if (I->empty()) {
+          assert(std::next(I) == E);
+          break;
         }
-        // if (ref.getValue() == node->getDefinition())
-        //   return {};
-        return ref;
-      };
+        // If multiple drivers, bail.
+        if (!llvm::hasSingleElement(**I)) {
+          assert(0 && "should be invalid or end if not single edge");
+          return {};
+        }
+        auto &edge = *I->begin();
+        if (I.nodeVisited(edge.first)) {
+          mlir::emitRemark(node->getDefinition().getLoc(),
+                           "driver cycle found")
+                  .attachNote(edge.first->getDefinition().getLoc())
+              << "already visited this value";
+          return {};
+        }
+        // llvm::errs() << "\tIndex: " << edge.second << "\n";
+        ref = FieldRef(edge.first->getDefinition(), edge.second)
+                  .getSubField(ref.getFieldID());
+      }
+      // if (ref.getValue() == node->getDefinition())
+      //   return {};
+      return ref;
+    };
 
+    SmallVector<Driver> drivers;
+    if (true) {
       for (auto arg : module.getArguments()) {
         auto node = ada.getGraph().lookup(arg);
         if (!node)
@@ -965,21 +966,31 @@ void HoistPassthroughPass::runOnOperation() {
                                     << "(no connect tracking)"
                                     << " source: " << source.getValue() << " @ "
                                     << source.getFieldID() << "\n");
+           // Create driver to re-use that code while migrating.
+          // auto d = Driver::get(arg);
+          // assert(d && "ADA found non-self source");
+          FConnectLike connect;
+          if (type_isa<RefType>(arg.getType()))
+            connect = getRefDefine(arg);
+          else
+            connect = getSingleConnectUserOf(arg);
+          assert(connect && "couldn't find connect??");
+          drivers.emplace_back(connect, source);
         }
       }
     }
 
-    auto notNullAndCanHoist = [](const Driver &d) -> bool {
-      return d && d.canHoist();
-    };
+    // auto notNullAndCanHoist = [](const Driver &d) -> bool {
+    //   return d && d.canHoist();
+    // };
 
 
-    SmallVector<Driver, 16> drivers(llvm::make_filter_range(
-        llvm::map_range(module.getArguments(),
-                        [&driverAnalysis](auto val) {
-                          return driverAnalysis.getCombinedDriverFor(val);
-                        }),
-        notNullAndCanHoist));
+    // SmallVector<Driver, 16> drivers(llvm::make_filter_range(
+    //     llvm::map_range(module.getArguments(),
+    //                     [&driverAnalysis](auto val) {
+    //                       return driverAnalysis.getCombinedDriverFor(val);
+    //                     }),
+    //     notNullAndCanHoist));
 
     // 2. Rematerialize must-driven ports at instantiation sites.
 
