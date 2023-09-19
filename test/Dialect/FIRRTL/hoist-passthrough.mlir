@@ -425,10 +425,35 @@ firrtl.circuit "NonPassiveSource" {
 
 // -----
 
+// Non-ground source: HW.
+
+// CHECK-LABEL: "AggSourceHW"
+firrtl.circuit "AggSourceHW" {
+  // CHECK:      @Select
+  // CHECK-NOT: out %out
+  // CHECK-NEXT:   firrtl.subindex
+  // CHECK-NEXT: }
+  firrtl.module private @Select(in %in: !firrtl.vector<uint<1>, 5>,
+                               out %out : !firrtl.uint<1>) {
+    %sel = firrtl.subindex %in[3] : !firrtl.vector<uint<1>, 5>
+    firrtl.strictconnect %out, %sel : !firrtl.uint<1>
+  }
+  // CHECK: @AggSourceHW
+  firrtl.module @AggSourceHW(in %in : !firrtl.vector<uint<1>, 5>, out %out : !firrtl.uint<1>) {
+    %s_in, %s_out = firrtl.instance s @Select(in in : !firrtl.vector<uint<1>, 5>,
+                                              out out : !firrtl.uint<1>)
+    // CHECK: firrtl.subindex
+    firrtl.strictconnect %s_in, %in : !firrtl.vector<uint<1>, 5>
+    firrtl.strictconnect %out, %s_out : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // Reject non-ground dest (for now).
 
-// CHECK-LABEL: "AggHW"
-firrtl.circuit "AggHW" {
+// CHECK-LABEL: "AggDestHW"
+firrtl.circuit "AggDestHW" {
   // CHECK:      module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>, out %out
   // CHECK-NEXT:   firrtl.strictconnect
   // CHECK-NEXT: }
@@ -436,7 +461,7 @@ firrtl.circuit "AggHW" {
                                out %out : !firrtl.vector<uint<1>, 5>) {
     firrtl.strictconnect %out, %in : !firrtl.vector<uint<1>, 5>
   }
-  firrtl.module @AggHW(in %in : !firrtl.vector<uint<1>, 5>, out %out : !firrtl.vector<uint<1>, 5>) {
+  firrtl.module @AggDestHW(in %in : !firrtl.vector<uint<1>, 5>, out %out : !firrtl.vector<uint<1>, 5>) {
     %u_in, %u_out = firrtl.instance u @UTurn(in in : !firrtl.vector<uint<1>, 5>,
                                              out out : !firrtl.vector<uint<1>, 5>)
     firrtl.strictconnect %u_in, %in : !firrtl.vector<uint<1>, 5>
