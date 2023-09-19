@@ -785,8 +785,12 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
     auto [name, valid] = getFieldName(FieldRef(node->definition, 0), true);
     if (valid)
       os << name;
-    else
-      os << "(" << node->definition << ")";
+    else {
+      Value v = node->definition;
+      // lol oh no.
+      static mlir::AsmState asmState(v.getContext());
+      v.print(os, asmState);
+   }
     if (node->invalid)
       os << " INVALID";
     return os.str().str();
