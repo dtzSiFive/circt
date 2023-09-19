@@ -924,7 +924,7 @@ void HoistPassthroughPass::runOnOperation() {
                 << "already visited this value";
             return {};
           }
-          llvm::errs() << "Index: " << edge.second << "\n";
+          llvm::errs() << "\tIndex: " << edge.second << "\n";
           ref = FieldRef(edge.first->definition, edge.second)
                     .getSubField(ref.getFieldID());
         }
