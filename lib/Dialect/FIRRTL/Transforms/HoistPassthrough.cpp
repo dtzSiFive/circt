@@ -885,6 +885,7 @@ void HoistPassthroughPass::runOnOperation() {
     driverAnalysis.clear();
     driverAnalysis.run(module);
 
+    llvm::errs() << "Analyzing: " << module.getName() << "\n";
     if (true) {
       AtomicDriverAnalysis ada(module);
      // for (auto &node : ada.getGraph().nodes) {
@@ -939,8 +940,7 @@ void HoistPassthroughPass::runOnOperation() {
         auto source = getSource(node);
         if (source) {
           if (source.getValue() == arg) {
-            // Undriven or input port.
-            // llvm::errs() << "self-source for : " << arg << "\n";
+            llvm::errs() << "self-source for : " << arg << "\n";
           } else
           llvm::errs() << "Found driver for " << arg
                        << " (chain length = TODO): "
