@@ -462,7 +462,8 @@ struct FieldRefs {
   }
   FieldRef addIndex(RefSubOp op) {
     auto input = op.getInput();
-    auto fieldID = hw::FieldIdImpl::getFieldID(input.getType(), op.getIndex());
+    auto inputBaseType = input.getType().getType();
+    auto fieldID = hw::FieldIdImpl::getFieldID(inputBaseType, op.getIndex());
     return addDerived(input, op.getResult(), fieldID);
   }
 };
