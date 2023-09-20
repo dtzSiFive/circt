@@ -657,7 +657,7 @@ private:
   /// No need to create node for every thing unless involved in connectivity.
   void addLazyRoot(Value v, bool invalid = false) {
     refs.addRoot(v);
-    if (invalid || /* !isAtomic(v.getType()) || */
+    if (invalid || !isAtomic(v.getType()) ||
         (!v.getDefiningOp<InstanceOp>() && hasDontTouch(v)))
       graph.getOrCreateNode(v)->invalidate();
   }
@@ -911,10 +911,6 @@ void HoistPassthroughPass::runOnOperation() {
     for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
       // llvm::errs() << "\t" << I->getDefinition() << "\n";
       if (I->isInvalid())
-        return {};
-
-      // Check on-the-fly instead of many "invalid" nodes just to record this.
-      if (!isAtomic(I->getDefinition().getType()))
         return {};
 
       // Exit early if derived from another port.  This can be hoisted
