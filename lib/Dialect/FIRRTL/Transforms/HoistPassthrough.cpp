@@ -1025,11 +1025,13 @@ void HoistPassthroughPass::runOnOperation() {
       
         auto index = destArg.getArgNumber();
         auto *igNode = instanceGraph.lookup(mod);
+#if 0
         (mlir::emitRemark(mod.getPortLocation(index)) << " replacing")
                 .attachNote(driver.source.getValue().getLoc())
             << "with value derived from this";
         destArg.dump();
         driver.source.getValue().dump();
+#endif
 
         // Replace dest in all instantiations.
         for (auto *record : igNode->uses()) {
