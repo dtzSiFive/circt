@@ -929,11 +929,15 @@ void HoistPassthroughPass::runOnOperation() {
         if (I->isInvalid())
           return {};
 
+        // Exit early if derived from another port.  This can be hoisted
+        // even if the source port (current node) itself cannot.
+
         // Search over.  Bail before inspecting edge below.
         if (I->empty()) {
           assert(std::next(I) == E);
           break;
         }
+
         // If multiple drivers, bail.
         if (!llvm::hasSingleElement(**I)) {
           assert(0 && "should be invalid or end if not single edge");
