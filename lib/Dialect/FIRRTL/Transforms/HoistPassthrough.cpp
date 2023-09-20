@@ -1059,8 +1059,6 @@ struct HoistPassthroughPass
 void HoistPassthroughPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "===- Running HoistPassthrough Pass "
                              "------------------------------------------===\n");
-  llvm::errs() << "===- Running HoistPassthrough Pass "
-                             "------------------------------------------===\n";
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 
   SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
@@ -1090,6 +1088,8 @@ void HoistPassthroughPass::runOnOperation() {
         return;
       });
 
+// #define ADA_STATS
+#ifdef ADA_STATS
   size_t totalNodes = 0;
   size_t totalEdges = 0;
   for (auto [idx, ada] : llvm::enumerate(modAnalyses)) {
@@ -1115,6 +1115,7 @@ void HoistPassthroughPass::runOnOperation() {
   llvm::errs() << "Total nodes: " << totalNodes << "\n";
   llvm::errs() << "Total edges: " << totalEdges << "\n";
   llvm::errs() << "------\n";
+#endif
 
   /// Build lookup table for Module -> index.
   DenseMap<Operation*, size_t> order;
