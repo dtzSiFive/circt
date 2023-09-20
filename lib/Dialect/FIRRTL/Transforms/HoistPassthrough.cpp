@@ -968,6 +968,8 @@ void HoistPassthroughPass::runOnOperation() {
     if (module.isPublic())
       continue;
 
+    assert(&ada == &modAnalyses[idx]);
+
     for (auto arg : module.getArguments()) {
       auto node = ada.getGraph().lookup(arg);
       if (!node)
@@ -1009,27 +1011,29 @@ void HoistPassthroughPass::runOnOperation() {
           drivers.emplace_back(connect, source);
         }
       }
+    }
 
-      auto *igNode = instanceGraph.lookup(module);
+    auto *igNode = instanceGraph.lookup(module);
 
-      for (auto *record : igNode->uses()) {
-        auto inst = cast<InstanceOp>(record->getInstance());
+    for (auto *record : igNode->uses()) {
+      auto inst = cast<InstanceOp>(record->getInstance());
 
-        auto modWithInst = record->getParent()->getModule();
-        assert(order.contains(modWithInst));
-        assert(modules[order[modWithInst]] == modWithInst);
-        auto &graphToUpdate = modAnalyses[order[modWithInst]].getGraph();
+      auto modWithInst = record->getParent()->getModule();
+      assert(order.contains(modWithInst));
+      assert(modules[order[modWithInst]] == modWithInst);
+      auto &graphToUpdate = modAnalyses[order[modWithInst]].getGraph();
 
-        for (auto &driver : drivers) {
-          auto destArg = driver.getDestBlockArg();
-          auto index = destArg.getArgNumber();
-          auto mappedDest = inst.getResult(index);
-          // Add (synthetic/derived) edge from dest to new source.
-          graphToUpdate.addEdge(FieldRef(inst.getResult(Driver::getIndex(
-                                             driver.source.getValue())),
-                                         driver.source.getFieldID()),
-                                mappedDest);
-        }
+      for (auto &driver : drivers) {
+        auto destArg = driver.getDestBlockArg();
+        auto index = destArg.getArgNumber();
+        auto mappedDest = inst.getResult(index);
+        // Add (synthetic/derived) edge from dest to new source.
+        assert(graphToUpdate.getOrCreateNode(mappedDest)->empty());
+        assert(!graphToUpdate.getOrCreateNode(mappedDest)->isInvalid());
+        graphToUpdate.addEdge(
+            FieldRef(inst.getResult(Driver::getIndex(driver.source.getValue())),
+                     driver.source.getFieldID()),
+            mappedDest);
       }
     }
   }
