@@ -542,10 +542,10 @@ struct ConnectionGraph {
     static inline NodeRef getTombstoneKey() {
       return reinterpret_cast<NodeRef>(llvm::DenseMapInfo<void *>::getTombstoneKey());
     }
-    static unsigned getHashValue(mlir::Value val) {
+    static inline unsigned getHashValue(mlir::Value val) {
       return ValInfo::getHashValue(val);
     }
-    static unsigned getHashValue(NodeRef node) {
+    static inline unsigned getHashValue(NodeRef node) {
       Value v;
       if (node == getEmptyKey())
         v = ValInfo::getEmptyKey();
@@ -558,7 +558,7 @@ struct ConnectionGraph {
       }
       return ValInfo::getHashValue(v);
     }
-    static bool isEqual(Value v, NodeRef node) {
+    static inline bool isEqual(Value v, NodeRef node) {
       if (node == getEmptyKey())
         return v == ValInfo::getEmptyKey();
       if (node == getTombstoneKey())
@@ -567,7 +567,7 @@ struct ConnectionGraph {
         return false;
       return node->getDefinition() == v;
     }
-    static bool isEqual(NodeRef lhs, NodeRef rhs) {
+    static inline bool isEqual(NodeRef lhs, NodeRef rhs) {
       if (lhs == rhs)
         return true;
       if (lhs == getEmptyKey() || lhs == getTombstoneKey())
