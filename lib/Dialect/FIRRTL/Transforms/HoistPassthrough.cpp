@@ -28,6 +28,7 @@
 #include "llvm/Support/DOTGraphTraits.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PointerIntPair.h"
+#include "mlir/IR/Threading.h"
 
 #include "mlir/Support/Timing.h"
 
@@ -600,6 +601,7 @@ public:
   auto nodes_begin() { return graph.nodes.begin(); }
   auto nodes_end() { return graph.nodes.end(); }
 
+  AtomicDriverAnalysis() = default;
   AtomicDriverAnalysis(FModuleOp mod) {
     // Add dummy node.
     // TODO: Don't have null definition, set bit?.
@@ -899,6 +901,101 @@ void HoistPassthroughPass::runOnOperation() {
           llvm::post_order(&instanceGraph),
           [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
       [](auto module) { return module; }));
+
+  auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
+    // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
+    FieldRef ref(node->getDefinition(), 0);
+    for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
+      // llvm::errs() << "\t" << I->getDefinition() << "\n";
+      if (I->isInvalid())
+        return {};
+
+      // Exit early if derived from another port.  This can be hoisted
+      // even if the source port (current node) itself cannot.
+
+      // Search over.  Bail before inspecting edge below.
+      if (I->empty()) {
+        assert(std::next(I) == E);
+        break;
+      }
+
+      // If multiple drivers, bail.
+      if (!llvm::hasSingleElement(**I)) {
+        assert(0 && "should be invalid or end if not single edge");
+        return {};
+      }
+      auto &edge = *I->begin();
+      if (I.nodeVisited(edge.first)) {
+        mlir::emitRemark(node->getDefinition().getLoc(),
+            "driver cycle found")
+          .attachNote(edge.first->getDefinition().getLoc())
+          << "already visited this value";
+        return {};
+      }
+      // llvm::errs() << "\tIndex: " << edge.second << "\n";
+      ref = FieldRef(edge.first->getDefinition(), edge.second)
+        .getSubField(ref.getFieldID());
+    }
+    // if (ref.getValue() == node->getDefinition())
+    //   return {};
+    return ref;
+  };
+
+
+   SmallVector<AtomicDriverAnalysis, 0> modAnalyses(modules.size());
+   SmallVector<SmallVector<Driver>, 0> modDrivers(modules.size());
+   mlir::parallelForEach(&getContext(), llvm::seq<size_t>(0, modules.size()), [&](size_t idx) {
+    auto mod = modules[idx];
+    modAnalyses[idx] = AtomicDriverAnalysis(mod);
+
+   auto &ada = modAnalyses[idx];
+   auto &drivers = modDrivers[idx];
+    
+      for (auto arg : mod.getArguments()) {
+        auto node = ada.getGraph().lookup(arg);
+        if (!node)
+          continue;
+        auto source = getSource(node);
+        if (source) {
+          if (source.getValue() == arg) {
+            // Input or undriven.
+            LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
+          } else {
+            LLVM_DEBUG(llvm::dbgs() << "Found driver for " << arg
+                                    << " (chain length = TODO): "
+                                    << "(no connect tracking)"
+                                    << " source: " << source.getValue() << " @ "
+                                    << source.getFieldID() << "\n");
+           if (!isa<BlockArgument>(source.getValue()))
+             continue;
+           // Create driver to re-use that code while migrating.
+          // auto d = Driver::get(arg);
+          // assert(d && "ADA found non-self source");
+          FConnectLike connect;
+          if (type_isa<RefType>(arg.getType()))
+            connect = getRefDefine(arg);
+          else
+            connect = getSingleConnectUserOf(arg);
+          if (!connect) {
+           arg.dump();
+           llvm::errs() << "source: " << source.getValue() << " @ "
+                        << source.getFieldID() << "\n";
+          }
+          assert(connect && "couldn't find connect??");
+          //if (source.getValue().getType() != arg.getType()) {
+          //  llvm::errs() << "source: " << source.getValue() << " @ "
+          //               << source.getFieldID() << "\n";
+          //  arg.dump();
+          //}
+
+          // If source is different block argument, can hoist.
+          //if (isa<BlockArgument>(source.getValue()))
+          drivers.emplace_back(connect, source);
+        }
+      }
+    }
+    return;
+   });
 
   // MustDrivenBy driverAnalysis;
   // driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
