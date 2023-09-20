@@ -765,6 +765,7 @@ public:
         auto copy = reduced.getOrCreateNode(node->getDefinition());
         if (node->isInvalid())
           copy->invalidate();
+        continue;
       }
       // TODO: Pass predicate to getSource.  Better to return a predicate source
       // than to chase to, e.g., invalid.
@@ -776,13 +777,13 @@ public:
         }
      
         // Keep, simplify.
-        llvm::errs() << "Simplifying " << node->getDefinition()
-                     << " to : " << source.getValue() << " @ "
-                     << source.getFieldID() << "\n";
+        // llvm::errs() << "Simplifying " << node->getDefinition()
+        //              << " to : " << source.getValue() << " @ "
+        //              << source.getFieldID() << "\n";
         reduced.addEdge(source, node->getDefinition());
       } else {
         // Origin is not kept, invalid.
-        llvm::errs() << "Invalidating " << node->getDefinition();
+        // llvm::errs() << "Invalidating " << node->getDefinition();
         reduced.getOrCreateNode(node->getDefinition())->invalidate();
       }
     }
