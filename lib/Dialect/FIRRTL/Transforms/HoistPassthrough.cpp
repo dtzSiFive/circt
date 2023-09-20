@@ -991,11 +991,11 @@ void HoistPassthroughPass::runOnOperation() {
                         << source.getFieldID() << "\n";
           }
           assert(connect && "couldn't find connect??");
-          if (source.getValue().getType() != arg.getType()) {
-            llvm::errs() << "source: " << source.getValue() << " @ "
-                         << source.getFieldID() << "\n";
-            arg.dump();
-          }
+          //if (source.getValue().getType() != arg.getType()) {
+          //  llvm::errs() << "source: " << source.getValue() << " @ "
+          //               << source.getFieldID() << "\n";
+          //  arg.dump();
+          //}
 
           // If source is different block argument, can hoist.
           if (isa<BlockArgument>(source.getValue()))
