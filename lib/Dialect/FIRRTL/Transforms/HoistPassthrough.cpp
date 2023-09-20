@@ -1019,8 +1019,13 @@ void HoistPassthroughPass::runOnOperation() {
       {
         auto destArg = driver.getDestBlockArg();
         auto mod = cast<firrtl::FModuleLike>(destArg.getOwner()->getParentOp());
+
+      
         auto index = destArg.getArgNumber();
         auto *igNode = instanceGraph.lookup(mod);
+        (mlir::emitRemark(mod.getPortLocation(index)) << " replacing")
+                .attachNote(driver.source.getValue().getLoc())
+            << "with value derived from this";
 
         // Replace dest in all instantiations.
         for (auto *record : igNode->uses()) {
