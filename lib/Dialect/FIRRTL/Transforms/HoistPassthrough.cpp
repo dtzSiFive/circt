@@ -428,6 +428,7 @@ namespace {
 class FieldRefs {
   /// Every block argument and result -> FieldRef.
   /// Built during walk, cached for re-use and easier querying.
+  /// TODO: DenseSet + custom Info to avoid storing Value 2x?
   DenseMap<Value, FieldRef> valToFieldRef;
 
 public:
