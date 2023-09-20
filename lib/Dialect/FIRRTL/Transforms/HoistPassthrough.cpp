@@ -775,6 +775,8 @@ private:
      refs.clear();
   };
 };
+static_assert(std::is_move_assignable_v<AtomicDriverAnalysis>);
+static_assert(std::is_move_constructible_v<AtomicDriverAnalysis>);
 
 
 } // end anonymous namespace
