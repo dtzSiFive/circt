@@ -534,6 +534,8 @@ struct ConnectionGraph {
   using NodeRef = Node::NodeRef;
   using Edge = Node::Edge;
 
+  /// Custom DenseMapInfo for looking up NodeRef's by mlir::Value.
+  /// Requires NodeRef's to be valid to dereference if not empty/tombstone.
   struct NodeValueInfo {
     using ValInfo = DenseMapInfo<mlir::Value>;
     static inline NodeRef getEmptyKey() {
@@ -542,9 +544,13 @@ struct ConnectionGraph {
     static inline NodeRef getTombstoneKey() {
       return reinterpret_cast<NodeRef>(llvm::DenseMapInfo<void *>::getTombstoneKey());
     }
+
+    /// Forward to Value's hashing.
     static inline unsigned getHashValue(mlir::Value val) {
       return ValInfo::getHashValue(val);
     }
+
+    /// Hash as-if is underlying definition, so val/node are hash-equivalent.
     static inline unsigned getHashValue(NodeRef node) {
       Value v;
       if (node == getEmptyKey())
@@ -558,6 +564,8 @@ struct ConnectionGraph {
       }
       return ValInfo::getHashValue(v);
     }
+
+    /// Equality comparison for Value and NodeRef.
     static inline bool isEqual(Value v, NodeRef node) {
       if (node == getEmptyKey())
         return v == ValInfo::getEmptyKey();
@@ -567,6 +575,8 @@ struct ConnectionGraph {
         return false;
       return node->getDefinition() == v;
     }
+
+    /// Equality comparison between NodeRef's.
     static inline bool isEqual(NodeRef lhs, NodeRef rhs) {
       if (lhs == rhs)
         return true;
@@ -582,11 +592,13 @@ struct ConnectionGraph {
     }
   };
 
-  // Lookup node for given value.
-  // Node is basically value + edges, reconsider datastructure.
+  /// Set of nodes, searchable by Value.
+  /// (DenseMap<Value, NodeRef>).
+  /// Might make sense to just put nodes in here entirely,
+  /// especially if want to be able to delete nodes --
+  /// presently can't remove from storage without invalidating.
   DenseSet<NodeRef, NodeValueInfo> nodeSet;
 
-  // SpecificBumpPtrAllocator<Node>
   std::deque<Node> nodes;
 
   NodeRef lookup(Value v) const {
@@ -945,19 +957,13 @@ void HoistPassthroughPass::runOnOperation() {
                              "------------------------------------------===\n");
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 
-
-  // TODO: Compute ADA's in parallel, walk IG post-order without mutating IR,
-  // adding new edges (TODO: track these as synthetic/derived information) and
-  // after complete walk, rewrite all modules in parallel.
-
-  // For now, do this one module at a time.
-
   SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(
       llvm::map_range(
           llvm::post_order(&instanceGraph),
           [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
       [](auto module) { return module; }));
 
+  // TODO: Refactor to free function.
   auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
     // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
     FieldRef ref(node->getDefinition(), 0);
@@ -968,6 +974,8 @@ void HoistPassthroughPass::runOnOperation() {
 
       // Exit early if derived from another port.  This can be hoisted
       // even if the source port (current node) itself cannot.
+      if (isa<BlockArgument>(I->getDefinition()))
+        break;
 
       // Search over.  Bail before inspecting edge below.
       if (I->empty()) {
@@ -1004,10 +1012,17 @@ void HoistPassthroughPass::runOnOperation() {
 
         // Per-module analysis, connectivity graph.
         modAnalyses[idx] = AtomicDriverAnalysis(mod);
+        // Consider: Walk this now, grab what is needed
+        // ({port,instance result}<--->{port, instance result} connectivity, simplified),
+        // to keep peak memory usage down.  And of course either trim the ADA
+        // or drop it in favor of the distilled analysis information.
+
+        // (XXX: Untested whether this is sane to call from threads)
+        // llvm::WriteGraph(&ada, module.getName());
         return;
       });
 
-  SmallVector<SmallVector<Driver>, 0> modDrivers(modules.size());
+  /// Build lookup table for Module -> index.
   DenseMap<Operation*, size_t> order;
   {
     size_t idx = 0;
@@ -1015,7 +1030,12 @@ void HoistPassthroughPass::runOnOperation() {
       order[module] = idx++;
   }
 
-  // Compute drivers bottom-up.  Add fake edges to graphs to record passthroughs in parents.
+
+  // Compute drivers bottom-up.  Add synthetic edges to graphs of instantiating
+  // modules to record passthroughs in parents that will be hoisted.
+  // Probably can drop most of the Driver code -- we just need a simple dest + source
+  // and either find the connections during patch-up or just always inject wires.
+  SmallVector<SmallVector<Driver>, 0> modDrivers(modules.size());
   for (auto [idx, module, ada, drivers] :
        llvm::enumerate(modules, modAnalyses, modDrivers)) {
     // TODO: Public means can't reason down into, or remove ports.
@@ -1035,15 +1055,14 @@ void HoistPassthroughPass::runOnOperation() {
           // Input or undriven.
           LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
         } else {
+          // XXX: $#@%@#$% clang-format likes to bork nice LLVM_DEBUG(...) bits :(.
           //                          << " (chain length = TODO): "
           //            << "(no connect tracking)"
           //            << " source: " << source.getValue() << " @ "
           //            << source.getFieldID() << "\n");
           if (!isa<BlockArgument>(source.getValue()))
             continue;
-          // Create driver to re-use that code while migrating.
-          // auto d = Driver::get(arg);
-          // assert(d && "ADA found non-self source");
+
           FConnectLike connect;
           if (type_isa<RefType>(arg.getType()))
             connect = getRefDefine(arg);
@@ -1068,8 +1087,9 @@ void HoistPassthroughPass::runOnOperation() {
       }
     }
 
+    /// Update graphs for instantiating modules with passthrough information.
+    /// We want to complete all analysis before rewriting.
     auto *igNode = instanceGraph.lookup(module);
-
     for (auto *record : igNode->uses()) {
       auto inst = cast<InstanceOp>(record->getInstance());
 
