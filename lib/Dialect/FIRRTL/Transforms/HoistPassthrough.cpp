@@ -752,7 +752,7 @@ public:
       keepSet.insert(edge.first);
 
     for (auto &node : graph.nodes) {
-      if (predicate(node.getDefinition()))
+      if (&node != modEntryNode && predicate(node.getDefinition()))
         keepSet.insert(&node);
     }
 
