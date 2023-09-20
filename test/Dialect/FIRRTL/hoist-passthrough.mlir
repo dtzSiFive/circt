@@ -397,12 +397,12 @@ firrtl.circuit "SymIntermediate" {
 
 // -----
 
-// Reject if symbol on instance?
+// Symbol on instance means keep symbol, not dontTouch its ports.
 
 // CHECK-LABEL: SymInstance
 firrtl.circuit "SymInstance" {
   firrtl.module private @Sink(in %in: !firrtl.uint<1>) {}
-  // CHECK: @UWire(in %in: !firrtl.uint<1>, out %out
+  // CHECK: @UWire(in %in: !firrtl.uint<1>)
   firrtl.module private @UWire(in %in: !firrtl.uint<1>,
                                out %out : !firrtl.uint<1>) {
     %sink_in = firrtl.instance sink sym @blocker @Sink(in in: !firrtl.uint<1>)
