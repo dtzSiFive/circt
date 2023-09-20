@@ -402,7 +402,7 @@ firrtl.circuit "SymIntermediate" {
 // CHECK-LABEL: SymInstance
 firrtl.circuit "SymInstance" {
   firrtl.module private @Sink(in %in: !firrtl.uint<1>) {}
-  // CHECK: @UWire(in %in: !firrtl.uint<1>, out %out) {
+  // CHECK: @UWire(in %in: !firrtl.uint<1>, out %out
   firrtl.module private @UWire(in %in: !firrtl.uint<1>,
                                out %out : !firrtl.uint<1>) {
     %sink_in = firrtl.instance sink sym @blocker @Sink(in in: !firrtl.uint<1>)
