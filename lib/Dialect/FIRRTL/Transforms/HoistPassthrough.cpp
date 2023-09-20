@@ -761,10 +761,20 @@ public:
 
     ConnectionGraph reduced;
     for (auto *node : keep) {
+      if (node->empty() || node->isInvalid()) {
+        auto copy = reduced.getOrCreateNode(node->getDefinition());
+        if (node->isInvalid())
+          copy->invalidate();
+      }
       // TODO: Pass predicate to getSource.  Better to return a predicate source
       // than to chase to, e.g., invalid.
       auto source = getSource(node);
       if (source && keepSet.contains(graph.lookup(source.getValue()))) {
+        if (source.getValue() == node->getDefinition()) {
+          assert(0 && "cycle?");
+          continue;
+        }
+     
         // Keep, simplify.
         llvm::errs() << "Simplifying " << node->getDefinition()
                      << " to : " << source.getValue() << " @ "
