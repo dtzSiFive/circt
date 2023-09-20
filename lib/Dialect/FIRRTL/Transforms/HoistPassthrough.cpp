@@ -747,25 +747,23 @@ public:
   /// TODO: Probably belongs on the ConnectionGraph, but maybe is a bit too specific.
   template <typename C>
   void trim(C &&predicate) {
-    DenseSet<ConnectionGraph::NodeRef> keepSet(modEntryNode->begin(),
-                                               modEntryNode->end());
+    DenseSet<ConnectionGraph::NodeRef> keepSet;
+    for (auto &edge : *modEntryNode)
+      keepSet.insert(edge.first);
+
     for (auto &node : graph.nodes) {
       if (predicate(node.getDefinition()))
         keepSet.insert(&node);
     }
 
     SmallVector<ConnectionGraph::NodeRef> keep(keepSet.begin(), keepSet.end());
-    keepSet.clear();
 
     ConnectionGraph reduced;
     for (auto *node : keep) {
       // TODO: Pass predicate to getSource.  Better to return a predicate source
       // than to chase to, e.g., invalid.
       auto source = getSource(node);
-      if (source &&
-          predicate(
-              source
-                  .getValue())) { // keepSet.contains(nodeFor(source.getValue()))
+      if (source && keepSet.contains(graph.lookup(source.getValue()))) {
         // Keep, simplify.
         reduced.addEdge(source, node->getDefinition());
       } else {
