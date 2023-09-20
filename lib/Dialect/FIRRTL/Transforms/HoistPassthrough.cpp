@@ -695,6 +695,7 @@ private:
                     return success();
                   })
                   .Case<SubaccessOp>([&](SubaccessOp access) {
+                    // Conservatively invalidate roots reaching subaccess.
                     invalidate(refs.getFor(access.getInput()).getValue());
                     addLazyRoot(access, true);
                     return success();
