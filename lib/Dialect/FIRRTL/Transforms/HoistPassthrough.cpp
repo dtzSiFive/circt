@@ -30,8 +30,6 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "mlir/IR/Threading.h"
 
-// #include "mlir/Support/Timing.h"
-
 #include <deque>
 
 #define DEBUG_TYPE "firrtl-hoist-passthrough"
@@ -338,97 +336,12 @@ Value HWDriver::remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder) {
 }
 
 //===----------------------------------------------------------------------===//
-// MustDrivenBy analysis.
+/// FieldRefs Cache
 //===----------------------------------------------------------------------===//
 namespace {
-/// Driver analysis, tracking values that "must be driven" by the specified
-/// source (+fieldID), along with final complete driving connect.
-class MustDrivenBy {
-public:
-  MustDrivenBy() = default;
-  MustDrivenBy(FModuleOp mod) { run(mod); }
-
-  /// Get direct driver, if computed, for the specified value.
-  Driver getDriverFor(Value v) const { return driverMap.lookup(v); }
-
-  /// Get combined driver for the specified value.
-  /// Walks the driver "graph" from the value to its ultimate source.
-  Driver getCombinedDriverFor(Value v) const {
-    Driver driver = driverMap.lookup(v);
-    if (!driver)
-      return driver;
-
-    // Chase and collapse.
-    Driver cur = driver;
-    size_t len = 1;
-    SmallPtrSet<Value, 8> seen;
-    while ((cur = driverMap.lookup(cur.source.getValue()))) {
-      // If re-encounter same value, bail.
-      if (!seen.insert(cur.source.getValue()).second)
-        return {};
-      driver.source = cur.source.getSubField(driver.source.getFieldID());
-      ++len;
-    }
-    (void)len;
-    llvm::dbgs() << "Found driver for " << v << " (chain length = " << len
-                 << "): " << driver << "\n";
-    return driver;
-  }
-
-  /// Analyze the given module's ports and chase simple storage.
-  void run(FModuleOp mod) {
-    SmallVector<Value, 64> worklist(mod.getArguments());
-
-    DenseSet<Value> processed;
-    processed.insert(worklist.begin(), worklist.end());
-    while (!worklist.empty()) {
-      auto val = worklist.pop_back_val();
-      auto driver = ignoreHWDrivers ? RefDriver::get(val) : Driver::get(val);
-      driverMap.insert({val, driver});
-      if (!driver)
-        continue;
-
-      auto sourceVal = driver.source.getValue();
-
-      // If already enqueued, ignore.
-      if (!processed.insert(sourceVal).second)
-        continue;
-
-      // Only chase through atomic values for now.
-      // Here, atomic implies must be driven entirely.
-      // This is true for HW types, and is true for RefType's because
-      // while they can be indexed into, only RHS can have indexing.
-      if (hw::FieldIdImpl::getMaxFieldID(sourceVal.getType()) != 0)
-        continue;
-
-      // Only through Wires, block arguments, instance results.
-      if (!isa<BlockArgument>(sourceVal) &&
-          !isa_and_nonnull<WireOp, InstanceOp>(sourceVal.getDefiningOp()))
-        continue;
-
-      worklist.push_back(sourceVal);
-    }
-  }
-
-  /// Clear out analysis results and storage.
-  void clear() { driverMap.clear(); }
-
-  /// Configure whether HW signals are analyzed.
-  void setIgnoreHWDrivers(bool ignore) { ignoreHWDrivers = ignore; }
-
-private:
-  /// Map of values to their computed direct must-drive source.
-  DenseMap<Value, Driver> driverMap;
-  bool ignoreHWDrivers = false;
-};
-} // end anonymous namespace
-
-namespace {
-/// FieldRef cache.
 class FieldRefs {
   /// Every block argument and result -> FieldRef.
   /// Built during walk, cached for re-use and easier querying.
-  /// TODO: DenseSet + custom Info to avoid storing Value 2x?
   DenseMap<Value, FieldRef> valToFieldRef;
 
 public:
@@ -501,6 +414,10 @@ static bool isAtomic(Type type) {
       ref.getValue().getType(), ref.getFieldID()));
 }
 
+//===----------------------------------------------------------------------===//
+/// Connection graph.
+/// Designed primarily for tracking entirely-driven connections.
+//===----------------------------------------------------------------------===//
 namespace {
 /// Simple connectivity graph.
 struct ConnectionGraph {
@@ -669,51 +586,53 @@ struct llvm::GraphTraits<ConnectionGraph::Node*> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+/// AtomicDriverAnalysis
+/// Analyze modules and build graph of "atomic" connectivity.
+//===----------------------------------------------------------------------===//
+
 /// Find "source".  TODO: Clean up, less magic.
 static FieldRef getSource(ConnectionGraph::NodeRef node) {
-    // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
-    FieldRef ref(node->getDefinition(), 0);
-    for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
-      // llvm::errs() << "\t" << I->getDefinition() << "\n";
-      if (I->isInvalid())
-        return {};
+  // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
+  FieldRef ref(node->getDefinition(), 0);
+  for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
+    // llvm::errs() << "\t" << I->getDefinition() << "\n";
+    if (I->isInvalid())
+      return {};
 
-      // Exit early if derived from another port.  This can be hoisted
-      // even if the source port (current node) itself cannot.
-      // TODO: Restore, but handle better.
-      // TODO: Customization point for early exit, parameter/argument?
-      // if (isa<BlockArgument>(I->getDefinition()) && &*I != node)
-      //   break;
+    // Exit early if derived from another port.  This can be hoisted
+    // even if the source port (current node) itself cannot.
+    // TODO: Restore, but handle better.
+    // TODO: Customization point for early exit, parameter/argument?
+    // if (isa<BlockArgument>(I->getDefinition()) && &*I != node)
+    //   break;
 
-      // Search over.  Bail before inspecting edge below.
-      if (I->empty()) {
-        assert(std::next(I) == E);
-        break;
-      }
-
-      // If multiple drivers, bail.
-      if (!llvm::hasSingleElement(**I)) {
-        assert(0 && "should be invalid or end if not single edge");
-        return {};
-      }
-      auto &edge = *I->begin();
-      if (I.nodeVisited(edge.first)) {
-        mlir::emitRemark(node->getDefinition().getLoc(),
-            "driver cycle found")
-          .attachNote(edge.first->getDefinition().getLoc())
-          << "already visited this value";
-        return {};
-      }
-      // llvm::errs() << "\tIndex: " << edge.second << "\n";
-      ref = FieldRef(edge.first->getDefinition(), edge.second)
-        .getSubField(ref.getFieldID());
+    // Search over.  Bail before inspecting edge below.
+    if (I->empty()) {
+      assert(std::next(I) == E);
+      break;
     }
-    // if (ref.getValue() == node->getDefinition())
-    //   return {};
-    return ref;
-  };
 
-
+    // If multiple drivers, bail.
+    if (!llvm::hasSingleElement(**I)) {
+      assert(0 && "should be invalid or end if not single edge");
+      return {};
+    }
+    auto &edge = *I->begin();
+    if (I.nodeVisited(edge.first)) {
+      mlir::emitRemark(node->getDefinition().getLoc(), "driver cycle found")
+              .attachNote(edge.first->getDefinition().getLoc())
+          << "already visited this value";
+      return {};
+    }
+    // llvm::errs() << "\tIndex: " << edge.second << "\n";
+    ref = FieldRef(edge.first->getDefinition(), edge.second)
+              .getSubField(ref.getFieldID());
+  }
+  // if (ref.getValue() == node->getDefinition())
+  //   return {};
+  return ref;
+};
 
 namespace {
 
@@ -1069,7 +988,6 @@ void HoistPassthroughPass::runOnOperation() {
           [](auto *node) { return dyn_cast<FModuleOp>(*node->getModule()); }),
       [](auto module) { return module; }));
 
-  // TODO: Refactor to free function.
   SmallVector<AtomicDriverAnalysis, 0> modAnalyses(modules.size());
   mlir::parallelForEach(
       &getContext(), llvm::seq<size_t>(0, modules.size()), [&](size_t idx) {
@@ -1077,8 +995,7 @@ void HoistPassthroughPass::runOnOperation() {
 
         // Per-module analysis, connectivity graph.
         modAnalyses[idx] = AtomicDriverAnalysis(mod);
-        // Consider: Walk this now, grab what is needed
-        // ({port,instance result}<--->{port, instance result} connectivity, simplified),
+
         modAnalyses[idx].trim([&](Value val) {
           return isa<BlockArgument>(val) || val.getDefiningOp<InstanceOp>();
         });
