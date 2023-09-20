@@ -978,6 +978,8 @@ void HoistPassthroughPass::runOnOperation() {
                                     << "(no connect tracking)"
                                     << " source: " << source.getValue() << " @ "
                                     << source.getFieldID() << "\n");
+           if (!isa<BlockArgument>(source.getValue()))
+             continue;
            // Create driver to re-use that code while migrating.
           // auto d = Driver::get(arg);
           // assert(d && "ADA found non-self source");
@@ -999,8 +1001,8 @@ void HoistPassthroughPass::runOnOperation() {
           //}
 
           // If source is different block argument, can hoist.
-          if (isa<BlockArgument>(source.getValue()))
-            drivers.emplace_back(connect, source);
+          //if (isa<BlockArgument>(source.getValue()))
+          drivers.emplace_back(connect, source);
         }
       }
     }
