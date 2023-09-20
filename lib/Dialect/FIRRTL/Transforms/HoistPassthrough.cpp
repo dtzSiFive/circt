@@ -29,6 +29,8 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PointerIntPair.h"
 
+#include "mlir/Support/Timing.h"
+
 #include <deque>
 
 #define DEBUG_TYPE "firrtl-hoist-passthrough"
@@ -901,6 +903,8 @@ void HoistPassthroughPass::runOnOperation() {
   // MustDrivenBy driverAnalysis;
   // driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
+  mlir::TimingScope ts;
+
   // For each module (PO)...
   for (auto module : modules) {
     // TODO: Public means can't reason down into, or remove ports.
@@ -913,13 +917,16 @@ void HoistPassthroughPass::runOnOperation() {
     // What ports to delete.
     // Hoisted drivers of output ports will be deleted.
     BitVector deadPorts(module.getNumPorts());
+    auto mts = ts.nest(module.getNameAttr());
 
     // Analyze all ports using current IR.
     // driverAnalysis.clear();
     // driverAnalysis.run(module);
 
     LLVM_DEBUG(llvm::dbgs() << "Analyzing: " << module.getName() << "\n");
+    auto analysisTs = mts.nest("driver analysis");
     AtomicDriverAnalysis ada(module);
+    analysisTs.stop();
 
     // llvm::WriteGraph(&ada, module.getName());
 
@@ -962,6 +969,7 @@ void HoistPassthroughPass::runOnOperation() {
       return ref;
     };
 
+    auto toDriverTS = mts.nest("to drivers");
     SmallVector<Driver> drivers;
       for (auto arg : module.getArguments()) {
         auto node = ada.getGraph().lookup(arg);
@@ -1006,6 +1014,7 @@ void HoistPassthroughPass::runOnOperation() {
         }
       }
     }
+    toDriverTS.stop();
 
     // auto notNullAndCanHoist = [](const Driver &d) -> bool {
     //   return d && d.canHoist();
@@ -1020,6 +1029,8 @@ void HoistPassthroughPass::runOnOperation() {
     //     notNullAndCanHoist));
 
     // 2. Rematerialize must-driven ports at instantiation sites.
+
+    auto rewriteTS = mts.nest("rewrite");
 
     // Do this first, keep alive Driver state pointing to module.
     for (auto &driver : drivers) {
