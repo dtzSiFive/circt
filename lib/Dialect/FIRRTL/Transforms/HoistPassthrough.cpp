@@ -546,16 +546,16 @@ struct ConnectionGraph {
 
   NodeRef getOrCreateNode(Value v) {
     // Expensive sanity check.  Consider moving to an expensive-checks-only verify().
-#ifndef NDEBUG
-    auto ref = getFieldRefFromValue(v);
-    if (ref.getValue() != v) {
-      ref.getValue().dump();
-      llvm::errs() << "fieldID: " << ref.getFieldID() << "\n";
-      v.dump();
-    }
-    assert(ref.getValue() == v);
-    assert(ref.getFieldID() == 0);
-#endif
+// #ifndef NDEBUG
+//     auto ref = getFieldRefFromValue(v);
+//     if (ref.getValue() != v) {
+//       ref.getValue().dump();
+//       llvm::errs() << "fieldID: " << ref.getFieldID() << "\n";
+//       v.dump();
+//     }
+//     assert(ref.getValue() == v);
+//     assert(ref.getFieldID() == 0);
+// #endif
     auto [it, inserted] = valToNode.try_emplace(v, nullptr);
     if (!inserted)
       return it->second;
