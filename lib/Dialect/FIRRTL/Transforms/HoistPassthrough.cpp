@@ -1016,6 +1016,7 @@ void HoistPassthroughPass::runOnOperation() {
 
         auto modWithInst = record->getParent()->getModule();
         assert(order.contains(modWithInst));
+        assert(modules[order[modWithInst]] == modWithInst);
         auto &graphToUpdate = modAnalyses[order[modWithInst]].getGraph();
 
         for (auto &driver : drivers) {
