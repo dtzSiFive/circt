@@ -959,6 +959,79 @@ void HoistPassthroughPass::runOnOperation() {
       order[module] = idx++;
   }
 
+  // Compute drivers bottom-up.  Add fake edges to graphs to record passthroughs in parents.
+  for (auto [idx, module, ada, drivers] :
+       llvm::enumerate(modules, modAnalyses, modDrivers)) {
+    // TODO: Public means can't reason down into, or remove ports.
+    // Does not mean cannot clone out wires or optimize w.r.t its contents.
+    if (module.isPublic())
+      continue;
+
+    for (auto arg : module.getArguments()) {
+      auto node = ada.getGraph().lookup(arg);
+      if (!node)
+        continue;
+      auto source = getSource(node);
+      if (source) {
+        if (source.getValue() == arg) {
+          // Input or undriven.
+          LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
+        } else {
+          //                          << " (chain length = TODO): "
+          //            << "(no connect tracking)"
+          //            << " source: " << source.getValue() << " @ "
+          //            << source.getFieldID() << "\n");
+          if (!isa<BlockArgument>(source.getValue()))
+            continue;
+          // Create driver to re-use that code while migrating.
+          // auto d = Driver::get(arg);
+          // assert(d && "ADA found non-self source");
+          FConnectLike connect;
+          if (type_isa<RefType>(arg.getType()))
+            connect = getRefDefine(arg);
+          else
+            connect = getSingleConnectUserOf(arg);
+          if (!connect) {
+            arg.dump();
+            llvm::errs() << "source: " << source.getValue() << " @ "
+                         << source.getFieldID() << "\n";
+          }
+          assert(connect && "couldn't find connect??");
+          // if (source.getValue().getType() != arg.getType()) {
+          //   llvm::errs() << "source: " << source.getValue() << " @ "
+          //                << source.getFieldID() << "\n";
+          //   arg.dump();
+          // }
+
+          // If source is different block argument, can hoist.
+          // if (isa<BlockArgument>(source.getValue()))
+          drivers.emplace_back(connect, source);
+        }
+      }
+
+      auto *igNode = instanceGraph.lookup(module);
+
+      for (auto *record : igNode->uses()) {
+        auto inst = cast<InstanceOp>(record->getInstance());
+
+        auto modWithInst = record->getParent()->getModule();
+        assert(order.contains(modWithInst));
+        auto &graphToUpdate = modAnalyses[order[modWithInst]].getGraph();
+
+        for (auto &driver : drivers) {
+          auto destArg = driver.getDestBlockArg();
+          auto index = destArg.getArgNumber();
+          auto mappedDest = inst.getResult(index);
+          // Add (synthetic/derived) edge from dest to new source.
+          graphToUpdate.addEdge(FieldRef(inst.getResult(Driver::getIndex(
+                                             driver.source.getValue())),
+                                         driver.source.getFieldID()),
+                                mappedDest);
+        }
+      }
+    }
+  }
+
   // MustDrivenBy driverAnalysis;
   // driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
@@ -1035,48 +1108,48 @@ void HoistPassthroughPass::runOnOperation() {
 
     // auto toDriverTS = mts.nest("to drivers");
     // SmallVector<Driver> drivers;
-    for (auto arg : module.getArguments()) {
-      auto node = ada.getGraph().lookup(arg);
-      if (!node)
-        continue;
-      auto source = getSource(node);
-      if (source) {
-        if (source.getValue() == arg) {
-          // Input or undriven.
-          LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
-        } else {
-          //                          << " (chain length = TODO): "
-          //            << "(no connect tracking)"
-          //            << " source: " << source.getValue() << " @ "
-          //            << source.getFieldID() << "\n");
-          if (!isa<BlockArgument>(source.getValue()))
-            continue;
-          // Create driver to re-use that code while migrating.
-          // auto d = Driver::get(arg);
-          // assert(d && "ADA found non-self source");
-          FConnectLike connect;
-          if (type_isa<RefType>(arg.getType()))
-            connect = getRefDefine(arg);
-          else
-            connect = getSingleConnectUserOf(arg);
-          if (!connect) {
-           arg.dump();
-           llvm::errs() << "source: " << source.getValue() << " @ "
-                        << source.getFieldID() << "\n";
-          }
-          assert(connect && "couldn't find connect??");
-          //if (source.getValue().getType() != arg.getType()) {
-          //  llvm::errs() << "source: " << source.getValue() << " @ "
-          //               << source.getFieldID() << "\n";
-          //  arg.dump();
-          //}
+    /// for (auto arg : module.getArguments()) {
+    ///   auto node = ada.getGraph().lookup(arg);
+    ///   if (!node)
+    ///     continue;
+    ///   auto source = getSource(node);
+    ///   if (source) {
+    ///     if (source.getValue() == arg) {
+    ///       // Input or undriven.
+    ///       LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
+    ///     } else {
+    ///       //                          << " (chain length = TODO): "
+    ///       //            << "(no connect tracking)"
+    ///       //            << " source: " << source.getValue() << " @ "
+    ///       //            << source.getFieldID() << "\n");
+    ///       if (!isa<BlockArgument>(source.getValue()))
+    ///         continue;
+    ///       // Create driver to re-use that code while migrating.
+    ///       // auto d = Driver::get(arg);
+    ///       // assert(d && "ADA found non-self source");
+    ///       FConnectLike connect;
+    ///       if (type_isa<RefType>(arg.getType()))
+    ///         connect = getRefDefine(arg);
+    ///       else
+    ///         connect = getSingleConnectUserOf(arg);
+    ///       if (!connect) {
+    ///        arg.dump();
+    ///        llvm::errs() << "source: " << source.getValue() << " @ "
+    ///                     << source.getFieldID() << "\n";
+    ///       }
+    ///       assert(connect && "couldn't find connect??");
+    ///       //if (source.getValue().getType() != arg.getType()) {
+    ///       //  llvm::errs() << "source: " << source.getValue() << " @ "
+    ///       //               << source.getFieldID() << "\n";
+    ///       //  arg.dump();
+    ///       //}
 
-          // If source is different block argument, can hoist.
-          //if (isa<BlockArgument>(source.getValue()))
-          drivers.emplace_back(connect, source);
-        }
-      }
-    }
+    ///       // If source is different block argument, can hoist.
+    ///       //if (isa<BlockArgument>(source.getValue()))
+    ///       drivers.emplace_back(connect, source);
+    ///     }
+    ///   }
+    /// }
     // toDriverTS.stop();
 
     // auto notNullAndCanHoist = [](const Driver &d) -> bool {
@@ -1123,17 +1196,6 @@ void HoistPassthroughPass::runOnOperation() {
           mappedDest.replaceAllUsesWith(driver.remat(
               [&inst](size_t index) { return inst.getResult(index); },
               builder));
-          auto modWithInst = record->getParent()->getModule();
-          assert(order.contains(modWithInst));
-          auto &graphToUpdate = modAnalyses[order[modWithInst]].getGraph();
-          // Add edge from dest to new source.
-          // Note that this is not right, and uses of dest now already use remat'd equiv.
-          // Also this is bad and you should feel bad ;).
-          // auto destNode = graphToUpdate.getOrCreateNode(mappedDest);
-          graphToUpdate.addEdge(FieldRef(inst.getResult(Driver::getIndex(
-                                             driver.source.getValue())),
-                                         driver.source.getFieldID()),
-                                mappedDest);
         }
         // The driven port has no external users, will soon be dead.
         deadPort = index;
