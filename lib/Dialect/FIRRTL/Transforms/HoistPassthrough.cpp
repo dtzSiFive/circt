@@ -903,7 +903,10 @@ void HoistPassthroughPass::runOnOperation() {
   // MustDrivenBy driverAnalysis;
   // driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
-  mlir::TimingScope ts;
+  mlir::DefaultTimingManager tm;
+  tm.setEnabled(true);
+  tm.setOutput(llvm::errs());
+  auto ts = tm.getRootScope();
 
   // For each module (PO)...
   for (auto module : modules) {
@@ -1108,6 +1111,7 @@ void HoistPassthroughPass::runOnOperation() {
     numUTurnsHoisted += deadPorts.count();
   }
   markAnalysesPreserved<InstanceGraph>();
+
 }
 
 /// This is the pass constructor.
