@@ -1026,8 +1026,10 @@ void HoistPassthroughPass::runOnOperation() {
   size_t totalNodes = 0;
   for (auto [idx, ada] : llvm::enumerate(modAnalyses)) {
     size_t maxEdges = 0;
+    size_t numEdges = 0;
     size_t invalids = 0;
     for (auto &node : ada.getGraph().nodes) {
+      numEdges += node.size();
       maxEdges = std::max(maxEdges, node.size());
       if (node.isInvalid())
         ++invalids;
@@ -1035,6 +1037,7 @@ void HoistPassthroughPass::runOnOperation() {
     llvm::errs() << "Analysis for " << modules[idx].getNameAttr()
                  << "\n\tnode count: " << ada.getGraph().nodes.size()
                  << "\n\tmax incidence: " << maxEdges
+                 << "\n\tedges: " << numEdges
                  << "\n\tinvalid nodes: " << invalids << "\n";
   }
 
