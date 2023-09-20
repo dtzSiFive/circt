@@ -679,8 +679,9 @@ static FieldRef getSource(ConnectionGraph::NodeRef node) {
 
       // Exit early if derived from another port.  This can be hoisted
       // even if the source port (current node) itself cannot.
-      if (isa<BlockArgument>(I->getDefinition()))
-        break;
+      // TODO: Restore, but handle better.
+      // if (isa<BlockArgument>(I->getDefinition()) && &*I != node)
+      //   break;
 
       // Search over.  Bail before inspecting edge below.
       if (I->empty()) {
