@@ -534,18 +534,69 @@ struct ConnectionGraph {
   using NodeRef = Node::NodeRef;
   using Edge = Node::Edge;
 
+  struct NodeValueInfo {
+    using ValInfo = DenseMapInfo<mlir::Value>;
+    static inline NodeRef getEmptyKey() {
+      return reinterpret_cast<NodeRef>(llvm::DenseMapInfo<void *>::getEmptyKey());
+    }
+    static inline NodeRef getTombstoneKey() {
+      return reinterpret_cast<NodeRef>(llvm::DenseMapInfo<void *>::getTombstoneKey());
+    }
+    static unsigned getHashValue(mlir::Value val) {
+      return ValInfo::getHashValue(val);
+    }
+    static unsigned getHashValue(NodeRef node) {
+      Value v;
+      if (node == getEmptyKey())
+        v = ValInfo::getEmptyKey();
+      else if (node == getTombstoneKey())
+        v = ValInfo::getTombstoneKey();
+      else {
+        v = node->getDefinition();
+        assert(v != ValInfo::getEmptyKey());
+        assert(v != ValInfo::getTombstoneKey());
+      }
+      return ValInfo::getHashValue(v);
+    }
+    static bool isEqual(Value v, NodeRef node) {
+      if (node == getEmptyKey())
+        return v == ValInfo::getEmptyKey();
+      if (node == getTombstoneKey())
+        return v == ValInfo::getTombstoneKey();
+      if (v == ValInfo::getEmptyKey() || v == ValInfo::getTombstoneKey())
+        return false;
+      return node->getDefinition() == v;
+    }
+    static bool isEqual(NodeRef lhs, NodeRef rhs) {
+      if (lhs == rhs)
+        return true;
+      if (lhs == getEmptyKey() || lhs == getTombstoneKey())
+        return false;
+      if (rhs == getEmptyKey() || rhs == getTombstoneKey())
+        return false;
+     assert(lhs->getDefinition() != ValInfo::getEmptyKey());
+     assert(lhs->getDefinition() != ValInfo::getTombstoneKey());
+     assert(rhs->getDefinition() != ValInfo::getEmptyKey());
+     assert(rhs->getDefinition() != ValInfo::getTombstoneKey());
+     return lhs->getDefinition() == rhs->getDefinition();
+    }
+  };
+
   // Lookup node for given value.
   // Node is basically value + edges, reconsider datastructure.
-  DenseMap<Value, NodeRef> valToNode;
+  DenseSet<NodeRef, NodeValueInfo> nodeSet;
 
   // SpecificBumpPtrAllocator<Node>
   std::deque<Node> nodes;
 
   NodeRef lookup(Value v) const {
-    return valToNode.lookup(v);
+   auto it = nodeSet.find_as(v);
+   if (it != nodeSet.end())
+     return *it;
+   return nullptr;
   }
 
-  bool contains(Value v) const { return valToNode.contains(v); }
+  bool contains(Value v) const { return nodeSet.find_as(v) != nodeSet.end(); }
 
   NodeRef getOrCreateNode(Value v) {
     // Expensive sanity check.  Consider moving to an expensive-checks-only verify().
@@ -559,11 +610,13 @@ struct ConnectionGraph {
 //     assert(ref.getValue() == v);
 //     assert(ref.getFieldID() == 0);
 // #endif
-    auto [it, inserted] = valToNode.try_emplace(v, nullptr);
-    if (!inserted)
-      return it->second;
+    auto node = lookup(v);
+    if (node)
+      return node;
     nodes.emplace_back(v);
-    return it->second = &nodes.back();
+    node = &nodes.back();
+    nodeSet.insert(node);
+    return node;
   };
 
   /// Add edge from src to dst.
