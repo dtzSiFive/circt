@@ -941,72 +941,34 @@ void HoistPassthroughPass::runOnOperation() {
     return ref;
   };
 
+  SmallVector<AtomicDriverAnalysis, 0> modAnalyses(modules.size());
+  mlir::parallelForEach(
+      &getContext(), llvm::seq<size_t>(0, modules.size()), [&](size_t idx) {
+        auto mod = modules[idx];
 
-   SmallVector<AtomicDriverAnalysis, 0> modAnalyses(modules.size());
-   SmallVector<SmallVector<Driver>, 0> modDrivers(modules.size());
-   mlir::parallelForEach(&getContext(), llvm::seq<size_t>(0, modules.size()), [&](size_t idx) {
-    auto mod = modules[idx];
-    modAnalyses[idx] = AtomicDriverAnalysis(mod);
+        // Per-module analysis, connectivity graph.
+        modAnalyses[idx] = AtomicDriverAnalysis(mod);
+        return;
+      });
 
-   auto &ada = modAnalyses[idx];
-   auto &drivers = modDrivers[idx];
-    
-      for (auto arg : mod.getArguments()) {
-        auto node = ada.getGraph().lookup(arg);
-        if (!node)
-          continue;
-        auto source = getSource(node);
-        if (source) {
-          if (source.getValue() == arg) {
-            // Input or undriven.
-            LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
-          } else {
-            LLVM_DEBUG(llvm::dbgs() << "Found driver for " << arg
-                                    << " (chain length = TODO): "
-                                    << "(no connect tracking)"
-                                    << " source: " << source.getValue() << " @ "
-                                    << source.getFieldID() << "\n");
-           if (!isa<BlockArgument>(source.getValue()))
-             continue;
-           // Create driver to re-use that code while migrating.
-          // auto d = Driver::get(arg);
-          // assert(d && "ADA found non-self source");
-          FConnectLike connect;
-          if (type_isa<RefType>(arg.getType()))
-            connect = getRefDefine(arg);
-          else
-            connect = getSingleConnectUserOf(arg);
-          if (!connect) {
-           arg.dump();
-           llvm::errs() << "source: " << source.getValue() << " @ "
-                        << source.getFieldID() << "\n";
-          }
-          assert(connect && "couldn't find connect??");
-          //if (source.getValue().getType() != arg.getType()) {
-          //  llvm::errs() << "source: " << source.getValue() << " @ "
-          //               << source.getFieldID() << "\n";
-          //  arg.dump();
-          //}
-
-          // If source is different block argument, can hoist.
-          //if (isa<BlockArgument>(source.getValue()))
-          drivers.emplace_back(connect, source);
-        }
-      }
-    }
-    return;
-   });
+  SmallVector<SmallVector<Driver>, 0> modDrivers(modules.size());
+  DenseMap<Operation*, size_t> order;
+  {
+    size_t idx = 0;
+    for (auto module : modules)
+      order[module] = idx++;
+  }
 
   // MustDrivenBy driverAnalysis;
   // driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
-  mlir::DefaultTimingManager tm;
-  tm.setEnabled(true);
-  tm.setOutput(llvm::errs());
-  auto ts = tm.getRootScope();
+  // mlir::DefaultTimingManager tm;
+  // tm.setEnabled(true);
+  // tm.setOutput(llvm::errs());
+  // auto ts = tm.getRootScope();
 
   // For each module (PO)...
-  for (auto module : modules) {
+  for (auto [idx, module, ada, drivers]: llvm::enumerate(modules, modAnalyses, modDrivers)) {
     // TODO: Public means can't reason down into, or remove ports.
     // Does not mean cannot clone out wires or optimize w.r.t its contents.
     if (module.isPublic())
@@ -1017,78 +979,79 @@ void HoistPassthroughPass::runOnOperation() {
     // What ports to delete.
     // Hoisted drivers of output ports will be deleted.
     BitVector deadPorts(module.getNumPorts());
-    auto mts = ts.nest(module.getNameAttr());
+    // auto mts = ts.nest(module.getNameAttr());
 
     // Analyze all ports using current IR.
     // driverAnalysis.clear();
     // driverAnalysis.run(module);
 
-    LLVM_DEBUG(llvm::dbgs() << "Analyzing: " << module.getName() << "\n");
-    auto analysisTs = mts.nest("driver analysis");
-    AtomicDriverAnalysis ada(module);
-    analysisTs.stop();
+    // LLVM_DEBUG(llvm::dbgs() << "Analyzing: " << module.getName() << "\n");
+    // auto analysisTs = mts.nest("driver analysis");
+    // AtomicDriverAnalysis ada(module);
+    // auto &ada = modAnalyses[
+    // analysisTs.stop();
 
     // llvm::WriteGraph(&ada, module.getName());
 
-    auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
-      // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
-      FieldRef ref(node->getDefinition(), 0);
-      for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
-        // llvm::errs() << "\t" << I->getDefinition() << "\n";
-        if (I->isInvalid())
-          return {};
+    // auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
+    //   // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
+    //   FieldRef ref(node->getDefinition(), 0);
+    //   for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
+    //     // llvm::errs() << "\t" << I->getDefinition() << "\n";
+    //     if (I->isInvalid())
+    //       return {};
 
-        // Exit early if derived from another port.  This can be hoisted
-        // even if the source port (current node) itself cannot.
+    //     // Exit early if derived from another port.  This can be hoisted
+    //     // even if the source port (current node) itself cannot.
 
-        // Search over.  Bail before inspecting edge below.
-        if (I->empty()) {
-          assert(std::next(I) == E);
-          break;
-        }
+    //     // Search over.  Bail before inspecting edge below.
+    //     if (I->empty()) {
+    //       assert(std::next(I) == E);
+    //       break;
+    //     }
 
-        // If multiple drivers, bail.
-        if (!llvm::hasSingleElement(**I)) {
-          assert(0 && "should be invalid or end if not single edge");
-          return {};
-        }
-        auto &edge = *I->begin();
-        if (I.nodeVisited(edge.first)) {
-          mlir::emitRemark(node->getDefinition().getLoc(),
-                           "driver cycle found")
-                  .attachNote(edge.first->getDefinition().getLoc())
-              << "already visited this value";
-          return {};
-        }
-        // llvm::errs() << "\tIndex: " << edge.second << "\n";
-        ref = FieldRef(edge.first->getDefinition(), edge.second)
-                  .getSubField(ref.getFieldID());
-      }
-      // if (ref.getValue() == node->getDefinition())
-      //   return {};
-      return ref;
-    };
+    //     // If multiple drivers, bail.
+    //     if (!llvm::hasSingleElement(**I)) {
+    //       assert(0 && "should be invalid or end if not single edge");
+    //       return {};
+    //     }
+    //     auto &edge = *I->begin();
+    //     if (I.nodeVisited(edge.first)) {
+    //       mlir::emitRemark(node->getDefinition().getLoc(), "driver cycle found")
+    //               .attachNote(edge.first->getDefinition().getLoc())
+    //           << "already visited this value";
+    //       return {};
+    //     }
+    //     // llvm::errs() << "\tIndex: " << edge.second << "\n";
+    //     ref = FieldRef(edge.first->getDefinition(), edge.second)
+    //               .getSubField(ref.getFieldID());
+    //   }
+    //   // if (ref.getValue() == node->getDefinition())
+    //   //   return {};
+    //   return ref;
+    // };
 
-    auto toDriverTS = mts.nest("to drivers");
-    SmallVector<Driver> drivers;
-      for (auto arg : module.getArguments()) {
-        auto node = ada.getGraph().lookup(arg);
-        if (!node)
-          continue;
-        auto source = getSource(node);
-        if (source) {
-          if (source.getValue() == arg) {
-            // Input or undriven.
-            LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
-          } else {
-            LLVM_DEBUG(llvm::dbgs() << "Found driver for " << arg
-                                    << " (chain length = TODO): "
-                                    << "(no connect tracking)"
-                                    << " source: " << source.getValue() << " @ "
-                                    << source.getFieldID() << "\n");
-           if (!isa<BlockArgument>(source.getValue()))
-             continue;
-           // Create driver to re-use that code while migrating.
+    // Build "drivers" for hoisting.
+
+    // auto toDriverTS = mts.nest("to drivers");
+    // SmallVector<Driver> drivers;
+    for (auto arg : module.getArguments()) {
+      auto node = ada.getGraph().lookup(arg);
+      if (!node)
+        continue;
+      auto source = getSource(node);
+      if (source) {
+        if (source.getValue() == arg) {
+          // Input or undriven.
+          LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
+        } else {
+          //                          << " (chain length = TODO): "
+          //            << "(no connect tracking)"
+          //            << " source: " << source.getValue() << " @ "
+          //            << source.getFieldID() << "\n");
+          if (!isa<BlockArgument>(source.getValue()))
+            continue;
+          // Create driver to re-use that code while migrating.
           // auto d = Driver::get(arg);
           // assert(d && "ADA found non-self source");
           FConnectLike connect;
@@ -1114,7 +1077,7 @@ void HoistPassthroughPass::runOnOperation() {
         }
       }
     }
-    toDriverTS.stop();
+    // toDriverTS.stop();
 
     // auto notNullAndCanHoist = [](const Driver &d) -> bool {
     //   return d && d.canHoist();
@@ -1130,7 +1093,7 @@ void HoistPassthroughPass::runOnOperation() {
 
     // 2. Rematerialize must-driven ports at instantiation sites.
 
-    auto rewriteTS = mts.nest("rewrite");
+    // auto rewriteTS = mts.nest("rewrite");
 
     // Do this first, keep alive Driver state pointing to module.
     for (auto &driver : drivers) {
@@ -1160,6 +1123,17 @@ void HoistPassthroughPass::runOnOperation() {
           mappedDest.replaceAllUsesWith(driver.remat(
               [&inst](size_t index) { return inst.getResult(index); },
               builder));
+          auto modWithInst = record->getParent()->getModule();
+          assert(order.contains(modWithInst));
+          auto &graphToUpdate = modAnalyses[order[modWithInst]].getGraph();
+          // Add edge from dest to new source.
+          // Note that this is not right, and uses of dest now already use remat'd equiv.
+          // Also this is bad and you should feel bad ;).
+          // auto destNode = graphToUpdate.getOrCreateNode(mappedDest);
+          graphToUpdate.addEdge(FieldRef(inst.getResult(Driver::getIndex(
+                                             driver.source.getValue())),
+                                         driver.source.getFieldID()),
+                                mappedDest);
         }
         // The driven port has no external users, will soon be dead.
         deadPort = index;
