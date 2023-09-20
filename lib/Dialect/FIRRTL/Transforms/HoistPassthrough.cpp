@@ -657,7 +657,8 @@ private:
   /// No need to create node for every thing unless involved in connectivity.
   void addLazyRoot(Value v, bool invalid = false) {
     refs.addRoot(v);
-    if (invalid || !isAtomic(v.getType()) || hasDontTouch(v))
+    if (invalid || !isAtomic(v.getType()) ||
+        (!v.getDefiningOp<InstanceOp>() && hasDontTouch(v)))
       graph.getOrCreateNode(v)->invalidate();
   }
 
@@ -666,7 +667,7 @@ private:
   void addDecl(Operation *op) {
     bool allInvalid = [&]() {
       // TODO: hasDontTouch also checks inner symbols, which may not be quite what's wanted here.
-      if (hasDontTouch(op))
+      if (!isa<InstanceOp>(op) && hasDontTouch(op))
         return true;
       if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable())
         return true;
