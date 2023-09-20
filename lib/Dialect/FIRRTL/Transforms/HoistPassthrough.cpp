@@ -1024,11 +1024,14 @@ void HoistPassthroughPass::runOnOperation() {
       });
 
   size_t totalNodes = 0;
+  size_t totalEdges = 0;
   for (auto [idx, ada] : llvm::enumerate(modAnalyses)) {
     size_t maxEdges = 0;
     size_t numEdges = 0;
     size_t invalids = 0;
     for (auto &node : ada.getGraph().nodes) {
+      if (&node == ada.getModEntryNode())
+        continue;
       numEdges += node.size();
       maxEdges = std::max(maxEdges, node.size());
       if (node.isInvalid())
@@ -1039,7 +1042,11 @@ void HoistPassthroughPass::runOnOperation() {
                  << "\n\tmax incidence: " << maxEdges
                  << "\n\tedges: " << numEdges
                  << "\n\tinvalid nodes: " << invalids << "\n";
+    totalNodes += ada.getGraph().nodes.size();
+    totalEdges += numEdges;
   }
+  llvm::errs() << "Total nodes: " << totalNodes;
+  llvm::errs() << "Total edges: " << totalEdges;
 
   /// Build lookup table for Module -> index.
   DenseMap<Operation*, size_t> order;
