@@ -499,7 +499,6 @@ firrtl.circuit "AggSourceHW" {
 // CHECK-LABEL: "AggDestHW"
 firrtl.circuit "AggDestHW" {
   // CHECK:      module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>) {
-  // CHECK-NEXT:   firrtl.strictconnect
   // CHECK-NEXT: }
   firrtl.module private @UTurn(in %in: !firrtl.vector<uint<1>, 5>,
                                out %out : !firrtl.vector<uint<1>, 5>) {
