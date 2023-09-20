@@ -526,6 +526,7 @@ struct ConnectionGraph {
     auto begin() { return drivenByEdges.begin(); }
     auto end() { return drivenByEdges.end(); }
     bool empty() { return drivenByEdges.empty(); }
+    auto size() { return drivenByEdges.size(); }
 
     void addEdge(NodeRef node, size_t fieldID) {
       drivenByEdges.emplace_back(node, fieldID);
@@ -1021,6 +1022,21 @@ void HoistPassthroughPass::runOnOperation() {
         // llvm::WriteGraph(&ada, module.getName());
         return;
       });
+
+  size_t totalNodes = 0;
+  for (auto [idx, ada] : llvm::enumerate(modAnalyses)) {
+    size_t maxEdges = 0;
+    size_t invalids = 0;
+    for (auto &node : ada.getGraph().nodes) {
+      maxEdges = std::max(maxEdges, node.size());
+      if (node.isInvalid())
+        ++invalids;
+    }
+    llvm::errs() << "Analysis for " << modules[idx].getNameAttr()
+                 << "\n\tnode count: " << ada.getGraph().nodes.size()
+                 << "\n\tmax incidence: " << maxEdges
+                 << "\n\tinvalid nodes: " << invalids << "\n";
+  }
 
   /// Build lookup table for Module -> index.
   DenseMap<Operation*, size_t> order;
