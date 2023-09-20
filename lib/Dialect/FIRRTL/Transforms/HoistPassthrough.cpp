@@ -24,10 +24,10 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GraphWriter.h"
 
-#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
-#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/DOTGraphTraits.h"
+#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/PointerIntPair.h"
 
 #include <deque>
 
@@ -506,7 +506,6 @@ struct ConnectionGraph {
     /// Like a FieldRef but for a Node.
     /// FieldID is always on LHS, if RHS node is invalidated.
     using Edge = std::pair<NodeRef, size_t>;
-
   private:
     /// The definition represented by this node.
     /// Steal bit for state tracking (invalid).
@@ -539,13 +538,14 @@ struct ConnectionGraph {
   // SpecificBumpPtrAllocator<Node>
   std::deque<Node> nodes;
 
-  NodeRef lookup(Value v) const { return valToNode.lookup(v); }
+  NodeRef lookup(Value v) const {
+    return valToNode.lookup(v);
+  }
 
   bool contains(Value v) const { return valToNode.contains(v); }
 
   NodeRef getOrCreateNode(Value v) {
-    // Expensive sanity check.  Consider moving to an expensive-checks-only
-    // verify().
+    // Expensive sanity check.  Consider moving to an expensive-checks-only verify().
 #ifndef NDEBUG
     auto ref = getFieldRefFromValue(v);
     if (ref.getValue() != v) {
@@ -591,7 +591,6 @@ class AtomicDriverAnalysis {
 
   /// FieldRef cache, computed during analysis but cleared out when complete.
   FieldRefs refs;
-
 public:
   ConnectionGraph &getGraph() { return graph; }
   ConnectionGraph::Node *getModEntryNode() { return modEntryNode; }
@@ -609,7 +608,10 @@ public:
   }
 
 private:
-  void invalidate(Value v) { return graph.getOrCreateNode(v)->invalidate(); }
+
+  void invalidate(Value v) {
+    return graph.getOrCreateNode(v)->invalidate();
+  }
 
   void flow(FieldRef src, FieldRef dst) {
     // Non-root RHS invalidates the destination node.
@@ -698,8 +700,7 @@ private:
                   })
                   .Case<RefCastOp>([&](RefCastOp op) {
                     // Transparently index through refcast.
-                    // TODO: Verification comparing to getFieldRefFromValue will
-                    // disagree here!
+                    // TODO: Verification comparing to getFieldRefFromValue will disagree here!
                     refs.addDerived(op.getInput(), op.getResult(), 0);
                     return success();
                   })
@@ -714,7 +715,7 @@ private:
                     addDecl(declOp);
                     return success();
                   })
-                  .Case<Forceable, MemOp>([&](auto declOp) {
+                  .Case<Forceable,MemOp>([&](auto declOp) {
                     // Registers, memories... invalid!
                     addDecl(declOp);
                     for (auto result : declOp->getResults())
@@ -763,16 +764,17 @@ private:
     // TODO: Either plumb this appropriately or drop it and what feeds it.
     (void)result;
 
-    /// Clear out computed field refs, no longer needed.
-    refs.clear();
+     /// Clear out computed field refs, no longer needed.
+     refs.clear();
   };
 };
+
 
 } // end anonymous namespace
 
 /// Use a node as a "graph".  Useful for dfs, so on.
 template <>
-struct llvm::GraphTraits<ConnectionGraph::Node *> {
+struct llvm::GraphTraits<ConnectionGraph::Node*> {
   using NodeType = ConnectionGraph::Node;
   using NodeRef = NodeType *;
 
@@ -781,10 +783,8 @@ struct llvm::GraphTraits<ConnectionGraph::Node *> {
   static NodeRef getChild(const ConnectionGraph::Edge &edge) {
     return edge.first;
   }
-  using EdgeIterator =
-      std::invoke_result_t<decltype(&NodeType::begin), NodeType *>;
-  using ChildIteratorType =
-      llvm::mapped_iterator<EdgeIterator, decltype(&getChild)>;
+  using EdgeIterator = std::invoke_result_t<decltype(&NodeType::begin),NodeType*>;
+  using ChildIteratorType = llvm::mapped_iterator<EdgeIterator,decltype(&getChild)>;
   static ChildIteratorType child_begin(NodeRef node) {
     return {node->begin(), &getChild};
   }
@@ -795,8 +795,7 @@ struct llvm::GraphTraits<ConnectionGraph::Node *> {
 
 /// Analysis as a graph, entry is dummy node "driven by" output ports.
 template <>
-struct llvm::GraphTraits<AtomicDriverAnalysis *>
-    : public llvm::GraphTraits<ConnectionGraph::Node *> {
+struct llvm::GraphTraits<AtomicDriverAnalysis*> : public llvm::GraphTraits<ConnectionGraph::Node*> {
   static NodeRef getEntryNode(AtomicDriverAnalysis *graph) {
     return graph->getModEntryNode();
   }
@@ -835,7 +834,7 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
       // XXX: lmao.
       static mlir::AsmState asmState(def.getContext());
       def.print(os, asmState);
-    }
+   }
     if (node->isInvalid())
       os << " INVALID";
     return os.str().str();
@@ -851,19 +850,18 @@ struct llvm::DOTGraphTraits<AtomicDriverAnalysis *>
   // TODO: (optionally) Edge dest labels! (+invert)
 
   template <typename Iterator>
-  static std::string getEdgeAttributes(const ConnectionGraph::Node *node,
-                                       Iterator it,
+  static std::string getEdgeAttributes(const ConnectionGraph::Node *node, Iterator it,
                                        const AtomicDriverAnalysis *) {
-    // Edge label is recorded fieldID (or argument number for edges from dummy
-    // entry).
+    // Edge label is recorded fieldID (or argument number for edges from dummy entry).
     auto *cur = it.getCurrent();
     return ("label=" + Twine(cur->second)).str();
   }
 
-  static std::string getGraphProperties(const AtomicDriverAnalysis *) {
+  static std::string getGraphProperties(const AtomicDriverAnalysis*) {
     return "\trankdir=\"LR\";";
   }
 };
+
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
@@ -884,6 +882,7 @@ void HoistPassthroughPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "===- Running HoistPassthrough Pass "
                              "------------------------------------------===\n");
   auto &instanceGraph = getAnalysis<InstanceGraph>();
+
 
   // TODO: Compute ADA's in parallel, walk IG post-order without mutating IR,
   // adding new edges (TODO: track these as synthetic/derived information) and
@@ -942,7 +941,8 @@ void HoistPassthroughPass::runOnOperation() {
         }
         auto &edge = *I->begin();
         if (I.nodeVisited(edge.first)) {
-          mlir::emitRemark(node->getDefinition().getLoc(), "driver cycle found")
+          mlir::emitRemark(node->getDefinition().getLoc(),
+                           "driver cycle found")
                   .attachNote(edge.first->getDefinition().getLoc())
               << "already visited this value";
           return {};
@@ -957,22 +957,22 @@ void HoistPassthroughPass::runOnOperation() {
     };
 
     SmallVector<Driver> drivers;
-    for (auto arg : module.getArguments()) {
-      auto node = ada.getGraph().lookup(arg);
-      if (!node)
-        continue;
-      auto source = getSource(node);
-      if (source) {
-        if (source.getValue() == arg) {
-          // Input or undriven.
-          LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
-        } else {
-          LLVM_DEBUG(llvm::dbgs()
-                     << "Found driver for " << arg << " (chain length = TODO): "
-                     << "(no connect tracking)"
-                     << " source: " << source.getValue() << " @ "
-                     << source.getFieldID() << "\n");
-          // Create driver to re-use that code while migrating.
+      for (auto arg : module.getArguments()) {
+        auto node = ada.getGraph().lookup(arg);
+        if (!node)
+          continue;
+        auto source = getSource(node);
+        if (source) {
+          if (source.getValue() == arg) {
+            // Input or undriven.
+            LLVM_DEBUG(llvm::dbgs() << "self-source for : " << arg << "\n");
+          } else {
+            LLVM_DEBUG(llvm::dbgs() << "Found driver for " << arg
+                                    << " (chain length = TODO): "
+                                    << "(no connect tracking)"
+                                    << " source: " << source.getValue() << " @ "
+                                    << source.getFieldID() << "\n");
+           // Create driver to re-use that code while migrating.
           // auto d = Driver::get(arg);
           // assert(d && "ADA found non-self source");
           FConnectLike connect;
@@ -981,9 +981,9 @@ void HoistPassthroughPass::runOnOperation() {
           else
             connect = getSingleConnectUserOf(arg);
           if (!connect) {
-            arg.dump();
-            llvm::errs() << "source: " << source.getValue() << " @ "
-                         << source.getFieldID() << "\n";
+           arg.dump();
+           llvm::errs() << "source: " << source.getValue() << " @ "
+                        << source.getFieldID() << "\n";
           }
           assert(connect && "couldn't find connect??");
           if (source.getValue().getType() != arg.getType()) {
@@ -1003,6 +1003,7 @@ void HoistPassthroughPass::runOnOperation() {
     //   return d && d.canHoist();
     // };
 
+
     // SmallVector<Driver, 16> drivers(llvm::make_filter_range(
     //     llvm::map_range(module.getArguments(),
     //                     [&driverAnalysis](auto val) {
@@ -1019,6 +1020,7 @@ void HoistPassthroughPass::runOnOperation() {
         auto destArg = driver.getDestBlockArg();
         auto mod = cast<firrtl::FModuleLike>(destArg.getOwner()->getParentOp());
 
+      
         auto index = destArg.getArgNumber();
         auto *igNode = instanceGraph.lookup(mod);
 #if 0
