@@ -647,6 +647,71 @@ struct ConnectionGraph {
 
 } // end anonymous namespace
 
+/// Use a node as a "graph".  Useful for dfs, so on.
+template <>
+struct llvm::GraphTraits<ConnectionGraph::Node*> {
+  using NodeType = ConnectionGraph::Node;
+  using NodeRef = NodeType *;
+
+  static NodeRef getEntryNode(NodeRef node) { return node; }
+
+  static NodeRef getChild(const ConnectionGraph::Edge &edge) {
+    return edge.first;
+  }
+  using EdgeIterator = std::invoke_result_t<decltype(&NodeType::begin),NodeType*>;
+  using ChildIteratorType = llvm::mapped_iterator<EdgeIterator,decltype(&getChild)>;
+  static ChildIteratorType child_begin(NodeRef node) {
+    return {node->begin(), &getChild};
+  }
+  static ChildIteratorType child_end(NodeRef node) {
+    return {node->end(), &getChild};
+  }
+};
+
+/// Find "source".  TODO: Clean up, less magic.
+static FieldRef getSource(ConnectionGraph::NodeRef node) {
+    // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
+    FieldRef ref(node->getDefinition(), 0);
+    for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
+      // llvm::errs() << "\t" << I->getDefinition() << "\n";
+      if (I->isInvalid())
+        return {};
+
+      // Exit early if derived from another port.  This can be hoisted
+      // even if the source port (current node) itself cannot.
+      if (isa<BlockArgument>(I->getDefinition()))
+        break;
+
+      // Search over.  Bail before inspecting edge below.
+      if (I->empty()) {
+        assert(std::next(I) == E);
+        break;
+      }
+
+      // If multiple drivers, bail.
+      if (!llvm::hasSingleElement(**I)) {
+        assert(0 && "should be invalid or end if not single edge");
+        return {};
+      }
+      auto &edge = *I->begin();
+      if (I.nodeVisited(edge.first)) {
+        mlir::emitRemark(node->getDefinition().getLoc(),
+            "driver cycle found")
+          .attachNote(edge.first->getDefinition().getLoc())
+          << "already visited this value";
+        return {};
+      }
+      // llvm::errs() << "\tIndex: " << edge.second << "\n";
+      ref = FieldRef(edge.first->getDefinition(), edge.second)
+        .getSubField(ref.getFieldID());
+    }
+    // if (ref.getValue() == node->getDefinition())
+    //   return {};
+    return ref;
+  };
+
+
+
 namespace {
 
 // TODO: Optionally disable analysis for HW signals!
@@ -675,6 +740,51 @@ public:
     modEntryNode = &graph.nodes.back();
 
     run(mod);
+  }
+
+  /// Simplify connectivity to only boundary values, collapsing chains of single-drivers.
+  /// Filter using provided predicate, and keep entry nodes pointed to by modEntryNode.
+  /// TODO: Probably belongs on the ConnectionGraph, but maybe is a bit too specific.
+  template <typename C>
+  void trim(C &&predicate) {
+    DenseSet<ConnectionGraph::NodeRef> keepSet(modEntryNode->begin(),
+                                               modEntryNode->end());
+    for (auto &node : graph.nodes) {
+      if (predicate(node.getDefinition()))
+        keepSet.insert(&node);
+    }
+
+    SmallVector<ConnectionGraph::NodeRef> keep(keepSet.begin(), keepSet.end());
+    keepSet.clear();
+
+    ConnectionGraph reduced;
+    for (auto *node : keep) {
+      // TODO: Pass predicate to getSource.  Better to return a predicate source
+      // than to chase to, e.g., invalid.
+      auto source = getSource(node);
+      if (source &&
+          predicate(
+              source
+                  .getValue())) { // keepSet.contains(nodeFor(source.getValue()))
+        // Keep, simplify.
+        reduced.addEdge(source, node->getDefinition());
+      } else {
+        // Origin is not kept, invalid.
+        reduced.getOrCreateNode(node->getDefinition())->invalidate();
+      }
+    }
+
+    /// New entry node.
+    reduced.nodes.emplace_back(Value());
+    auto *entryNode = &reduced.nodes.back();
+    for (auto &edge : *modEntryNode) {
+      entryNode->addEdge(reduced.lookup(edge.first->getDefinition()),
+                         edge.second);
+    }
+
+    // Replace our data.
+    modEntryNode = entryNode;
+    graph = std::move(reduced);
   }
 
 private:
@@ -847,27 +957,6 @@ static_assert(std::is_move_constructible_v<AtomicDriverAnalysis>);
 
 } // end anonymous namespace
 
-/// Use a node as a "graph".  Useful for dfs, so on.
-template <>
-struct llvm::GraphTraits<ConnectionGraph::Node*> {
-  using NodeType = ConnectionGraph::Node;
-  using NodeRef = NodeType *;
-
-  static NodeRef getEntryNode(NodeRef node) { return node; }
-
-  static NodeRef getChild(const ConnectionGraph::Edge &edge) {
-    return edge.first;
-  }
-  using EdgeIterator = std::invoke_result_t<decltype(&NodeType::begin),NodeType*>;
-  using ChildIteratorType = llvm::mapped_iterator<EdgeIterator,decltype(&getChild)>;
-  static ChildIteratorType child_begin(NodeRef node) {
-    return {node->begin(), &getChild};
-  }
-  static ChildIteratorType child_end(NodeRef node) {
-    return {node->end(), &getChild};
-  }
-};
-
 /// Analysis as a graph, entry is dummy node "driven by" output ports.
 template <>
 struct llvm::GraphTraits<AtomicDriverAnalysis*> : public llvm::GraphTraits<ConnectionGraph::Node*> {
@@ -967,47 +1056,6 @@ void HoistPassthroughPass::runOnOperation() {
       [](auto module) { return module; }));
 
   // TODO: Refactor to free function.
-  auto getSource = [&](ConnectionGraph::NodeRef node) -> FieldRef {
-    // llvm::errs() << "Walking for: " << node->getDefinition() << "\n";
-    FieldRef ref(node->getDefinition(), 0);
-    for (auto I = llvm::df_begin(node), E = llvm::df_end(node); I != E; ++I) {
-      // llvm::errs() << "\t" << I->getDefinition() << "\n";
-      if (I->isInvalid())
-        return {};
-
-      // Exit early if derived from another port.  This can be hoisted
-      // even if the source port (current node) itself cannot.
-      if (isa<BlockArgument>(I->getDefinition()))
-        break;
-
-      // Search over.  Bail before inspecting edge below.
-      if (I->empty()) {
-        assert(std::next(I) == E);
-        break;
-      }
-
-      // If multiple drivers, bail.
-      if (!llvm::hasSingleElement(**I)) {
-        assert(0 && "should be invalid or end if not single edge");
-        return {};
-      }
-      auto &edge = *I->begin();
-      if (I.nodeVisited(edge.first)) {
-        mlir::emitRemark(node->getDefinition().getLoc(),
-            "driver cycle found")
-          .attachNote(edge.first->getDefinition().getLoc())
-          << "already visited this value";
-        return {};
-      }
-      // llvm::errs() << "\tIndex: " << edge.second << "\n";
-      ref = FieldRef(edge.first->getDefinition(), edge.second)
-        .getSubField(ref.getFieldID());
-    }
-    // if (ref.getValue() == node->getDefinition())
-    //   return {};
-    return ref;
-  };
-
   SmallVector<AtomicDriverAnalysis, 0> modAnalyses(modules.size());
   mlir::parallelForEach(
       &getContext(), llvm::seq<size_t>(0, modules.size()), [&](size_t idx) {
@@ -1017,6 +1065,9 @@ void HoistPassthroughPass::runOnOperation() {
         modAnalyses[idx] = AtomicDriverAnalysis(mod);
         // Consider: Walk this now, grab what is needed
         // ({port,instance result}<--->{port, instance result} connectivity, simplified),
+        modAnalyses[idx].trim([&](Value val) {
+          return isa<BlockArgument>(val) || val.getDefiningOp<InstanceOp>();
+        });
         // to keep peak memory usage down.  And of course either trim the ADA
         // or drop it in favor of the distilled analysis information.
 
