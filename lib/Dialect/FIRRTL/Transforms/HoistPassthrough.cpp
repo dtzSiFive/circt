@@ -765,9 +765,13 @@ public:
       auto source = getSource(node);
       if (source && keepSet.contains(graph.lookup(source.getValue()))) {
         // Keep, simplify.
+        llvm::errs() << "Simplifying " << node->getDefinition()
+                     << " to : " << source.getValue() << " @ "
+                     << source.getFieldID() << "\n";
         reduced.addEdge(source, node->getDefinition());
       } else {
         // Origin is not kept, invalid.
+        llvm::errs() << "Invalidating " << node->getDefinition();
         reduced.getOrCreateNode(node->getDefinition())->invalidate();
       }
     }
