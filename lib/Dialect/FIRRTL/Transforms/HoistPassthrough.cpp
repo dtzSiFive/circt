@@ -661,6 +661,7 @@ private:
   /// appropriate and only creating nodes if needed to record invalid state.
   void addDecl(Operation *op) {
     bool allInvalid = [&]() {
+      // TODO: hasDontTouch also checks inner symbols, which may not be quite what's wanted here.
       if (hasDontTouch(op))
         return true;
       if (auto fop = dyn_cast<Forceable>(op); fop && fop.isForceable())
