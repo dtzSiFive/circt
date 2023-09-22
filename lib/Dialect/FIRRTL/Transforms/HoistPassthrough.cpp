@@ -103,9 +103,6 @@ struct Driver {
 
   // "Virtual" methods, either commonly defined or dispatched appropriately.
 
-  /// Determine direct driver for the given value, empty Driver otherwise.
-  static Driver get(Value v);
-
   /// Whether this can be rematerialized up through an instantiation.
   bool canHoist() const { return isa<BlockArgument>(source.getValue()); }
 
@@ -173,8 +170,6 @@ struct RefDriver : public Driver {
 
   static bool classof(const Driver *t) { return isa<RefValue>(t->getDest()); }
 
-  static RefDriver get(Value v);
-
   Value remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder);
 };
 static_assert(sizeof(RefDriver) == sizeof(Driver),
@@ -187,8 +182,6 @@ struct HWDriver : public Driver {
   using Driver::Driver;
 
   static bool classof(const Driver *t) { return !isa<RefValue>(t->getDest()); }
-
-  static HWDriver get(Value v);
 
   Value remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder);
 };
@@ -209,14 +202,6 @@ static inline T &operator<<(T &os, Driver &d) {
 //===----------------------------------------------------------------------===//
 // Driver implementation.
 //===----------------------------------------------------------------------===//
-
-Driver Driver::get(Value v) {
-  if (auto refDriver = RefDriver::get(v))
-    return refDriver;
-  if (auto hwDriver = HWDriver::get(v))
-    return hwDriver;
-  return {};
-}
 
 Value Driver::remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder) {
   return TypeSwitch<Driver *, Value>(this)
@@ -258,22 +243,6 @@ static RefDefineOp getRefDefine(Value result) {
   return {};
 }
 
-RefDriver RefDriver::get(Value v) {
-  auto refVal = dyn_cast<RefValue>(v);
-  if (!refVal)
-    return {};
-
-  auto rd = getRefDefine(v);
-  if (!rd)
-    return {};
-
-  auto ref = getFieldRefFromValue(rd.getSrc(), true);
-  if (!ref)
-    return {};
-
-  return RefDriver(rd, ref);
-}
-
 Value RefDriver::remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder) {
   auto mappedSource = mapPortFn(getIndex(source.getValue()));
   auto newVal = getValueByFieldID(builder, mappedSource, source.getFieldID());
@@ -301,53 +270,6 @@ static bool hasDontTouchOrInnerSymOnResult(Value value) {
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
   return (module.getPortSymbolAttr(arg.getArgNumber())) ||
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
-}
-
-HWDriver HWDriver::get(Value v) {
-  auto baseValue = dyn_cast<FIRRTLBaseValue>(v);
-  if (!baseValue)
-    return {};
-
-  // Output must be passive, for flow reasons.
-  // Reject aggregates for now, to be conservative re:aliasing writes/etc.
-  // before ExpandWhens.
-  if (!baseValue.getType().isPassive() || !baseValue.getType().isGround())
-    return {};
-
-  auto connect = getSingleConnectUserOf(v);
-  if (!connect)
-    return {};
-  auto ref = getFieldRefFromValue(connect.getSrc());
-  if (!ref)
-    return {};
-
-  // Reject if not all same block.
-  if (v.getParentBlock() != ref.getValue().getParentBlock() ||
-      v.getParentBlock() != connect->getBlock())
-    return {};
-
-  // Reject if cannot reason through this.
-  // Use local "hasDontTouch" to distinguish inner symbols on results
-  // vs on the operation itself (like an instance).
-  if (hasDontTouchOrInnerSymOnResult(v) ||
-      hasDontTouchOrInnerSymOnResult(ref.getValue()))
-    return {};
-  if (auto fop = ref.getValue().getDefiningOp<Forceable>();
-      fop && fop.isForceable())
-    return {};
-
-  // Limit to passive sources for now.
-  auto sourceType = type_dyn_cast<FIRRTLBaseType>(ref.getValue().getType());
-  if (!sourceType)
-    return {};
-  if (!sourceType.isPassive())
-    return {};
-
-  assert(hw::FieldIdImpl::getFinalTypeByFieldID(sourceType, ref.getFieldID()) ==
-             baseValue.getType() &&
-         "unexpected type mismatch, cast or extension?");
-
-  return HWDriver(connect, ref);
 }
 
 Value HWDriver::remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder) {
