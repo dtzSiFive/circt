@@ -496,8 +496,7 @@ struct ConnectionGraph {
     auto [it, inserted] = nodeSet.insert_as(nullptr, v);
     if (!inserted)
       return *it;
-    nodes.emplace_back(v);
-    return *it = &nodes.back();
+    return *it = &nodes.emplace_back(v);
   };
 
   /// Add edge from src to dst.
