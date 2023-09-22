@@ -490,13 +490,14 @@ struct ConnectionGraph {
     //     assert(ref.getValue() == v);
     //     assert(ref.getFieldID() == 0);
     // #endif
-    auto node = lookup(v);
-    if (node)
-      return node;
+
+    // Search using value, "inserting" nullptr if not present.
+    // If not found, allocate and update in-place.
+    auto [it, inserted] = nodeSet.insert_as(nullptr, v);
+    if (!inserted)
+      return *it;
     nodes.emplace_back(v);
-    node = &nodes.back();
-    nodeSet.insert(node);
-    return node;
+    return *it = &nodes.back();
   };
 
   /// Add edge from src to dst.
