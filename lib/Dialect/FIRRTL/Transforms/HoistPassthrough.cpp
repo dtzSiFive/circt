@@ -377,16 +377,13 @@ struct ConnectionGraph {
     /// The definition represented by this node.
     /// Steal bit for state tracking (invalid).
     llvm::PointerIntPair<Value, 1, bool> defAndInvalid;
-    /// Driver edges.  If invalid, cleared.
+    /// Driver edges.  For now, track all but invalid if > 1.
     SmallVector<Edge, 1> drivenByEdges;
 
   public:
     Node(Value v) : defAndInvalid(v) {}
 
-    void invalidate() {
-      defAndInvalid.setInt(true);
-      drivenByEdges.clear();
-    }
+    void invalidate() { defAndInvalid.setInt(true); }
     bool isInvalid() const { return defAndInvalid.getInt(); }
     Value getDefinition() const { return defAndInvalid.getPointer(); }
 
@@ -396,12 +393,6 @@ struct ConnectionGraph {
     auto size() { return drivenByEdges.size(); }
 
     void addEdge(NodeRef node, size_t fieldID) {
-      // If invalid, don't track edges.
-      if (isInvalid())
-        return;
-      // If this is second driver, invalidate.
-      if (!empty())
-        return invalidate();
       drivenByEdges.emplace_back(node, fieldID);
     }
   };
@@ -512,6 +503,11 @@ struct ConnectionGraph {
   void addEdge(FieldRef src, Value v) {
     auto srcNode = getOrCreateNode(src.getValue());
     auto dstNode = getOrCreateNode(v);
+
+    // Multiple drivers -> invalidate.
+    // (if not already empty, it now has > 1)
+    if (!dstNode->empty())
+      dstNode->invalidate();
     dstNode->addEdge(srcNode, src.getFieldID());
   }
 };
