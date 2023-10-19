@@ -472,10 +472,10 @@ hw.module @Aliasing(inout %a : i42, inout %b : i42, inout %c : i42) {
 
 hw.module @reg_0(in %in4: i4, in %in8: i8, out a: i8, out b: i8) {
   // CHECK-LABEL: module reg_0(
-  // CHECK-NEXT:   input  [3:0] in4, //
-  // CHECK-NEXT:   input  [7:0] in8, //
-  // CHECK-NEXT:   output [7:0] a, //
-  // CHECK-NEXT:                b //
+  // CHECK-NEXT:   input var  [3:0] in4, //
+  // CHECK-NEXT:   input var  [7:0] in8, //
+  // CHECK-NEXT:   output var [7:0] a, //
+  // CHECK-NEXT:                    b //
   // CHECK-NEXT:  );
 
   // CHECK-EMPTY:
@@ -1339,10 +1339,10 @@ hw.module @MoveInstances(in %a_in: i8, out outc : i8){
 hw.module.extern @extInst(in %_h: i1, in %_i: i1, in %_j: i1, in %_k: i1, in %_z :i0)
 
 // CHECK-LABEL: module extInst2
-// CHECK-NEXT:     input                signed_0,
-// CHECK-NEXT:                          _i,
-// CHECK-NEXT:                          _j,
-// CHECK-NEXT:                          _k
+// CHECK-NEXT:     input var                signed_0,
+// CHECK-NEXT:                              _i,
+// CHECK-NEXT:                              _j,
+// CHECK-NEXT:                              _k
 hw.module @extInst2(in %signed: i1, in %_i: i1, in %_j: i1, in %_k: i1, in %_z :i0) {}
 
 // CHECK-LABEL: module zeroWidthArrayIndex
@@ -1509,9 +1509,9 @@ hw.module @ElseIfLocations(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %fla
 }
 
 // CHECK-LABEL: ReuseExistingInOut
-// CHECK: input {{.+}}, //
-// CHECK:        [[INPUT:[:alnum:]+]], //
-// CHECK: output [[OUTPUT:.+]] //
+// CHECK: input var {{.+}}, //
+// CHECK:           [[INPUT:[:alnum:]+]], //
+// CHECK: output var [[OUTPUT:.+]] //
 // CHECK: );
 hw.module @ReuseExistingInOut(in %clock: i1, in %a: i1, out out1: i1) {
   %expr1 = comb.or %a, %a : i1
