@@ -98,13 +98,13 @@ circuit Top : %[[
 
 ; CHECK-LABEL: module Child(
 ; CHECK-NOT:   endmodule
-; CHECK:         input [[Child_boredPort:[a-zA-Z0-9_]+]]
+; CHECK:         input var [[Child_boredPort:[a-zA-Z0-9_]+]]
 ; CHECK:         wire tap = [[Child_boredPort]];
 ; CHECK:       endmodule
 
 ; CHECK-LABEL: module ChildWrapper(
 ; CHECK-NOT:   endmodule
-; CHECK:         input [[ChildWrapper_boredPort:[a-zA-Z0-9_]+]]
+; CHECK:         input var [[ChildWrapper_boredPort:[a-zA-Z0-9_]+]]
 ; CHECK:         Child signed_0 (
 ; CHECK-NEXT:      .[[Child_boredPort]] ([[ChildWrapper_boredPort]])
 ; CHECK:       endmodule
@@ -158,8 +158,8 @@ circuit Top : %[[
       leaf.c <= c
 
   ; CHECK-LABEL: module Top(
-  ; CHECK-NEXT:    input c
-  ; CHECK-NEXT:    output [2:0] o
+  ; CHECK-NEXT:    input var c
+  ; CHECK-NEXT:    output var [2:0] o
   ; CHECK-NEXT:  );
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    assign o = 3'h2;
