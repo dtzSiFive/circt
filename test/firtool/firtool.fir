@@ -135,18 +135,18 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-LABEL: module test_mod(
 ; Check that a fir location is stripped.
 ; VERILOG-NOT:   .fir
-; VERILOG-NEXT:    input        clock,
-; VERILOG-NEXT:                 a,
-; VERILOG-NEXT:    input  [1:0] b,
-; VERILOG-NEXT:    output       c,
-; VERILOG-NEXT:    input vec_0,
-; VERILOG-NEXT:          vec_1,
-; VERILOG-NEXT:          vec_2,
-; VERILOG-NEXT:    output       out_implicitTrunc,
-; VERILOG-NEXT:                 out_prettifyExample,
-; VERILOG-NEXT:                 out_multibitMux,
-; VERILOG-NEXT:                 out_mux2cell_0,
-; VERILOG-NEXT:                 out_mux2cell_1
+; VERILOG-NEXT:    input var        clock,
+; VERILOG-NEXT:                     a,
+; VERILOG-NEXT:    input var  [1:0] b,
+; VERILOG-NEXT:    output var       c,
+; VERILOG-NEXT:    input var vec_0,
+; VERILOG-NEXT:              vec_1,
+; VERILOG-NEXT:              vec_2,
+; VERILOG-NEXT:    output var       out_implicitTrunc,
+; VERILOG-NEXT:                     out_prettifyExample,
+; VERILOG-NEXT:                     out_multibitMux,
+; VERILOG-NEXT:                     out_mux2cell_0,
+; VERILOG-NEXT:                     out_mux2cell_1
 ; VERILOG-NEXT:    );
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:    wire [9:0] _prettifyExample_out1;
@@ -224,10 +224,10 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; MLIRLOWER-NEXT:  }
 
 ; VERILOG-LABEL: module ImplicitTrunc(
-; VERILOG-NEXT:   input        inp_1,
-; VERILOG-NEXT:   input  [4:0] inp_2,
-; VERILOG-NEXT:   output [2:0] out1,
-; VERILOG-NEXT:                out2
+; VERILOG-NEXT:   input var        inp_1,
+; VERILOG-NEXT:   input var  [4:0] inp_2,
+; VERILOG-NEXT:   output var [2:0] out1,
+; VERILOG-NEXT:                    out2
 ; VERILOG-NEXT:   );
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:   wire [5:0] _GEN = {inp_2[4], inp_2} << inp_1;
@@ -265,9 +265,9 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     a_q <= r
 
 ; VERILOG-LABEL: module FlipFlop(
-; VERILOG-NEXT:    input  clock,
-; VERILOG-NEXT:           a_d,
-; VERILOG-NEXT:    output a_q
+; VERILOG-NEXT:    input var  clock,
+; VERILOG-NEXT:               a_d,
+; VERILOG-NEXT:    output var a_q
 ; VERILOG-NEXT:  );
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;
