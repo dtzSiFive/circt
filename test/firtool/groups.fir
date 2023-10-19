@@ -24,13 +24,13 @@ circuit Foo: %[[
         node y = x
 
 ; CHECK-LABEL: module Foo_A_B(
-; CHECK-NEXT:    input _x
+; CHECK-NEXT:    input var _x
 ; CHECK-NEXT:  );
 ; CHECK:         wire y = _x;
 ; CHECK-NEXT:  endmodule
 
 ; CHECK-LABEL: module Foo_A(
-; CHECK-NEXT:    input _in
+; CHECK-NEXT:    input var _in
 ; CHECK:         wire x = _in;
 ; CHECK-NEXT:    wire x_probe = x;
 ; CHECK-NEXT:  endmodule
