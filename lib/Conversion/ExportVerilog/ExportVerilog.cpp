@@ -5726,18 +5726,21 @@ void ModuleEmitter::emitPortList(Operation *module,
       auto thisPortDirection = portInfo.at(portIdx).dir;
       switch (thisPortDirection) {
       case ModulePort::Direction::Output:
-        ps << "output ";
+        ps << "output var ";
         break;
       case ModulePort::Direction::Input:
-        ps << (hasOutputs ? "input  " : "input ");
+        ps << (hasOutputs ? "input var  " : "input var ");
         break;
       case ModulePort::Direction::InOut:
-        ps << (hasOutputs ? "inout  " : "inout ");
+        ps << (hasOutputs ? "inout      " : "inout     ");
         break;
       }
-      bool emitWireInPorts = state.options.emitWireInPorts;
-      if (emitWireInPorts)
-        ps << "wire ";
+      // TODO: Change to emit port kind.
+      // Looks like this is appease Questa wanting this explicit.
+      //bool emitWireInPorts = state.options.emitWireInPorts;
+      //if (emitWireInPorts)
+      //  ps << "wire ";
+      // ps << "var ";
 
       // Emit the type.
       if (!portTypeStrings[portIdx].empty())
@@ -5745,8 +5748,8 @@ void ModuleEmitter::emitPortList(Operation *module,
       if (portTypeStrings[portIdx].size() < maxTypeWidth)
         ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
 
-      size_t startOfNamePos =
-          (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
+      size_t startOfNamePos = (hasOutputs ? 7 : 6) +
+                              /* (emitWireInPorts ? 5 : 0) */ 4 + maxTypeWidth;
 
       // Emit the name.
       ps << PPExtString(getPortVerilogName(module, portInfo.at(portIdx)));
