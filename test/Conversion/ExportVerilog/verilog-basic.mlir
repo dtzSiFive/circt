@@ -1,8 +1,8 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
-// CHECK-NEXT:   input a,{{.*}}
-// CHECK-NEXT:         b
+// CHECK-NEXT:   input var a,{{.*}}
+// CHECK-NEXT:             b
 // CHECK-NEXT:  );
 hw.module @inputs_only(in %a: i1, in %b: i1) {
   hw.output
@@ -14,21 +14,21 @@ hw.module @no_ports() {
 }
 
 // CHECK-LABEL: module Expressions(
-// CHECK-NEXT:    input  [3:0]  in4,
-// CHECK-NEXT:    input         clock,
-// CHECK-NEXT:    output        out1a,
-// CHECK-NEXT:                  out1b,
-// CHECK-NEXT:                  out1c,
-// CHECK-NEXT:                  out1d,
-// CHECK-NEXT:                  out1e,
-// CHECK-NEXT:                  out1f,
-// CHECK-NEXT:                  out1g,
-// CHECK-NEXT:    output [3:0]  out4,
-// CHECK-NEXT:                  out4s,
-// CHECK-NEXT:    output [15:0] out16,
-// CHECK-NEXT:                  out16s,
-// CHECK-NEXT:    output [16:0] sext17,
-// CHECK-NEXT:    output [1:0]  orvout
+// CHECK-NEXT:    input var  [3:0]  in4,
+// CHECK-NEXT:    input var         clock,
+// CHECK-NEXT:    output var        out1a,
+// CHECK-NEXT:                      out1b,
+// CHECK-NEXT:                      out1c,
+// CHECK-NEXT:                      out1d,
+// CHECK-NEXT:                      out1e,
+// CHECK-NEXT:                      out1f,
+// CHECK-NEXT:                      out1g,
+// CHECK-NEXT:    output var [3:0]  out4,
+// CHECK-NEXT:                      out4s,
+// CHECK-NEXT:    output var [15:0] out16,
+// CHECK-NEXT:                      out16s,
+// CHECK-NEXT:    output var [16:0] sext17,
+// CHECK-NEXT:    output var [1:0]  orvout
 // CHECK-NEXT:  );
 
 hw.module @Expressions(in %in4: i4, in %clock: i1, 
@@ -355,8 +355,8 @@ hw.module @MultiUseExpr(in %a: i4, out b0: i1, out b1: i1, out b2: i1, out b3: i
 }
 
 // CHECK-LABEL: module SimpleConstPrint(
-// CHECK-NEXT:    input  [3:0] in4,
-// CHECK-NEXT:    output [3:0] out4
+// CHECK-NEXT:    input var  [3:0] in4,
+// CHECK-NEXT:    output var [3:0] out4
 // CHECK-NEXT: );
 // CHECK:  wire [3:0] w = 4'h1;
 // CHECK:  assign out4 = in4 + 4'h1;
@@ -401,7 +401,7 @@ hw.module @InlineDeclAssignment(in %a: i1) {
 }
 
 // CHECK-LABEL: module ordered_region
-// CHECK-NEXT: input a
+// CHECK-NEXT: input var a
 // CHECK-NEXT: );
 // CHECK-EMPTY:
 hw.module @ordered_region(in %a: i1) {
@@ -472,8 +472,8 @@ hw.module.extern @ExternParametricWidth<width: i32>
 hw.module @NestedParameterUsage<param: i32>(
   in %in: !hw.int<#hw.param.decl.ref<"param">>, out out: !hw.int<#hw.param.decl.ref<"param">>) {
   // CHECK: #(parameter /*integer*/ param) (
-  // CHECK: input  [param - 1:0] in,
-  // CHECK: output [param - 1:0] out
+  // CHECK: input var  [param - 1:0] in,
+  // CHECK: output var [param - 1:0] out
   // CHECK: );
   // CHECK: ExternParametricWidth #(
   // CHECK:   .width(param)
@@ -620,8 +620,8 @@ hw.module @UnaryParensIssue755(in %a: i8, out b: i1) {
 // reserved Verilog keywords.
 hw.module.extern @VerbatimModuleExtern(in %foo: i1 {hw.exportPort = #hw<innerSym@symA>}, out bar: i1 {hw.exportPort = #hw<innerSym@symB>})
 // CHECK-LABEL: module VerbatimModule(
-// CHECK-NEXT:    input  signed_0
-// CHECK-NEXT:    output unsigned_0
+// CHECK-NEXT:    input var  signed_0
+// CHECK-NEXT:    output var unsigned_0
 hw.module @VerbatimModule(in %signed: i1 {hw.exportPort = #hw<innerSym@symA>}, out unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
@@ -681,7 +681,7 @@ hw.module @BindEmission2() {
 
 hw.module @rename_port(in %r: i1 {hw.verilogName = "w"}) {
 // CHECK-LABEL: module rename_port
-// CHECK:  input w
+// CHECK:  input var w
 // CHECK:  wire [3:0] w_0;
     %w = sv.wire : !hw.inout<i4>
     hw.output
@@ -689,9 +689,9 @@ hw.module @rename_port(in %r: i1 {hw.verilogName = "w"}) {
 
 hw.module @bind_rename_port(in %.io_req_ready.output: i1, in %reset: i1 { hw.verilogName = "resetSignalName" }, in %clock: i1) {
   // CHECK-LABEL: module bind_rename_port
-  // CHECK-NEXT: input _io_req_ready_output,
-  // CHECK-NEXT:       resetSignalName,
-  // CHECK-NEXT:       clock
+  // CHECK-NEXT: input var _io_req_ready_output,
+  // CHECK-NEXT:           resetSignalName,
+  // CHECK-NEXT:           clock
   hw.output
 }
 
