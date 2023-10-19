@@ -16,8 +16,8 @@ hw.module @EnumCheck(in %a : !hw.enum<T>, in %b: !hw.enum<>, in %c : !hw.enum<U>
 
 // CHECK:       typedef enum bit [0:0] {enum0_A, enum0_B} enum0;
 // CHECK-LABEL: module EnumCmp(
-// CHECK-NEXT:   input  enum0 test,
-// CHECK-NEXT:   output       result
+// CHECK-NEXT:   input var  enum0 test,
+// CHECK-NEXT:   output var       result
 // CHECK-NEXT:  )
 // CHECK-EMPTY:
 // CHECK-NEXT:   assign result = test == enum0_A;
