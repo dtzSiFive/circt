@@ -31,9 +31,9 @@
 // CHECK-IR:         }
 
 // CHECK-VERILOG-LABEL: module A_B(
-// CHECK-VERILOG:   input  p_clk,
-// CHECK-VERILOG:          p_in,
-// CHECK-VERILOG:   output p_out
+// CHECK-VERILOG:   input var  p_clk,
+// CHECK-VERILOG:              p_in,
+// CHECK-VERILOG:   output var p_out
 // CHECK-VERILOG: );
 // CHECK-VERILOG:   reg r;
 // CHECK-VERILOG:   always_ff @(posedge p_clk)
@@ -42,9 +42,9 @@
 // CHECK-VERILOG: endmodule
 
 // CHECK-VERILOG-LABEL: module A(
-// CHECK-VERILOG:   input  in,
-// CHECK-VERILOG:          clk,
-// CHECK-VERILOG:   output out
+// CHECK-VERILOG:   input var  in,
+// CHECK-VERILOG:              clk,
+// CHECK-VERILOG:   output var out
 // CHECK-VERILOG: );
 // CHECK-VERILOG:   A_B A_B (
 // CHECK-VERILOG:     .p_clk (clk),
