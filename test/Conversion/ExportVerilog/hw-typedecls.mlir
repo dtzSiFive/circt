@@ -46,19 +46,19 @@ sv.ifdef "__PYCDE_TYPES__"  {
 
 // CHECK-LABEL: module testTypeAlias
 hw.module @testTypeAlias(
-  // CHECK: input  foo      arg0,
+  // CHECK: input var  foo      arg0,
   // CHECK:                 arg1
   in %arg0: !hw.typealias<@__hw_typedecls::@foo,i1>,
   in %arg1: !hw.typealias<@__hw_typedecls::@foo,i1>,
-  // CHECK: input  foo[2:0] arg2
+  // CHECK: input var  foo[2:0] arg2
   in %arg2: !hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>,
-  // CHECK: input  arr      arrArg,
+  // CHECK: input var  arr      arrArg,
   in %arrArg: !hw.typealias<@__hw_typedecls::@arr,!hw.array<16xi8>>,
-  // CHECK: input  bar      structArg,
+  // CHECK: input var  bar      structArg,
   in %structArg: !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>,
-  // CHECK: input  myEnum   enumArg,
+  // CHECK: input var  myEnum   enumArg,
   in %enumArg: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>,
-  // CHECK: output foo      out
+  // CHECK: output var foo      out
   out out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
   // CHECK: out = arg0 + arg1
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
