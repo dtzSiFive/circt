@@ -2813,7 +2813,7 @@ ParseResult FIRStmtParser::parseAssert() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(clock, predicate, enable, messageUnescaped, operands,
-                           name.getValue(), concurrent);
+                           name.getValue(), true /* concurrent */);
   return success();
 }
 
@@ -2847,7 +2847,7 @@ ParseResult FIRStmtParser::parseAssume() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
-                           operands, name.getValue(), concurrent);
+                           operands, name.getValue(), true /* concurrent */);
   return success();
 }
 
@@ -2873,7 +2873,7 @@ ParseResult FIRStmtParser::parseCover() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
-                          ValueRange{}, name.getValue(), concurrent);
+                          ValueRange{}, name.getValue(), true /* concurrent */);
   return success();
 }
 
