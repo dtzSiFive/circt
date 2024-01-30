@@ -2831,15 +2831,23 @@ ParseResult FIRStmtParser::parseAssume() {
       parseExp(predicate, "expected predicate in 'assume'") ||
       parseExp(enable, "expected enable in 'assume'") ||
       parseGetSpelling(message) ||
-      parseToken(FIRToken::string, "expected message in 'assume'") ||
-      parseToken(FIRToken::r_paren, "expected ')' in 'assume'") ||
-      parseOptionalName(name) || parseOptionalInfo())
+      parseToken(FIRToken::string, "expected message in 'assume'"))
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  while (!consumeIf(FIRToken::r_paren)) {
+    operands.push_back({});
+    if (parseExp(operands.back(), "expected operand in assume"))
+      return failure();
+  }
+
+  if (parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
-                           ValueRange{}, name.getValue(), concurrent);
+                           operands, name.getValue(), concurrent);
   return success();
 }
 
