@@ -166,6 +166,9 @@ TOK_LPKEYWORD(stop)
 TOK_LPKEYWORD(assert)
 TOK_LPKEYWORD(assume)
 TOK_LPKEYWORD(cover)
+TOK_LPKEYWORD(assert_concurrent)
+TOK_LPKEYWORD(assume_concurrent)
+TOK_LPKEYWORD(cover_concurrent)
 
 TOK_LPKEYWORD(path)
 

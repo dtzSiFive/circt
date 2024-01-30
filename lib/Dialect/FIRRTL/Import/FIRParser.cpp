@@ -1605,8 +1605,11 @@ private:
   ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseStop();
+  template <bool concurrent>
   ParseResult parseAssert();
+  template <bool concurrent>
   ParseResult parseAssume();
+  template <bool concurrent>
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseMatch(unsigned matchIndent);
@@ -2523,11 +2526,17 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::lp_stop:
     return parseStop();
   case FIRToken::lp_assert:
-    return parseAssert();
+    return parseAssert<false>();
+  case FIRToken::lp_assert_concurrent:
+    return parseAssert<true>();
   case FIRToken::lp_assume:
-    return parseAssume();
+    return parseAssume<false>();
+  case FIRToken::lp_assume_concurrent:
+    return parseAssume<true>();
   case FIRToken::lp_cover:
-    return parseCover();
+    return parseCover<false>();
+  case FIRToken::lp_cover_concurrent:
+    return parseCover<true>();
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
   case FIRToken::kw_match:
@@ -2775,8 +2784,11 @@ ParseResult FIRStmtParser::parseStop() {
 }
 
 /// assert ::= 'assert(' exp exp exp StringLit exp*')' info?
+/// assert_concurrent ::= 'assert_concurrent(' exp exp exp StringLit exp*')' info?
+template <bool concurrent>
 ParseResult FIRStmtParser::parseAssert() {
-  auto startTok = consumeToken(FIRToken::lp_assert);
+  auto startTok = consumeToken(concurrent ? FIRToken::lp_assert_concurrent
+                                          : FIRToken::lp_assert);
 
   Value clock, predicate, enable;
   StringRef message;
@@ -2801,13 +2813,16 @@ ParseResult FIRStmtParser::parseAssert() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(clock, predicate, enable, messageUnescaped, operands,
-                           name.getValue());
+                           name.getValue(), concurrent);
   return success();
 }
 
 /// assume ::= 'assume(' exp exp exp StringLit ')' info?
+/// assume_concurrent ::= 'assume_concurrent(' exp exp exp StringLit ')' info?
+template <bool concurrent>
 ParseResult FIRStmtParser::parseAssume() {
-  auto startTok = consumeToken(FIRToken::lp_assume);
+  auto startTok = consumeToken(concurrent ? FIRToken::lp_assume_concurrent
+                                          : FIRToken::lp_assume);
 
   Value clock, predicate, enable;
   StringRef message;
@@ -2824,13 +2839,16 @@ ParseResult FIRStmtParser::parseAssume() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
-                           ValueRange{}, name.getValue());
+                           ValueRange{}, name.getValue(), concurrent);
   return success();
 }
 
 /// cover ::= 'cover(' exp exp exp StringLit ')' info?
+/// cover_concurrent ::= 'cover_concurrent(' exp exp exp StringLit ')' info?
+template <bool concurrent>
 ParseResult FIRStmtParser::parseCover() {
-  auto startTok = consumeToken(FIRToken::lp_cover);
+  auto startTok = consumeToken(concurrent ? FIRToken::lp_cover_concurrent
+                                          : FIRToken::lp_cover);
 
   Value clock, predicate, enable;
   StringRef message;
@@ -2847,7 +2865,7 @@ ParseResult FIRStmtParser::parseCover() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
-                          ValueRange{}, name.getValue());
+                          ValueRange{}, name.getValue(), concurrent);
   return success();
 }
 
