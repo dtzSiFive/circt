@@ -124,13 +124,15 @@ circuit WhenEncodedVerification:
     ; Verification Library Assertions
 
     ; Predicate modifier `noMod`
-    when cond:
-      printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}", value)
-      stop(clock, enable, 1)
+    ; TODO: Guards.  SVA format is implicit.
+    assert_concurrent(clock, not(cond), enable, "Hello Assert", value) : verif_library_label_magic
+    ;when cond:
+    ;  printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}", value)
+    ;  stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
-    ; CHECK-SAME: format = "sva"
-    ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
+    ; CHECKX-SAME: format = "sva"
+    ; CHECKX-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_magic"
 
     ; Predicate modifier `trueOrIsX`
