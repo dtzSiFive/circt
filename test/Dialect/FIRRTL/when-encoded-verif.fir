@@ -136,6 +136,8 @@ circuit WhenEncodedVerification:
     ; CHECK-SAME: name = "verif_library_label_magic"
 
     ; Predicate modifier `trueOrIsX`
+    ; TODO: isX intrinsic...
+    ; assert_concurrent(clock, not(cond), enable, "Hello Assert", value) : verify_library_label_magic
     when cond:
       printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}", value)
       stop(clock, enable, 1)
@@ -144,22 +146,24 @@ circuit WhenEncodedVerification:
     ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.isX [[TMP1]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
-    ; CHECK-SAME: format = "sva"
-    ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
+    ; CHECKX-SAME: format = "sva"
+    ; CHECKX-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_magic"
 
     ; Verification Library Assumptions
 
     ; Predicate modifier `noMod`
-    when cond:
-      printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}", value)
-      stop(clock, enable, 1)
+    assume_concurrent(clock, not(cond), enable, "Hello Assume", value) : verif_library_label_voodoo
+    ;when cond:
+    ;  printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}", value)
+    ;  stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
-    ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
+    ; CHECKX-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_voodoo"
 
     ; Predicate modifier `trueOrIsX`
+    ; TODO: isX intrinsic...
     when cond:
       printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}", value)
       stop(clock, enable, 1)
@@ -172,14 +176,16 @@ circuit WhenEncodedVerification:
     ; CHECK-SAME: name = "verif_library_label_voodoo"
 
     ; New flavor of when-encoded verification that also includes an assert
-    assert(clock, cond, enable, "hello")
     node not_cond = eq(cond, UInt<1>(0))
-    when not_cond:
-      printf(clock, enable, "Assertion failed: hello")
+    assert_concurrent(clock, not(not_cond), enable, "Assertion failed: hello") : chisel3_builtin
+    ;assert(clock, cond, enable, "hello")
+    ;node not_cond = eq(cond, UInt<1>(0))
+    ;when not_cond:
+    ;  printf(clock, enable, "Assertion failed: hello")
     ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
-    ; CHECK-SAME: format = "ifElseFatal"
+    ; CHECKX-SAME: format = "ifElseFatal"
     ; CHECK-SAME: name = "chisel3_builtin"
 
     when not_reset:
