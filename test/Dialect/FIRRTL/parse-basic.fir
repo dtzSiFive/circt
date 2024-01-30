@@ -432,19 +432,19 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire en: UInt <1>
     pred <= eq(i8, i8)
     en <= not(reset)
-    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true}
     assert(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assert_0"}
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "assert_0"}
     assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
-    ; CHECK: firrtl.assert %clock, %pred, %en, "pred=%d, en=%d"(%pred, %en) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assert_1"}
+    ; CHECK: firrtl.assert %clock, %pred, %en, "pred=%d, en=%d"(%pred, %en) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "assert_1"}
     assert(clock, pred, en, "pred=%d, en=%d", pred, en) : assert_1
-    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true}
     assume(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assume_0"}
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "assume_0"}
     assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
-    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true}
     cover(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "cover_0"}
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "cover_0"}
     cover(clock, pred, en, "X equals Y when Z is valid") : cover_0
 
   ; CHECK-LABEL: firrtl.module private @type_handling(
