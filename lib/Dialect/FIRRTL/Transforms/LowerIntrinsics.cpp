@@ -774,7 +774,7 @@ void LowerIntrinsicsPass::runOnOperation() {
         auto intop = builder.create<GenericIntrinsicExprOp>(
             resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         outputs.front().result.replaceAllUsesWith(intop.getResult());
-        intop->setAttr("name", inst.getNameAttr());
+        // intop->setAttr("name", inst.getNameAttr());
       } else {
         // Or create a bundle for the results and replace using subfields.
         auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
@@ -784,7 +784,7 @@ void LowerIntrinsicsPass::runOnOperation() {
         for (auto &output : outputs)
           output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
               intop.getResult(), output.element.name));
-        intop->setAttr("name", inst.getNameAttr());
+        // intop->setAttr("name", inst.getNameAttr());
       }
       inst.erase();
     }
