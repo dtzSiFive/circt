@@ -716,9 +716,76 @@ struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
-  auto &ig = getAnalysis<InstanceGraph>();
-   // Convert to int ops.
 
+  auto &ig = getAnalysis<InstanceGraph>();
+
+   // Convert to int ops.
+  for (auto op : llvm::make_early_inc_range(getOperation().getOps<FIntModuleOp>())) {
+    auto *node = ig.lookup(op);
+    auto params = op.getParameters();
+    if (params && params.empty())
+      params = {};
+    for (auto *use : node->uses()) {
+      auto inst = use->getInstance<InstanceOp>();
+      ImplicitLocOpBuilder builder(op.getLoc(), inst);
+      SmallVector<Value> inputs;
+      struct OutputInfo {
+        Value result;
+        BundleType::BundleElement element;
+      };
+      SmallVector<OutputInfo> outputs;
+      for (auto [idx, result] : llvm::enumerate(inst.getResults())) {
+        // Replace inputs with wires that will be used as operands.
+        if (inst.getPortDirection(idx) != Direction::Out) {
+          auto w = builder.create<WireOp>(result.getLoc(), result.getType())
+                       .getResult();
+          result.replaceAllUsesWith(w);
+          inputs.push_back(w);
+          continue;
+        }
+
+        // Gather outputs.  This will become a bundle if more than one, but
+        // typically there are zero or one.
+        auto ftype = dyn_cast<FIRRTLBaseType>(inst.getType(idx));
+        if (!ftype) {
+          inst.emitError("intrinsic has non-FIRRTL or non-base port type")
+              << inst.getType(idx);
+          signalPassFailure();
+          return;
+        }
+        outputs.push_back(
+            OutputInfo{inst.getResult(idx),
+                       BundleType::BundleElement(inst.getPortName(idx),
+                                                 /*isFlipped=*/false, ftype)});
+      }
+
+      // std::optional<Type> resultType;
+      // TODO: Single op with optional result type.
+      if (outputs.empty())
+        builder.create<GenericIntrinsicOp>(op.getIntrinsicAttr(), inputs, params);
+      else if (outputs.size() == 1) {
+        auto resultType = outputs.front().element.type;
+        auto intop = builder.create<GenericIntrinsicExprOp>(
+            resultType, op.getIntrinsicAttr(), inputs, params);
+        outputs.front().result.replaceAllUsesWith(intop.getResult());
+      } else {
+        auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
+            outputs, [](const auto &info) { return info.element; }));
+        auto intop = builder.create<GenericIntrinsicExprOp>(
+            resultType, op.getIntrinsicAttr(), inputs, params);
+        for (auto &output : outputs)
+          output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
+              intop.getResult(), output.element.name));
+      }
+      inst.erase();
+    }
+    op.erase();
+    // Can't erase from IG.
+    // ig.erase(node);
+  }
+
+  getOperation()->dump();
+  return;
 
   IntrinsicLowerings lowering(&getContext(), ig);
   lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
