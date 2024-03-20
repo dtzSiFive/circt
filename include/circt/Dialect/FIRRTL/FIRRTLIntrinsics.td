@@ -37,7 +37,11 @@ def GenericIntrinsicOp : FIRRTLOp<"int.generic",
     [HasCustomSSAName]> {
   let summary = "Generic intrinsic operation for intrinsics with no result.";
 
-  let arguments = (ins StrAttr:$intrinsic, Variadic<AnyType>:$operands);
+  let arguments = (
+    ins StrAttr:$intrinsic,
+    Variadic<AnyType>:$operands,
+    OptionalAttr<ParamDeclArrayAttr>:$parameters
+  );
   let results = (outs);
   let assemblyFormat = "$intrinsic $operands attr-dict-with-keyword (`:` type($operands)^)? ";
 }
