@@ -25,8 +25,10 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   // CHECK-NEXT: firrtl.int.generic.expr "clock_gate" %clock, %ui1 : (!firrtl.clock, !firrtl.uint<1>)
   // CHECK-NEXT: firrtl.int.generic.expr "noargs" : () -> i32
   // CHECK-NEXT: firrtl.int.generic.expr "params" attributes {parameters = [#firrtl.param.decl<"FORMAT": none = "foobar">]} : () -> i32
+  // CHECK-NEXT: firrtl.int.generic.expr "params" attributes {parameters = [#firrtl.param.decl<"FORMAT": none = "foobar">]} : () -> i32
   %cg2 = firrtl.int.generic.expr "clock_gate" %clock, %ui1 : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.clock
   %cg3 = firrtl.int.generic.expr "noargs" : () -> i32
+  // firrtl.int.generic.expr "none" : () -> ()
   %p = firrtl.int.generic.expr "params" attributes {parameters = [#firrtl.param.decl<"FORMAT": none = "foobar">]} : () -> i32
 
   // CHECK-NEXT: firrtl.int.generic "params" attributes {parameters = [#firrtl.param.decl<"FORMAT": none = "foobar">]}
