@@ -26,7 +26,7 @@ def GenericIntrinsicExprOp : FIRRTLOp<"int.generic.expr",
   let arguments = (
     ins StrAttr:$intrinsic,
     Variadic<AnyType>:$operands,
-    OptionalAttr<ParamDeclArrayAttr>:$parameters
+    DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
   );
  
   let results = (outs AnyType:$result);
@@ -40,7 +40,7 @@ def GenericIntrinsicOp : FIRRTLOp<"int.generic",
   let arguments = (
     ins StrAttr:$intrinsic,
     Variadic<AnyType>:$operands,
-    OptionalAttr<ParamDeclArrayAttr>:$parameters
+    DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
   );
   let results = (outs);
   let assemblyFormat = "$intrinsic $operands attr-dict-with-keyword (`:` type($operands)^)? ";

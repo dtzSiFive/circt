@@ -722,12 +722,13 @@ void LowerIntrinsicsPass::runOnOperation() {
    // Convert to int ops.
   for (auto op : llvm::make_early_inc_range(getOperation().getOps<FIntModuleOp>())) {
     auto *node = ig.lookup(op);
-    auto params = op.getParameters();
-    if (params && params.empty())
-      params = {};
     for (auto *use : node->uses()) {
       auto inst = use->getInstance<InstanceOp>();
+
+      // Replace the instance of this intmodule with firrtl.int.generic.
+      // Inputs become operands, outputs are the result (if any).
       ImplicitLocOpBuilder builder(op.getLoc(), inst);
+
       SmallVector<Value> inputs;
       struct OutputInfo {
         Value result;
@@ -759,20 +760,26 @@ void LowerIntrinsicsPass::runOnOperation() {
                                                  /*isFlipped=*/false, ftype)});
       }
 
+      // Create the replacement operation.
+
       // std::optional<Type> resultType;
       // TODO: Single op with optional result type.
-      if (outputs.empty())
-        builder.create<GenericIntrinsicOp>(op.getIntrinsicAttr(), inputs, params);
-      else if (outputs.size() == 1) {
+
+      if (outputs.empty()) {
+        // If no results, this is firrtl.int.generic presently.
+        builder.create<GenericIntrinsicOp>(op.getIntrinsicAttr(), inputs, op.getParameters());
+      } else if (outputs.size() == 1) {
+        // Otherwise, create firrtl.int.generic.expr with the single output...
         auto resultType = outputs.front().element.type;
         auto intop = builder.create<GenericIntrinsicExprOp>(
-            resultType, op.getIntrinsicAttr(), inputs, params);
+            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         outputs.front().result.replaceAllUsesWith(intop.getResult());
       } else {
+        // Or create a bundle for the results and replace using subfields.
         auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
             outputs, [](const auto &info) { return info.element; }));
         auto intop = builder.create<GenericIntrinsicExprOp>(
-            resultType, op.getIntrinsicAttr(), inputs, params);
+            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         for (auto &output : outputs)
           output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
               intop.getResult(), output.element.name));
