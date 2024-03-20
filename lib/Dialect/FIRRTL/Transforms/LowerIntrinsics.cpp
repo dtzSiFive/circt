@@ -716,7 +716,11 @@ struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
-  IntrinsicLowerings lowering(&getContext(), getAnalysis<InstanceGraph>());
+  auto &ig = getAnalysis<InstanceGraph>();
+   // Convert to int ops.
+
+
+  IntrinsicLowerings lowering(&getContext(), ig);
   lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
   lowering.add<CirctIsXConverter>("circt.isX", "circt_isX");
   lowering.add<CirctPlusArgTestConverter>("circt.plusargs.test",
