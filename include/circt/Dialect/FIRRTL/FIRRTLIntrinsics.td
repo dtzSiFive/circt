@@ -29,7 +29,7 @@ def GenericIntrinsicExprOp : FIRRTLOp<"int.generic.expr",
     OptionalAttr<ParamDeclArrayAttr>:$parameters
   );
  
-  let results = (outs Optional<AnyType>:$result);
+  let results = (outs AnyType:$result);
   let assemblyFormat = "$intrinsic $operands attr-dict-with-keyword `:` functional-type($operands, $result)";
 }
 
