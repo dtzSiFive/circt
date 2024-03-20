@@ -30,7 +30,7 @@ def GenericIntrinsicExprOp : FIRRTLOp<"int.generic.expr",
   );
  
   let results = (outs AnyType:$result);
-  let assemblyFormat = "$intrinsic $operands attr-dict-with-keyword `:` functional-type($operands, $result)";
+  let assemblyFormat = "$intrinsic ($operands^)? attr-dict-with-keyword `:` functional-type($operands, $result)";
 }
 
 def GenericIntrinsicOp : FIRRTLOp<"int.generic",
@@ -43,7 +43,7 @@ def GenericIntrinsicOp : FIRRTLOp<"int.generic",
     DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
   );
   let results = (outs);
-  let assemblyFormat = "$intrinsic $operands attr-dict-with-keyword (`:` type($operands)^)? ";
+  let assemblyFormat = "$intrinsic ($operands^)? attr-dict-with-keyword (`:` type($operands)^)? ";
 }
 
 //===----------------------------------------------------------------------===//
