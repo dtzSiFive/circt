@@ -5764,9 +5764,6 @@ void GEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void GenericIntrinsicExprOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
 void GenericIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }

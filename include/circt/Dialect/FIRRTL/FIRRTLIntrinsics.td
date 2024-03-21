@@ -19,9 +19,9 @@ include "FIRRTLDialect.td"
 // Generic intrinsic operations for parsing into before lowering.
 //===----------------------------------------------------------------------===//
 
-def GenericIntrinsicExprOp : FIRRTLOp<"int.generic.expr",
+def GenericIntrinsicOp : FIRRTLOp<"int.generic",
     [HasCustomSSAName]> {
-  let summary = "Generic intrinsic operation for expression-like intrinsics.";
+  let summary = "Generic intrinsic operation for FIRRTL intrinsics.";
 
   let arguments = (
     ins StrAttr:$intrinsic,
@@ -29,21 +29,8 @@ def GenericIntrinsicExprOp : FIRRTLOp<"int.generic.expr",
     DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
   );
  
-  let results = (outs AnyType:$result);
+  let results = (outs Optional<AnyType>:$result);
   let assemblyFormat = "$intrinsic ($operands^)? attr-dict-with-keyword `:` functional-type($operands, $result)";
-}
-
-def GenericIntrinsicOp : FIRRTLOp<"int.generic",
-    [HasCustomSSAName]> {
-  let summary = "Generic intrinsic operation for intrinsics with no result.";
-
-  let arguments = (
-    ins StrAttr:$intrinsic,
-    Variadic<AnyType>:$operands,
-    DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
-  );
-  let results = (outs);
-  let assemblyFormat = "$intrinsic ($operands^)? attr-dict-with-keyword (`:` type($operands)^)? ";
 }
 
 //===----------------------------------------------------------------------===//

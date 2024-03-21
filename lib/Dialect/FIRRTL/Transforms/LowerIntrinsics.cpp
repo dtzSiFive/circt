@@ -761,30 +761,28 @@ void LowerIntrinsicsPass::runOnOperation() {
       }
 
       // Create the replacement operation.
-
-      // std::optional<Type> resultType;
-      // TODO: Single op with optional result type.
-
       if (outputs.empty()) {
-        // If no results, this is firrtl.int.generic presently.
-        builder.create<GenericIntrinsicOp>(op.getIntrinsicAttr(), inputs, op.getParameters());
+        // If no outputs, just create the operation.
+        builder.create<GenericIntrinsicOp>(op.getIntrinsicAttr(), /*result=*/Type(), inputs, op.getParameters());
       } else if (outputs.size() == 1) {
-        // Otherwise, create firrtl.int.generic.expr with the single output...
+        // For single output, the result is the output.
         auto resultType = outputs.front().element.type;
-        auto intop = builder.create<GenericIntrinsicExprOp>(
+        auto intop = builder.create<GenericIntrinsicOp>(
             resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         outputs.front().result.replaceAllUsesWith(intop.getResult());
-        // intop->setAttr("name", inst.getNameAttr());
+        auto name = builder.getStringAttr(inst.getName() + "_" + outputs.front().element.name.strref());
+        intop->setAttr("name", name);
       } else {
-        // Or create a bundle for the results and replace using subfields.
+        // For multiple outputs, create a bundle with fields for each output
+        // and replace users with subfields.
         auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
             outputs, [](const auto &info) { return info.element; }));
-        auto intop = builder.create<GenericIntrinsicExprOp>(
+        auto intop = builder.create<GenericIntrinsicOp>(
             resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         for (auto &output : outputs)
           output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
               intop.getResult(), output.element.name));
-        // intop->setAttr("name", inst.getNameAttr());
+        intop->setAttr("name", inst.getNameAttr());
       }
       inst.erase();
     }
