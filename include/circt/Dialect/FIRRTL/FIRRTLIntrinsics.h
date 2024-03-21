@@ -1,4 +1,4 @@
-//===- FIRRTLDialect.h - FIRRTL dialect declaration ------------*- C++ --*-===//
+//===- FIRRTLIntrinsics.h - FIRRTL intrinsics ------------------*- C++ --*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,38 +16,40 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 
+#include "mlir/Transforms/DialectConversion.h"
+
 namespace circt {
 namespace firrtl {
-class InstanceGraph;
 
 /// Base class for Intrinsic Converters.
 ///
 /// Intrinsic converters contain validation logic, along with a converter
-/// method to transform instances to extmodules/intmodules into ops.
+/// method to transform generic intrinsic ops to their implementation.
 class IntrinsicConverter {
 protected:
   StringRef name;
-  FModuleLike mod;
+  GenericIntrinsicOp op;
 
 public:
-  IntrinsicConverter(StringRef name, FModuleLike mod) : name(name), mod(mod) {}
+  IntrinsicConverter(StringRef name, GenericIntrinsicOp op) : name(name), op(op) {}
 
   virtual ~IntrinsicConverter();
 
-  /// Checks whether the intrinsic module is well-formed.
+  /// Checks whether the intrinsic is well-formed.
   ///
   /// This or's multiple ParseResults together, returning true on failure.
   virtual bool check() { return false; }
 
-  /// Transform an instance of the intrinsic.
-  virtual LogicalResult convert(InstanceOp op) = 0;
+  /// Transform the intrinsic to its implementation.
+  virtual LogicalResult convert() = 0;
 
 protected:
-  ParseResult hasNPorts(unsigned n);
 
-  ParseResult namedPort(unsigned n, StringRef portName);
+  ParseResult hasNInputs(unsigned n);
 
-  ParseResult resetPort(unsigned n);
+  ParseResult hasOutput();
+
+  ParseResult hasBundleOutput();
 
   ParseResult hasNParam(unsigned n, unsigned c = 0);
 
@@ -55,63 +57,83 @@ protected:
 
   ParseResult namedIntParam(StringRef paramName, bool optional = false);
 
+  template <typename C>
+  ParseResult checkInputType(unsigned n, const Twine &msg, C &&call) {
+    if (n >= op.getNumOperands())
+      return op.emitError(name) << " missing input " << n;
+    if (!std::invoke(std::forward<C>(call), op.getOperand(n).getType()))
+      return op.emitError(name) << " input " << n << " " << msg;
+    return success();
+  }
+
+  template <typename C>
+  ParseResult checkInputType(unsigned n, C &&call) {
+    return checkInputType(n, "not of correct type", std::forward<C>(call));
+  }
+
   template <typename T>
-  ParseResult typedPort(unsigned n) {
-    auto ports = mod.getPorts();
-    if (n >= ports.size()) {
-      mod.emitError(name) << " missing port " << n;
-      return failure();
-    }
-    if (!isa<T>(ports[n].type)) {
-      mod.emitError(name) << " port " << n << " not of correct type";
-      return failure();
-    }
+  ParseResult typedInput(unsigned n) {
+    return checkInputType(n, [](auto ty) { return isa<T>(ty); });
+  }
+
+  ParseResult hasResetInput(unsigned n) {
+    return checkInputType(n, "must be reset type", [](auto ty) {
+      auto baseType = dyn_cast<FIRRTLBaseType>(ty);
+      return baseType && baseType.isResetType();
+    });
+  }
+
+  template <typename T>
+  ParseResult sizedInput(unsigned n, int32_t size) {
+    return checkInputType(n, "not size " + Twine(size), [size](auto ty) {
+      auto t = dyn_cast<T>(ty);
+      return t && t.getWidth() != size;
+    });
+  }
+
+  template <typename T>
+  ParseResult typedOutput() {
+    if (op.getNumResults() == 0)
+      return op.emitError(name) << " missing output";
+    if (!isa<T>(op.getResult().getType()))
+      return op.emitError(name) << " output not of correct type";
     return success();
   }
 
   template <typename T>
-  ParseResult sizedPort(unsigned n, int32_t size) {
-    auto ports = mod.getPorts();
-    if (failed(typedPort<T>(n)))
+  ParseResult sizedOutput(int32_t size) {
+    if (failed(typedOutput<T>()))
       return failure();
-    if (cast<T>(ports[n].type).getWidth() != size) {
-      mod.emitError(name) << " port " << n << " not size " << size;
-      return failure();
-    }
+    if (cast<T>(op.getResult().getType()).getWidth() != size)
+      return op.emitError(name) << " output not size " << size;
     return success();
   }
+
+  // TODO: Helpers for inspecting and working with multi-output intrinsics with bundle result.
 };
 
 /// Lowering helper which collects all intrinsic converters.
 class IntrinsicLowerings {
-private:
-  using ConverterFn = std::function<LogicalResult(FModuleLike)>;
+//public:
+//  using ConversionMapTy =
+//      llvm::DenseMap<StringAttr, std::unique_ptr<IntrinsicConverter>>;
+
+// private:
+  // using ConverterFn = std::function<LogicalResult(GenericIntrinsicOp)>;
 
   /// Reference to the MLIR context.
   MLIRContext *context;
 
-  /// Reference to the instance graph to find module instances.
-  InstanceGraph &graph;
-
   /// Mapping from intrinsic names to converters.
-  DenseMap<StringAttr, ConverterFn> intmods;
-  /// Mapping from extmodule names to converters.
-  DenseMap<StringAttr, ConverterFn> extmods;
+  DenseMap<StringAttr, std::unique_ptr<IntrinsicConverter>> conversions;
 
 public:
-  IntrinsicLowerings(MLIRContext *context, InstanceGraph &graph)
-      : context(context), graph(graph) {}
+  IntrinsicLowerings(MLIRContext *context) : context(context) {}
 
   /// Registers a converter to an intrinsic name.
   template <typename T>
   void add(StringRef name) {
-    addConverter<T>(intmods, name);
-  }
-
-  /// Registers a converter to an extmodule name.
-  template <typename T>
-  void addExtmod(StringRef name) {
-    addConverter<T>(extmods, name);
+    addConverter<T>(name);
   }
 
   /// Registers a converter to multiple intrinsic names.
@@ -121,24 +143,26 @@ public:
     add<T>(args...);
   }
 
-  /// Lowers a module to an intrinsic, given an intrinsic name.
-  LogicalResult lower(CircuitOp circuit, bool allowUnknownIntrinsics = false);
+  /// Lowers all intrinsics in a module.
+  LogicalResult lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
 
   /// Return the number of intrinsics converted.
   unsigned getNumConverted() const { return numConverted; }
 
 private:
   template <typename T>
-  void addConverter(DenseMap<StringAttr, ConverterFn> &map, StringRef name) {
+  void addConverter(StringRef name) {
     auto nameAttr = StringAttr::get(context, name);
-    map.try_emplace(nameAttr,
-                    [this, nameAttr](FModuleLike mod) -> LogicalResult {
-                      T conv(nameAttr.getValue(), mod);
-                      return doLowering(mod, conv);
+    conversions.try_emplace(nameAttr, std::make_unique<T>
+                    [this, nameAttr](GenericIntrinsicOp op) -> LogicalResult {
+                      T conv(nameAttr.getValue(), op);
+                      IntrinsicConverter &base = conv;
+                      if (base.check() || failed(base.convert()))
+                        return failure();
+                      ++numConverted;
+                      return success();
                     });
   }
-
-  LogicalResult doLowering(FModuleLike mod, IntrinsicConverter &conv);
 
   unsigned numConverted = 0;
 };

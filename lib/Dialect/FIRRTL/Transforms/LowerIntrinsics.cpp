@@ -13,23 +13,26 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+// #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
+// #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+// #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/StringExtras.h"
+#include "mlir/Transforms/DialectConversion.h"
+// #include "llvm/ADT/APSInt.h"
+// #include "llvm/ADT/StringMap.h"
+// #include "llvm/ADT/PostOrderIterator.h"
+// #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
 
 using namespace circt;
 using namespace firrtl;
 
+#if 0
 namespace {
 
 class CirctSizeofConverter : public IntrinsicConverter {
@@ -37,6 +40,7 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check() override {
+    return op.getNumOpera
     return hasNPorts(2) || namedPort(0, "i") || namedPort(1, "size") ||
            sizedPort<UIntType>(1, 32) || hasNParam(0);
   }
@@ -702,6 +706,7 @@ public:
 };
 
 } // namespace
+#endif
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
@@ -710,90 +715,49 @@ public:
 namespace {
 struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
   void runOnOperation() override;
-  using LowerIntrinsicsBase::fixupEICGWrapper;
+  // using LowerIntrinsicsBase::fixupEICGWrapper;
 };
 } // namespace
+
+// TODO: Move to header or something?
+
+class IntrinsicOpConversion : public OpConversionPattern<GenericIntrinsicOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  using ConversionMapTy = IntrinsicLowerings::ConversionMapTy;
+
+  IntrinsicOpConversion(MLIRContext *context,
+                        const ConversionMapTy &conversions)
+      : OpConversionPattern(context), conversions(conversions) {}
+
+  LogicalResult
+  matchAndRewrite(GenericIntrinsicOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto it = conversions.find(op.getIntrinsicAttr());
+    if (it == conversions.end())
+      return failure();
+
+    auto &conv = *it->second;
+    if (conv.check() || failed(conv.convert()))
+      return failure();
+    return success();
+  }
+
+private:
+  const ConversionMapTy &conversions;
+};
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
 
-  auto &ig = getAnalysis<InstanceGraph>();
+  IntrinsicOpConversion::ConversionMapTy conversions;
 
-   // Convert to int ops.
-  for (auto op : llvm::make_early_inc_range(getOperation().getOps<FIntModuleOp>())) {
-    auto *node = ig.lookup(op);
-    for (auto *use : node->uses()) {
-      auto inst = use->getInstance<InstanceOp>();
+  // auto &ig = getAnalysis<InstanceGraph>();
 
-      // Replace the instance of this intmodule with firrtl.int.generic.
-      // Inputs become operands, outputs are the result (if any).
-      ImplicitLocOpBuilder builder(op.getLoc(), inst);
+  // Rewrite firrtl.int.generic to specific intrinsic implementations.
 
-      SmallVector<Value> inputs;
-      struct OutputInfo {
-        Value result;
-        BundleType::BundleElement element;
-      };
-      SmallVector<OutputInfo> outputs;
-      for (auto [idx, result] : llvm::enumerate(inst.getResults())) {
-        // Replace inputs with wires that will be used as operands.
-        if (inst.getPortDirection(idx) != Direction::Out) {
-          auto w = builder.create<WireOp>(result.getLoc(), result.getType())
-                       .getResult();
-          result.replaceAllUsesWith(w);
-          inputs.push_back(w);
-          continue;
-        }
-
-        // Gather outputs.  This will become a bundle if more than one, but
-        // typically there are zero or one.
-        auto ftype = dyn_cast<FIRRTLBaseType>(inst.getType(idx));
-        if (!ftype) {
-          inst.emitError("intrinsic has non-FIRRTL or non-base port type")
-              << inst.getType(idx);
-          signalPassFailure();
-          return;
-        }
-        outputs.push_back(
-            OutputInfo{inst.getResult(idx),
-                       BundleType::BundleElement(inst.getPortName(idx),
-                                                 /*isFlipped=*/false, ftype)});
-      }
-
-      // Create the replacement operation.
-      if (outputs.empty()) {
-        // If no outputs, just create the operation.
-        builder.create<GenericIntrinsicOp>(op.getIntrinsicAttr(), /*result=*/Type(), inputs, op.getParameters());
-      } else if (outputs.size() == 1) {
-        // For single output, the result is the output.
-        auto resultType = outputs.front().element.type;
-        auto intop = builder.create<GenericIntrinsicOp>(
-            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
-        outputs.front().result.replaceAllUsesWith(intop.getResult());
-        auto name = builder.getStringAttr(inst.getName() + "_" + outputs.front().element.name.strref());
-        intop->setAttr("name", name);
-      } else {
-        // For multiple outputs, create a bundle with fields for each output
-        // and replace users with subfields.
-        auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
-            outputs, [](const auto &info) { return info.element; }));
-        auto intop = builder.create<GenericIntrinsicOp>(
-            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
-        for (auto &output : outputs)
-          output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
-              intop.getResult(), output.element.name));
-        intop->setAttr("name", inst.getNameAttr());
-      }
-      inst.erase();
-    }
-    op.erase();
-    // Can't erase from IG.
-    // ig.erase(node);
-  }
-
-  getOperation()->dump();
-  return;
-
+#if 0
   IntrinsicLowerings lowering(&getContext(), ig);
   lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
   lowering.add<CirctIsXConverter>("circt.isX", "circt_isX");
@@ -837,19 +801,18 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
 
   // Remove this once `EICG_wrapper` is no longer special-cased by firtool.
-  if (fixupEICGWrapper)
-    lowering.addExtmod<EICGWrapperToClockGateConverter>("EICG_wrapper");
+  // if (fixupEICGWrapper)
+  //   lowering.addExtmod<EICGWrapperToClockGateConverter>("EICG_wrapper");
 
   if (failed(lowering.lower(getOperation())))
     return signalPassFailure();
   if (!lowering.getNumConverted())
     markAllAnalysesPreserved();
+#endif
 }
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerIntrinsicsPass(bool fixupEICGWrapper) {
-  auto pass = std::make_unique<LowerIntrinsicsPass>();
-  pass->fixupEICGWrapper = fixupEICGWrapper;
-  return pass;
+circt::firrtl::createLowerIntrinsicsPass() {
+  return std::make_unique<LowerIntrinsicsPass>();
 }
