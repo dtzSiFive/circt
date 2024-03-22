@@ -120,33 +120,33 @@ public:
   }
 };
 
-} // namespace
-
-#if 0
-
-
 class CirctClockInverterConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  bool check() override {
-    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
-           typedPort<ClockType>(0) || typedPort<ClockType>(1) || hasNParam(0);
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.typedInput<ClockType>(0) ||
+           gi.typedOutput<ClockType>() || gi.hasNParam(0);
   }
 
-  LogicalResult convert(InstanceOp inst) override {
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(in);
-    auto out = builder.create<ClockInverterIntrinsicOp>(in);
-    auto name = inst.getInstanceName();
-    Value outWire = builder.create<WireOp>(out.getType(), name).getResult();
-    builder.create<StrictConnectOp>(outWire, out);
-    inst.getResult(1).replaceAllUsesWith(outWire);
-    inst.erase();
-    return success();
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    // TODO: As temporary accomodation, consider propagating name to op
+    // during intmodule->op conversion, as code previously materialized
+    // a wire to hold the name of the instance.
+    // In the future, input FIRRTL can just be "node clock_inv = ....".
+    rewriter.replaceOpWithNewOp<ClockInverterIntrinsicOp>(gi.op, adaptor.getOperands()[0]);
+
+    // auto name = inst.getInstanceName();
+    // Value outWire = builder.create<WireOp>(out.getType(), name).getResult();
+    // builder.create<StrictConnectOp>(outWire, out);
+    // inst.getResult(1).replaceAllUsesWith(outWire);
   }
 };
+
+} // namespace
+
+#if 0
 
 class EICGWrapperToClockGateConverter : public IntrinsicConverter {
 public:
@@ -717,6 +717,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctPlusArgValueConverter>("circt.plusargs.value",
                                            "circt_plusargs_value");
   lowering.add<CirctClockGateConverter>("circt.clock_gate", "circt_clock_gate");
+  lowering.add<CirctClockInverterConverter>("circt.clock_inv",
+                                            "circt_clock_inv");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();
