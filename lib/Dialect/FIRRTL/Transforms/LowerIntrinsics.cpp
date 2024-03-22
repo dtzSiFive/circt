@@ -87,14 +87,17 @@ public:
     //auto r = cast<mlir::TypedValue<BundleType>>(gi.op.getResult());
     //if (op.getNumResults() == 0)
     //  return true;
-    return false;
 //    auto type = dyn_cast<BundleType>(op.getResult().
 //    if (!isa<BundleType>(type)
-//    return hasNPorts(2) || namedPort(0, "found") || namedPort(1, "result") ||
-//           sizedPort<UIntType>(0, 1) || hasNParam(1) || namedParam("FORMAT");
+    return gi.hasNOutputElements(2) ||
+           gi.sizedOutputElement<UIntType>(0, "found", 1) ||
+           gi.hasOutputElement(1, "result") || gi.hasNParam(1) ||
+           gi.namedParam("FORMAT");
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
+      gi.op.dump();
+      assert(0);
 //    auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
 //    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
 //    auto newop = builder.create<PlusArgsValueIntrinsicOp>(
@@ -747,6 +750,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctIsXConverter>("circt.isX", "circt_isX");
   lowering.add<CirctPlusArgTestConverter>("circt.plusargs.test",
                                           "circt_plusargs_test");
+  lowering.add<CirctPlusArgValueConverter>("circt.plusargs.value",
+                                           "circt_plusargs_value");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();

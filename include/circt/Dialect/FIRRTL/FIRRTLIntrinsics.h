@@ -88,7 +88,7 @@ struct GenericIntrinsic {
   ParseResult sizedInput(unsigned n, int32_t size) {
     return checkInputType(n, "not size " + Twine(size), [size](auto ty) {
       auto t = dyn_cast<T>(ty);
-      return t && t.getWidth() != size;
+      return t && t.getWidth() == size;
     });
   }
 
@@ -132,10 +132,16 @@ struct GenericIntrinsic {
       return emitError() << " output element " << n << " " << msg;
     return success();
   }
+
+
   template <typename C>
   ParseResult checkOutputElement(unsigned n, StringRef name, C &&call) {
     return checkOutputElement(n, name, "not of correct type",
                               std::forward<C>(call));
+  }
+
+  ParseResult hasOutputElement(unsigned n, StringRef name) {
+    return checkOutputElement(n, name, [](auto ty) { return true; });
   }
 
   template <typename T>
@@ -148,7 +154,7 @@ struct GenericIntrinsic {
     return checkOutputElement(n, name, "not size " + Twine(size),
                               [size](auto ty) {
                                 auto t = dyn_cast<T>(ty);
-                                return t && t.getWidth() != size;
+                                return t && t.getWidth() == size;
                               });
   }
 };
