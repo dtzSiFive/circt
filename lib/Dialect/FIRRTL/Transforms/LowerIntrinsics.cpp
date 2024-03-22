@@ -105,32 +105,6 @@ public:
 
 #if 0
 
-class CirctPlusArgValueConverter : public IntrinsicConverter {
-public:
-  using IntrinsicConverter::IntrinsicConverter;
-
-  bool check() override {
-    if (op.getNumResults() == 0)
-      return true;
-    return false;
-//    auto type = dyn_cast<BundleType>(op.getResult().
-//    if (!isa<BundleType>(type)
-//    return hasNPorts(2) || namedPort(0, "found") || namedPort(1, "result") ||
-//           sizedPort<UIntType>(0, 1) || hasNParam(1) || namedParam("FORMAT");
-  }
-
-  LogicalResult convert(InstanceOp inst) override {
-    auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto newop = builder.create<PlusArgsValueIntrinsicOp>(
-        inst.getResultTypes(), cast<StringAttr>(param.getValue()));
-    inst.getResult(0).replaceAllUsesWith(newop.getFound());
-    inst.getResult(1).replaceAllUsesWith(newop.getResult());
-    inst.erase();
-    return success();
-  }
-};
-
 class CirctClockGateConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
