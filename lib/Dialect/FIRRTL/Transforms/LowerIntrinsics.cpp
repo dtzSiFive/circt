@@ -83,29 +83,20 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    //gi.typedOutput<BundleType>();
-    //auto r = cast<mlir::TypedValue<BundleType>>(gi.op.getResult());
-    //if (op.getNumResults() == 0)
-    //  return true;
-//    auto type = dyn_cast<BundleType>(op.getResult().
-//    if (!isa<BundleType>(type)
     return gi.hasNOutputElements(2) ||
            gi.sizedOutputElement<UIntType>(0, "found", 1) ||
            gi.hasOutputElement(1, "result") || gi.hasNParam(1) ||
            gi.namedParam("FORMAT");
   }
 
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
-      gi.op.dump();
-      assert(0);
-//    auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
-//    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-//    auto newop = builder.create<PlusArgsValueIntrinsicOp>(
-//        inst.getResultTypes(), cast<StringAttr>(param.getValue()));
-//    inst.getResult(0).replaceAllUsesWith(newop.getFound());
-//    inst.getResult(1).replaceAllUsesWith(newop.getResult());
-//    inst.erase();
-//    return success();
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto bty = gi.getOutputBundle().getType();
+    auto newop = rewriter.create<PlusArgsValueIntrinsicOp>(
+        gi.op.getLoc(), bty.getElementType(size_t{0}),
+        bty.getElementType(size_t{1}), gi.getParamValue<StringAttr>("FORMAT"));
+    rewriter.replaceOpWithNewOp<BundleCreateOp>(
+        gi.op, bty, ValueRange({newop.getFound(), newop.getResult()}));
   }
 };
 } // namespace
