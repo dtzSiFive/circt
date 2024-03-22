@@ -19,6 +19,16 @@ ParseResult GenericIntrinsic::hasNInputs(unsigned n) {
   return success();
 }
 
+ParseResult GenericIntrinsic::hasNOutputElements(unsigned n) {
+  auto b = getOutputBundle();
+  if (!b)
+    return emitError() << " missing output bundle";
+  if (b.getType().getNumElements() != n)
+    return emitError() << " has " << b.getType().getNumElements()
+                       << " output elements instead of " << n;
+  return success();
+}
+
 // ParseResult IntrinsicConverter::namedPort(unsigned n, StringRef portName) {
 //   auto ports = mod.getPorts();
 //   if (n >= ports.size()) {
@@ -103,10 +113,8 @@ public:
       return failure();
 
     auto &conv = *it->second;
-    if (conv.check(GenericIntrinsic(op))) {
-      llvm::errs() << "Check failed!! BAROOOOGA! BAROOOOGA!\n";
+    if (conv.check(GenericIntrinsic(op)))
       return failure();
-    }
     conv.convert(GenericIntrinsic(op), adaptor, rewriter);
     return success();
   }

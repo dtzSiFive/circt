@@ -109,6 +109,48 @@ struct GenericIntrinsic {
       return emitError() << " output not size " << size;
     return success();
   }
+
+  mlir::TypedValue<BundleType> getOutputBundle() {
+    return dyn_cast_or_null<mlir::TypedValue<BundleType>>(op.getResult());
+  }
+
+  ParseResult hasNOutputElements(unsigned n);
+
+  template <typename C>
+  ParseResult checkOutputElement(unsigned n, StringRef name, const Twine &msg, C &&call) {
+    auto b = getOutputBundle();
+    if (!b)
+      return emitError() << " missing output bundle";
+    auto ty = b.getType();
+    if (n >= ty.getNumElements())
+      return emitError() << " missing output element " << n;
+    auto element = ty.getElement(n);
+    if (element.name != name)
+      return emitError() << " output element " << n << " is named "
+                         << element.name << " not " << name;
+    if (!std::invoke(std::forward<C>(call), element.type))
+      return emitError() << " output element " << n << " " << msg;
+    return success();
+  }
+  template <typename C>
+  ParseResult checkOutputElement(unsigned n, StringRef name, C &&call) {
+    return checkOutputElement(n, name, "not of correct type",
+                              std::forward<C>(call));
+  }
+
+  template <typename T>
+  ParseResult typedOutputElement(unsigned n, StringRef name) {
+    return checkOutputElement(n, name, [](auto ty) { return isa<T>(ty); });
+  }
+
+  template <typename T>
+  ParseResult sizedOutputElement(unsigned n, StringRef name, int32_t size) {
+    return checkOutputElement(n, name, "not size " + Twine(size),
+                              [size](auto ty) {
+                                auto t = dyn_cast<T>(ty);
+                                return t && t.getWidth() != size;
+                              });
+  }
 };
 
 /// Base class for Intrinsic Converters.
