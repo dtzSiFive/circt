@@ -136,10 +136,8 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
         };
 
         auto inputs = replaceResults(builder, inst.getResults().drop_back());
-        // This can't directly use the clock_gate intrinsic, as the test_en operand there
-        // is NOT optional.  Invent a EICG_wrapper for now instead.
         auto intop = builder.create<GenericIntrinsicOp>(
-            builder.getType<ClockType>(), "EICG_wrapper", inputs,
+            builder.getType<ClockType>(), "circt_clock_gate", inputs,
             op.getParameters());
         inst.getResults().back().replaceAllUsesWith(intop.getResult());
         inst.erase();

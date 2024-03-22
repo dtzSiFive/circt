@@ -34,33 +34,21 @@ using namespace firrtl;
 
 namespace {
 
-class CirctSizeofConverter : public IntrinsicConverter {
+class CirctSizeofConverter : public IntrinsicOpConverter<SizeOfIntrinsicOp> {
 public:
-  using IntrinsicConverter::IntrinsicConverter;
+  using IntrinsicOpConverter::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(1) || gi.sizedOutput<UIntType>(32) || gi.hasNParam(0);
   }
-
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-               PatternRewriter &rewriter) override {
-    rewriter.replaceOpWithNewOp<SizeOfIntrinsicOp>(gi.op,
-                                                   adaptor.getOperands()[0]);
-  }
 };
 
-class CirctIsXConverter : public IntrinsicConverter {
+class CirctIsXConverter : public IntrinsicOpConverter<IsXIntrinsicOp> {
 public:
-  using IntrinsicConverter::IntrinsicConverter;
+  using IntrinsicOpConverter::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(1) || gi.sizedOutput<UIntType>(1) || gi.hasNParam(0);
-  }
-
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-               PatternRewriter &rewriter) override {
-    rewriter.replaceOpWithNewOp<IsXIntrinsicOp>(gi.op,
-                                                adaptor.getOperands()[0]);
   }
 };
 
@@ -102,21 +90,23 @@ public:
   }
 };
 
-class CirctClockGateConverter : public IntrinsicConverter {
+class CirctClockGateConverter : public IntrinsicOpConverter<ClockGateIntrinsicOp> {
 public:
-  using IntrinsicConverter::IntrinsicConverter;
+  using IntrinsicOpConverter::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(2) || gi.typedInput<ClockType>(0) ||
-           gi.sizedInput<UIntType>(1, 1) || gi.typedOutput<ClockType>() ||
-           gi.hasNParam(0);
-  }
-
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-               PatternRewriter &rewriter) override {
-    rewriter.replaceOpWithNewOp<ClockGateIntrinsicOp>(
-        gi.op, adaptor.getOperands()[0], adaptor.getOperands()[1],
-        /*test_en=*/Value{});
+    if (gi.op.getNumOperands() == 3) {
+      return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
+             gi.sizedInput<UIntType>(2, 1) || gi.typedOutput<ClockType>() ||
+             gi.hasNParam(0);
+    }
+    if (gi.op.getNumOperands() == 2) {
+      return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
+             gi.typedOutput<ClockType>() || gi.hasNParam(0);
+    }
+    gi.emitError() << " has " << gi.op.getNumOperands()
+                   << " ports instead of 3 or 4";
+    return true;
   }
 };
 
@@ -144,51 +134,31 @@ public:
   }
 };
 
-class EICGWrapperToClockGateConverter : public IntrinsicConverter {
-public:
-  using IntrinsicConverter::IntrinsicConverter;
+class CirctMux2CellConverter : public IntrinsicOpConverter<Mux2CellIntrinsicOp> {
+  using IntrinsicOpConverter::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
-    if (gi.op.getNumOperands() == 3) {
-      return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
-             gi.sizedInput<UIntType>(2, 1) || gi.typedOutput<ClockType>() ||
-             gi.hasNParam(0);
-    }
-    if (gi.op.getNumOperands() == 2) {
-      return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
-             gi.typedOutput<ClockType>() || gi.hasNParam(0);
-    }
-    gi.emitError() << " has " << gi.op.getNumOperands()
-                   << " ports instead of 3 or 4";
-    return true;
-  }
-
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-               PatternRewriter &rewriter) override {
-    rewriter.replaceOpWithNewOp<ClockGateIntrinsicOp>(gi.op, adaptor.getOperands());
+    return gi.hasNInputs(3) || gi.typedInput<UIntType>(0) || gi.hasNParam(0);
   }
 };
 
-template <bool isMux2>
-class CirctMuxCellConverter : public IntrinsicConverter {
-private:
-  static constexpr unsigned inputNum = isMux2 ? 3 : 5;
-
-public:
-  using IntrinsicConverter::IntrinsicConverter;
+class CirctMux4CellConverter
+    : public IntrinsicOpConverter<Mux4CellIntrinsicOp> {
+  using IntrinsicOpConverter::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(inputNum) || gi.typedInput<UIntType>(0) || gi.hasNParam(0);
+    return gi.hasNInputs(5) || gi.typedInput<UIntType>(0) || gi.hasNParam(0);
   }
+};
 
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-               PatternRewriter &rewriter) override {
-    if constexpr (isMux2)
-      rewriter.replaceOpWithNewOp<Mux2CellIntrinsicOp>(gi.op,
-                                                       adaptor.getOperands());
-    else
-      rewriter.replaceOpWithNewOp<Mux4CellIntrinsicOp>(gi.op,
-                                                       adaptor.getOperands());
+class CirctLTLAndConverter : public IntrinsicOpConverter<LTLAndIntrinsicOp> {
+public:
+  using IntrinsicOpConverter::IntrinsicOpConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedInput<UIntType>(1, 1) || gi.sizedOutput<UIntType>(1) ||
+           gi.hasNParam(0);
   }
 };
 
@@ -669,12 +639,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctClockGateConverter>("circt.clock_gate", "circt_clock_gate");
   lowering.add<CirctClockInverterConverter>("circt.clock_inv",
                                             "circt_clock_inv");
-  // TODO: convert over in instances-to-ops.
-  lowering.add<EICGWrapperToClockGateConverter>("EICG_wrapper");
-
-  lowering.add<CirctMuxCellConverter<true>>("circt.mux2cell", "circt_mux2cell");
-  lowering.add<CirctMuxCellConverter<false>>("circt.mux4cell",
-                                             "circt_mux4cell");
+  lowering.add<CirctMux2CellConverter>("circt.mux2cell", "circt_mux2cell");
+  lowering.add<CirctMux4CellConverter>("circt.mux4cell", "circt_mux4cell");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();

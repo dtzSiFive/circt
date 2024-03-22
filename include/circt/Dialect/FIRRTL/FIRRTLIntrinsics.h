@@ -176,6 +176,19 @@ public:
                        PatternRewriter &rewriter) = 0;
 };
 
+template <typename OpTy>
+class IntrinsicOpConverter  : public IntrinsicConverter {
+public:
+  /// Transform the intrinsic to its implementation.
+  /// Handles the simple case of just forwarding to new op kind.
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override final {
+    // Pass along result type and operands.  No attributes.
+    rewriter.replaceOpWithNewOp<OpTy>(gi.op, gi.op.getResultTypes(),
+                                      adaptor.getOperands());
+  }
+};
+
 /// Lowering helper which collects all intrinsic converters.
 class IntrinsicLowerings {
 public:
