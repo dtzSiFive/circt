@@ -42,26 +42,24 @@ public:
     return gi.hasNInputs(1) || gi.sizedOutput<UIntType>(32) || gi.hasNParam(0);
   }
 
+
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
     rewriter.replaceOpWithNewOp<SizeOfIntrinsicOp>(gi.op,
                                                    adaptor.getOperands()[0]);
   }
 };
-} // namespace
 
-#if 0
 class CirctIsXConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  bool check() override {
-    return hasNInputs(1) || sizedOutput<UIntType>(1) || hasNParam(0);
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedOutput<UIntType>(1) || gi.hasNParam(0);
   }
 
-  void convert() override {
-    ImplicitLocOpBuilder builder(op.getLoc(), op);
-    op.replaceAllUsesWith(builder.create<IsXIntrinsicOp>(op.getOperand(0)));
-    op.erase();
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
+    rewriter.replaceOpWithNewOp<IsXIntrinsicOp>(gi.op,
+                                                adaptor.getOperands()[0]);
   }
 };
 
@@ -69,20 +67,19 @@ class CirctPlusArgTestConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  bool check() override {
-    return hasNInputs(0) || sizedOutput<UIntType>(1) ||
-           hasNParam(1) || namedParam("FORMAT");
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(0) || gi.sizedOutput<UIntType>(1) ||
+           gi.hasNParam(1) || gi.namedParam("FORMAT");
   }
 
-  void convert() override {
-    auto param = cast<ParamDeclAttr>(op.getParameters()[0]);
-    ImplicitLocOpBuilder builder(op.getLoc(), op);
-    auto newop = builder.create<PlusArgsTestIntrinsicOp>(
-        cast<StringAttr>(param.getValue()));
-    op.replaceAllUsesWith(newop);
-    op.erase();
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
+    rewriter.replaceOpWithNewOp<PlusArgsTestIntrinsicOp>(
+        gi.op, gi.getParamValue<StringAttr>("FORMAT"));
   }
 };
+} // namespace
+
+#if 0
 
 class CirctPlusArgValueConverter : public IntrinsicConverter {
 public:
@@ -719,7 +716,11 @@ void LowerIntrinsicsPass::runOnOperation() {
 
   IntrinsicLowerings lowering(&getContext());
   lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
-  if (failed(lowering.lower(getOperation())))
+  lowering.add<CirctIsXConverter>("circt.isX", "circt_isX");
+  lowering.add<CirctPlusArgTestConverter>("circt.plusargs.test",
+                                          "circt_plusargs_test");
+
+  if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();
   return;
 

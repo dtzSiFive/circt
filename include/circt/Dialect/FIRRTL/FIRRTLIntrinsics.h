@@ -43,6 +43,21 @@ struct GenericIntrinsic {
 
   ParseResult namedIntParam(StringRef paramName, bool optional = false);
 
+  ParamDeclAttr getParamByName(StringRef name) {
+    for (auto param : op.getParameters().getAsRange<ParamDeclAttr>())
+      if (param.getName().getValue().equals(name))
+        return param;
+    return {};
+  }
+
+  template <typename T>
+  T getParamValue(StringRef name) {
+    auto p = getParamByName(name);
+    if (!p)
+      return {};
+    return cast<T>(p.getValue());
+  }
+
   template <typename C>
   ParseResult checkInputType(unsigned n, const Twine &msg, C &&call) {
     if (n >= op.getNumOperands())

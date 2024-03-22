@@ -81,8 +81,6 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
                                                  /*isFlipped=*/false, ftype)});
       }
 
-      inst.dump();
-
       // Create the replacement operation.
       if (outputs.empty()) {
         // If no outputs, just create the operation.

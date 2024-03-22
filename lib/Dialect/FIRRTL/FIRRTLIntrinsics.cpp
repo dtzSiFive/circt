@@ -97,13 +97,16 @@ public:
   LogicalResult
   matchAndRewrite(GenericIntrinsicOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+
     auto it = conversions.find(op.getIntrinsicAttr());
     if (it == conversions.end())
       return failure();
 
     auto &conv = *it->second;
-    if (conv.check(GenericIntrinsic(op)))
+    if (conv.check(GenericIntrinsic(op))) {
+      llvm::errs() << "Check failed!! BAROOOOGA! BAROOOOGA!\n";
       return failure();
+    }
     conv.convert(GenericIntrinsic(op), adaptor, rewriter);
     return success();
   }
@@ -115,17 +118,19 @@ private:
 LogicalResult IntrinsicLowerings::lower(FModuleOp mod,
                                         bool allowUnknownIntrinsics) {
 
-   ConversionTarget target(*context);
-   RewritePatternSet patterns(context);
-   if (allowUnknownIntrinsics)
-     target.addDynamicallyLegalOp<GenericIntrinsicOp>(
-         [this](GenericIntrinsicOp op) {
-           return conversions.count(op.getIntrinsicAttr());
-         });
-   else
-     target.addIllegalOp<GenericIntrinsicOp>();
+  ConversionTarget target(*context);
 
-   return mlir::applyPartialConversion(mod, target, std::move(patterns));
+  target.addLegalDialect<FIRRTLDialect>();
+  if (allowUnknownIntrinsics)
+    target.addDynamicallyLegalOp<GenericIntrinsicOp>(
+        [this](GenericIntrinsicOp op) {
+          return !conversions.count(op.getIntrinsicAttr());
+        });
+  else
+    target.addIllegalOp<GenericIntrinsicOp>();
+
+  RewritePatternSet patterns(context);
+  patterns.add<IntrinsicOpConversion>(context, conversions);
+
+  return mlir::applyPartialConversion(mod, target, std::move(patterns));
 }
-
-
