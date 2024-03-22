@@ -101,32 +101,29 @@ public:
         gi.op, bty, ValueRange({newop.getFound(), newop.getResult()}));
   }
 };
-} // namespace
-
-#if 0
 
 class CirctClockGateConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  bool check() override {
-    return hasNPorts(3) || namedPort(0, "in") || namedPort(1, "en") ||
-           namedPort(2, "out") || typedPort<ClockType>(0) ||
-           sizedPort<UIntType>(1, 1) || typedPort<ClockType>(2) || hasNParam(0);
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.typedInput<ClockType>(0) ||
+           gi.sizedInput<UIntType>(1, 1) || gi.typedOutput<ClockType>() ||
+           gi.hasNParam(0);
   }
 
-  LogicalResult convert(InstanceOp inst) override {
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-    auto en = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(in);
-    inst.getResult(1).replaceAllUsesWith(en);
-    auto out = builder.create<ClockGateIntrinsicOp>(in, en, Value{});
-    inst.getResult(2).replaceAllUsesWith(out);
-    inst.erase();
-    return success();
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    rewriter.replaceOpWithNewOp<ClockGateIntrinsicOp>(
+        gi.op, adaptor.getOperands()[0], adaptor.getOperands()[1],
+        /*test_en=*/Value{});
   }
 };
+
+} // namespace
+
+#if 0
+
 
 class CirctClockInverterConverter : public IntrinsicConverter {
 public:
@@ -719,6 +716,7 @@ void LowerIntrinsicsPass::runOnOperation() {
                                           "circt_plusargs_test");
   lowering.add<CirctPlusArgValueConverter>("circt.plusargs.value",
                                            "circt_plusargs_value");
+  lowering.add<CirctClockGateConverter>("circt.clock_gate", "circt_clock_gate");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();
