@@ -40,7 +40,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
         firrtl::createMaterializeDebugInfoPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createInstrinsicInstancesToOpsPass(opt.shouldFixupEICGWrapper()));
+      firrtl::createIntrinsicInstancesToOpsPass(opt.shouldFixupEICGWrapper()));
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsicsPass());
 

@@ -32,49 +32,36 @@
 using namespace circt;
 using namespace firrtl;
 
-#if 0
 namespace {
 
 class CirctSizeofConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  bool check() override {
-    return op.getNumOpera
-    return hasNPorts(2) || namedPort(0, "i") || namedPort(1, "size") ||
-           sizedPort<UIntType>(1, 32) || hasNParam(0);
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedOutput<UIntType>(32) || gi.hasNParam(0);
   }
 
-  LogicalResult convert(InstanceOp inst) override {
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputTy = inst.getResult(0).getType();
-    auto inputWire = builder.create<WireOp>(inputTy).getResult();
-    inst.getResult(0).replaceAllUsesWith(inputWire);
-    auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
-    inst.getResult(1).replaceAllUsesWith(size);
-    inst.erase();
-    return success();
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
+    rewriter.replaceOpWithNewOp<SizeOfIntrinsicOp>(gi.op,
+                                                   adaptor.getOperands()[0]);
   }
 };
+} // namespace
 
+#if 0
 class CirctIsXConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check() override {
-    return hasNPorts(2) || namedPort(0, "i") || namedPort(1, "found") ||
-           sizedPort<UIntType>(1, 1) || hasNParam(0);
+    return hasNInputs(1) || sizedOutput<UIntType>(1) || hasNParam(0);
   }
 
-  LogicalResult convert(InstanceOp inst) override {
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputTy = inst.getResult(0).getType();
-    auto inputWire = builder.create<WireOp>(inputTy).getResult();
-    inst.getResult(0).replaceAllUsesWith(inputWire);
-    auto size = builder.create<IsXIntrinsicOp>(inputWire);
-    inst.getResult(1).replaceAllUsesWith(size);
-    inst.erase();
-    return success();
+  void convert() override {
+    ImplicitLocOpBuilder builder(op.getLoc(), op);
+    op.replaceAllUsesWith(builder.create<IsXIntrinsicOp>(op.getOperand(0)));
+    op.erase();
   }
 };
 
@@ -83,18 +70,17 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check() override {
-    return hasNPorts(1) || namedPort(0, "found") || sizedPort<UIntType>(0, 1) ||
+    return hasNInputs(0) || sizedOutput<UIntType>(1) ||
            hasNParam(1) || namedParam("FORMAT");
   }
 
-  LogicalResult convert(InstanceOp inst) override {
-    auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+  void convert() override {
+    auto param = cast<ParamDeclAttr>(op.getParameters()[0]);
+    ImplicitLocOpBuilder builder(op.getLoc(), op);
     auto newop = builder.create<PlusArgsTestIntrinsicOp>(
         cast<StringAttr>(param.getValue()));
-    inst.getResult(0).replaceAllUsesWith(newop);
-    inst.erase();
-    return success();
+    op.replaceAllUsesWith(newop);
+    op.erase();
   }
 };
 
@@ -103,8 +89,13 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check() override {
-    return hasNPorts(2) || namedPort(0, "found") || namedPort(1, "result") ||
-           sizedPort<UIntType>(0, 1) || hasNParam(1) || namedParam("FORMAT");
+    if (op.getNumResults() == 0)
+      return true;
+    return false;
+//    auto type = dyn_cast<BundleType>(op.getResult().
+//    if (!isa<BundleType>(type)
+//    return hasNPorts(2) || namedPort(0, "found") || namedPort(1, "result") ||
+//           sizedPort<UIntType>(0, 1) || hasNParam(1) || namedParam("FORMAT");
   }
 
   LogicalResult convert(InstanceOp inst) override {
@@ -721,37 +712,18 @@ struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
 
 // TODO: Move to header or something?
 
-class IntrinsicOpConversion : public OpConversionPattern<GenericIntrinsicOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  using ConversionMapTy = IntrinsicLowerings::ConversionMapTy;
-
-  IntrinsicOpConversion(MLIRContext *context,
-                        const ConversionMapTy &conversions)
-      : OpConversionPattern(context), conversions(conversions) {}
-
-  LogicalResult
-  matchAndRewrite(GenericIntrinsicOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto it = conversions.find(op.getIntrinsicAttr());
-    if (it == conversions.end())
-      return failure();
-
-    auto &conv = *it->second;
-    if (conv.check() || failed(conv.convert()))
-      return failure();
-    return success();
-  }
-
-private:
-  const ConversionMapTy &conversions;
-};
-
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
 
-  IntrinsicOpConversion::ConversionMapTy conversions;
+  // TODO: Build conversion table/data-structure once in initialize().
+
+  IntrinsicLowerings lowering(&getContext());
+  lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
+  if (failed(lowering.lower(getOperation())))
+    return signalPassFailure();
+  return;
+
+  /// IntrinsicOpConversion::ConversionMapTy conversions;
 
   // auto &ig = getAnalysis<InstanceGraph>();
 

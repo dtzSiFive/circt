@@ -25,7 +25,7 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct IntrinsicInstancesToOpsPass : public LowerIntrinsicsBase<IntrinsicInstancesToOpsPass> {
+struct IntrinsicInstancesToOpsPass : public IntrinsicInstancesToOpsBase<IntrinsicInstancesToOpsPass> {
   void runOnOperation() override;
   using IntrinsicInstancesToOpsBase::fixupEICGWrapper;
 };

@@ -21,35 +21,21 @@
 namespace circt {
 namespace firrtl {
 
-/// Base class for Intrinsic Converters.
-///
-/// Intrinsic converters contain validation logic, along with a converter
-/// method to transform generic intrinsic ops to their implementation.
-class IntrinsicConverter {
-protected:
-  StringRef name;
+/// Helper class for checking and extracting information from the generic instrinsic op.
+struct GenericIntrinsic {
   GenericIntrinsicOp op;
 
-public:
-  IntrinsicConverter(StringRef name, GenericIntrinsicOp op) : name(name), op(op) {}
+  GenericIntrinsic(GenericIntrinsicOp op) : op(op) {}
 
-  virtual ~IntrinsicConverter();
-
-  /// Checks whether the intrinsic is well-formed.
-  ///
-  /// This or's multiple ParseResults together, returning true on failure.
-  virtual bool check() { return false; }
-
-  /// Transform the intrinsic to its implementation.
-  virtual LogicalResult convert() = 0;
-
-protected:
+  InFlightDiagnostic emitError() {
+    return op.emitError(op.getIntrinsic());
+  }
 
   ParseResult hasNInputs(unsigned n);
 
-  ParseResult hasOutput();
+  // ParseResult hasOutput();
 
-  ParseResult hasBundleOutput();
+  // ParseResult hasBundleOutput();
 
   ParseResult hasNParam(unsigned n, unsigned c = 0);
 
@@ -60,9 +46,9 @@ protected:
   template <typename C>
   ParseResult checkInputType(unsigned n, const Twine &msg, C &&call) {
     if (n >= op.getNumOperands())
-      return op.emitError(name) << " missing input " << n;
+      return emitError() << " missing input " << n;
     if (!std::invoke(std::forward<C>(call), op.getOperand(n).getType()))
-      return op.emitError(name) << " input " << n << " " << msg;
+      return emitError() << " input " << n << " " << msg;
     return success();
   }
 
@@ -94,9 +80,9 @@ protected:
   template <typename T>
   ParseResult typedOutput() {
     if (op.getNumResults() == 0)
-      return op.emitError(name) << " missing output";
+      return emitError() << " missing output";
     if (!isa<T>(op.getResult().getType()))
-      return op.emitError(name) << " output not of correct type";
+      return emitError() << " output not of correct type";
     return success();
   }
 
@@ -105,32 +91,48 @@ protected:
     if (failed(typedOutput<T>()))
       return failure();
     if (cast<T>(op.getResult().getType()).getWidth() != size)
-      return op.emitError(name) << " output not size " << size;
+      return emitError() << " output not size " << size;
     return success();
   }
+};
 
-  // TODO: Helpers for inspecting and working with multi-output intrinsics with bundle result.
+/// Base class for Intrinsic Converters.
+///
+/// Intrinsic converters contain validation logic, along with a converter
+/// method to transform generic intrinsic ops to their implementation.
+class IntrinsicConverter {
+public:
+  virtual ~IntrinsicConverter() = default;
+
+  /// Checks whether the intrinsic is well-formed.
+  ///
+  /// This or's multiple ParseResults together, returning true on failure.
+  virtual bool check(GenericIntrinsic gi) = 0;
+
+  /// Transform the intrinsic to its implementation.
+  virtual void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) = 0;
 };
 
 /// Lowering helper which collects all intrinsic converters.
 class IntrinsicLowerings {
-//public:
-//  using ConversionMapTy =
-//      llvm::DenseMap<StringAttr, std::unique_ptr<IntrinsicConverter>>;
+public:
+  using ConversionMapTy =
+      llvm::DenseMap<StringAttr, std::unique_ptr<IntrinsicConverter>>;
 
-// private:
-  // using ConverterFn = std::function<LogicalResult(GenericIntrinsicOp)>;
+private:
+  using ConverterFn = std::function<LogicalResult(GenericIntrinsicOp)>;
 
   /// Reference to the MLIR context.
   MLIRContext *context;
 
   /// Mapping from intrinsic names to converters.
-  DenseMap<StringAttr, std::unique_ptr<IntrinsicConverter>> conversions;
+  ConversionMapTy conversions;
 
 public:
   IntrinsicLowerings(MLIRContext *context) : context(context) {}
 
   /// Registers a converter to an intrinsic name.
+  // enable-if T is IntrinsicConverter.
   template <typename T>
   void add(StringRef name) {
     addConverter<T>(name);
@@ -146,25 +148,13 @@ public:
   /// Lowers all intrinsics in a module.
   LogicalResult lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
 
-  /// Return the number of intrinsics converted.
-  unsigned getNumConverted() const { return numConverted; }
-
 private:
   template <typename T>
   void addConverter(StringRef name) {
     auto nameAttr = StringAttr::get(context, name);
-    conversions.try_emplace(nameAttr, std::make_unique<T>
-                    [this, nameAttr](GenericIntrinsicOp op) -> LogicalResult {
-                      T conv(nameAttr.getValue(), op);
-                      IntrinsicConverter &base = conv;
-                      if (base.check() || failed(base.convert()))
-                        return failure();
-                      ++numConverted;
-                      return success();
-                    });
+    assert(!conversions.contains(nameAttr) && "duplicate conversion for intrinsic");
+    conversions.try_emplace(nameAttr, std::make_unique<T>());
   }
-
-  unsigned numConverted = 0;
 };
 
 } // namespace firrtl
