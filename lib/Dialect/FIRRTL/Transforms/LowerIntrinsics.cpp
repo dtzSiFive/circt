@@ -169,53 +169,34 @@ public:
   }
 };
 
+template <bool isMux2>
+class CirctMuxCellConverter : public IntrinsicConverter {
+private:
+  static constexpr unsigned inputNum = isMux2 ? 3 : 5;
+
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(inputNum) || gi.typedInput<UIntType>(0) || gi.hasNParam(0);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    if constexpr (isMux2)
+      rewriter.replaceOpWithNewOp<Mux2CellIntrinsicOp>(gi.op,
+                                                       adaptor.getOperands());
+    else
+      rewriter.replaceOpWithNewOp<Mux4CellIntrinsicOp>(gi.op,
+                                                       adaptor.getOperands());
+  }
+};
+
 } // namespace
 
 #if 0
 
 
-template <bool isMux2>
-class CirctMuxCellConverter : public IntrinsicConverter {
-private:
-  static constexpr unsigned portNum = isMux2 ? 4 : 6;
-
-public:
-  using IntrinsicConverter::IntrinsicConverter;
-
-  bool check() override {
-    if (hasNPorts(portNum) || namedPort(0, "sel") || typedPort<UIntType>(0)) {
-      return true;
-    }
-    if (isMux2) {
-      if (namedPort(1, "high") || namedPort(2, "low") || namedPort(3, "out"))
-        return true;
-    } else {
-      if (namedPort(1, "v3") || namedPort(2, "v2") || namedPort(3, "v1") ||
-          namedPort(4, "v0") || namedPort(5, "out"))
-        return true;
-    }
-    return false;
-  }
-
-  LogicalResult convert(InstanceOp inst) override {
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    SmallVector<Value> operands;
-    operands.reserve(portNum - 1);
-    for (unsigned i = 0; i < portNum - 1; i++) {
-      auto v = builder.create<WireOp>(inst.getResult(i).getType()).getResult();
-      operands.push_back(v);
-      inst.getResult(i).replaceAllUsesWith(v);
-    }
-    Value out;
-    if (isMux2)
-      out = builder.create<Mux2CellIntrinsicOp>(operands);
-    else
-      out = builder.create<Mux4CellIntrinsicOp>(operands);
-    inst.getResult(portNum - 1).replaceAllUsesWith(out);
-    inst.erase();
-    return success();
-  }
-};
 
 class CirctLTLAndConverter : public IntrinsicConverter {
 public:
@@ -690,6 +671,10 @@ void LowerIntrinsicsPass::runOnOperation() {
                                             "circt_clock_inv");
   // TODO: convert over in instances-to-ops.
   lowering.add<EICGWrapperToClockGateConverter>("EICG_wrapper");
+
+  lowering.add<CirctMuxCellConverter<true>>("circt.mux2cell", "circt_mux2cell");
+  lowering.add<CirctMuxCellConverter<false>>("circt.mux4cell",
+                                             "circt_mux4cell");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();
