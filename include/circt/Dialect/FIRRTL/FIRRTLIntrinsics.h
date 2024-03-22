@@ -21,15 +21,14 @@
 namespace circt {
 namespace firrtl {
 
-/// Helper class for checking and extracting information from the generic instrinsic op.
+/// Helper class for checking and extracting information from the generic
+/// instrinsic op.
 struct GenericIntrinsic {
   GenericIntrinsicOp op;
 
   GenericIntrinsic(GenericIntrinsicOp op) : op(op) {}
 
-  InFlightDiagnostic emitError() {
-    return op.emitError(op.getIntrinsic());
-  }
+  InFlightDiagnostic emitError() { return op.emitError(op.getIntrinsic()); }
 
   ParseResult hasNInputs(unsigned n);
 
@@ -117,7 +116,8 @@ struct GenericIntrinsic {
   ParseResult hasNOutputElements(unsigned n);
 
   template <typename C>
-  ParseResult checkOutputElement(unsigned n, StringRef name, const Twine &msg, C &&call) {
+  ParseResult checkOutputElement(unsigned n, StringRef name, const Twine &msg,
+                                 C &&call) {
     auto b = getOutputBundle();
     if (!b)
       return emitError() << " missing output bundle";
@@ -132,7 +132,6 @@ struct GenericIntrinsic {
       return emitError() << " output element " << n << " " << msg;
     return success();
   }
-
 
   template <typename C>
   ParseResult checkOutputElement(unsigned n, StringRef name, C &&call) {
@@ -173,7 +172,8 @@ public:
   virtual bool check(GenericIntrinsic gi) = 0;
 
   /// Transform the intrinsic to its implementation.
-  virtual void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) = 0;
+  virtual void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+                       PatternRewriter &rewriter) = 0;
 };
 
 /// Lowering helper which collects all intrinsic converters.
@@ -215,7 +215,8 @@ private:
   template <typename T>
   void addConverter(StringRef name) {
     auto nameAttr = StringAttr::get(context, name);
-    assert(!conversions.contains(nameAttr) && "duplicate conversion for intrinsic");
+    assert(!conversions.contains(nameAttr) &&
+           "duplicate conversion for intrinsic");
     conversions.try_emplace(nameAttr, std::make_unique<T>());
   }
 };

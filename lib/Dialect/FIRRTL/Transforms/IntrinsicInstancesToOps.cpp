@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the IntrinsicInstancesToOps pass.  This pass processes FIRRTL
-// intmodules and replaces all instances with generic intrinsic ops.
+// This file defines the IntrinsicInstancesToOps pass.  This pass processes
+// FIRRTL intmodules and replaces all instances with generic intrinsic ops.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,7 +25,8 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct IntrinsicInstancesToOpsPass : public IntrinsicInstancesToOpsBase<IntrinsicInstancesToOpsPass> {
+struct IntrinsicInstancesToOpsPass
+    : public IntrinsicInstancesToOpsBase<IntrinsicInstancesToOpsPass> {
   void runOnOperation() override;
   using IntrinsicInstancesToOpsBase::fixupEICGWrapper;
 };
@@ -35,13 +36,12 @@ struct IntrinsicInstancesToOpsPass : public IntrinsicInstancesToOpsBase<Intrinsi
 void IntrinsicInstancesToOpsPass::runOnOperation() {
   auto &ig = getAnalysis<InstanceGraph>();
 
-   // Convert to int ops.
-  for (auto op : llvm::make_early_inc_range(getOperation().getOps<FIntModuleOp>())) {
+  // Convert to int ops.
+  for (auto op :
+       llvm::make_early_inc_range(getOperation().getOps<FIntModuleOp>())) {
     auto *node = ig.lookup(op);
 
     // Look at the intmodule's ports to determine how this gets converted.
-
-    
 
     for (auto *use : node->uses()) {
       auto inst = use->getInstance<InstanceOp>();
@@ -84,7 +84,9 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
       // Create the replacement operation.
       if (outputs.empty()) {
         // If no outputs, just create the operation.
-        builder.create<GenericIntrinsicOp>( /*result=*/Type(), op.getIntrinsicAttr(), inputs, op.getParameters());
+        builder.create<GenericIntrinsicOp>(/*result=*/Type(),
+                                           op.getIntrinsicAttr(), inputs,
+                                           op.getParameters());
 
       } else if (outputs.size() == 1) {
         // For single output, the result is the output.
@@ -92,8 +94,8 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
         auto intop = builder.create<GenericIntrinsicOp>(
             resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         outputs.front().result.replaceAllUsesWith(intop.getResult());
-        // auto name = builder.getStringAttr(inst.getInstanceName() + "_" + outputs.front().element.name.strref());
-        // intop->setAttr("name", name);
+        // auto name = builder.getStringAttr(inst.getInstanceName() + "_" +
+        // outputs.front().element.name.strref()); intop->setAttr("name", name);
       } else {
         // For multiple outputs, create a bundle with fields for each output
         // and replace users with subfields.

@@ -75,7 +75,7 @@ ParseResult GenericIntrinsic::namedParam(StringRef paramName, bool optional) {
 }
 
 ParseResult GenericIntrinsic::namedIntParam(StringRef paramName,
-                                              bool optional) {
+                                            bool optional) {
   for (auto a : op.getParameters()) {
     auto param = cast<ParamDeclAttr>(a);
     if (param.getName().getValue().equals(paramName)) {

@@ -42,8 +42,8 @@ public:
     return gi.hasNInputs(1) || gi.sizedOutput<UIntType>(32) || gi.hasNParam(0);
   }
 
-
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
     rewriter.replaceOpWithNewOp<SizeOfIntrinsicOp>(gi.op,
                                                    adaptor.getOperands()[0]);
   }
@@ -57,7 +57,8 @@ public:
     return gi.hasNInputs(1) || gi.sizedOutput<UIntType>(1) || gi.hasNParam(0);
   }
 
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
     rewriter.replaceOpWithNewOp<IsXIntrinsicOp>(gi.op,
                                                 adaptor.getOperands()[0]);
   }
@@ -68,11 +69,12 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(0) || gi.sizedOutput<UIntType>(1) ||
-           gi.hasNParam(1) || gi.namedParam("FORMAT");
+    return gi.hasNInputs(0) || gi.sizedOutput<UIntType>(1) || gi.hasNParam(1) ||
+           gi.namedParam("FORMAT");
   }
 
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor, PatternRewriter &rewriter) override {
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
     rewriter.replaceOpWithNewOp<PlusArgsTestIntrinsicOp>(
         gi.op, gi.getParamValue<StringAttr>("FORMAT"));
   }
@@ -809,7 +811,6 @@ void LowerIntrinsicsPass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerIntrinsicsPass() {
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerIntrinsicsPass() {
   return std::make_unique<LowerIntrinsicsPass>();
 }
