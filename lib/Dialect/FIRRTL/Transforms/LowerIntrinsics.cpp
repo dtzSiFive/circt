@@ -151,9 +151,10 @@ class CirctMux4CellConverter
   }
 };
 
-class CirctLTLAndConverter : public IntrinsicOpConverter<LTLAndIntrinsicOp> {
+template <typename OpTy>
+class CirctLTLBinaryConverter : public IntrinsicOpConverter<OpTy> {
 public:
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+  using IntrinsicOpConverter<OpTy>::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
@@ -162,13 +163,49 @@ public:
   }
 };
 
-class CirctLTLOrConverter : public IntrinsicOpConverter<LTLOrIntrinsicOp> {
+template <typename OpTy>
+class CirctLTLUnaryConverter : public IntrinsicOpConverter<OpTy> {
+public:
+  using IntrinsicOpConverter<OpTy>::IntrinsicOpConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.hasNParam(0);
+  }
+};
+
+class CirctLTLDelayConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.hasNParam(1, 2) ||
+           gi.namedIntParam("delay") || gi.namedIntParam("length", true);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto delay = getI64Attr(gi.getParamValue<IntegerAttr>("delay"));
+    auto length = getI64Attr(gi.getParamValue<IntegerAttr>("length"));
+    rewriter.replaceOpWithNewOp<LTLDelayIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], delay, length);
+  }
+};
+
+class CirctLTLClockConverter
+    : public IntrinsicOpConverter<LTLClockIntrinsicOp> {
 public:
   using IntrinsicOpConverter::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.sizedInput<UIntType>(1, 1) || gi.sizedOutput<UIntType>(1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
            gi.hasNParam(0);
   }
 };
@@ -603,8 +640,19 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctMux2CellConverter>("circt.mux2cell", "circt_mux2cell");
   lowering.add<CirctMux4CellConverter>("circt.mux4cell", "circt_mux4cell");
 
-  lowering.add<CirctLTLAndConverter>("circt.ltl.and", "circt_ltl_and");
-  lowering.add<CirctLTLOrConverter>("circt.ltl.or", "circt_ltl_or");
+  lowering.add<CirctLTLBinaryConverter<LTLAndIntrinsicOp>>("circt.ltl.and", "circt_ltl_and");
+  lowering.add<CirctLTLBinaryConverter<LTLOrIntrinsicOp>>("circt.ltl.or", "circt_ltl_or");
+  lowering.add<CirctLTLBinaryConverter<LTLConcatIntrinsicOp>>("circt.ltl.concat", "circt_ltl_concat");
+  lowering.add<CirctLTLBinaryConverter<LTLImplicationIntrinsicOp>>("circt.ltl.implication",
+                                             "circt_ltl_implication");
+  lowering.add<CirctLTLBinaryConverter<LTLDisableIntrinsicOp>>(
+      "circt.ltl.disable", "circt_ltl_disable");
+  lowering.add<CirctLTLUnaryConverter<LTLNotIntrinsicOp>>("circt.ltl.not", "circt_ltl_not");
+  lowering.add<CirctLTLUnaryConverter<LTLEventuallyIntrinsicOp>>(
+      "circt.ltl.eventually", "circt_ltl_eventually");
+
+  lowering.add<CirctLTLDelayConverter>("circt.ltl.delay", "circt_ltl_delay");
+  lowering.add<CirctLTLClockConverter>("circt.ltl.clock", "circt_ltl_clock");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();
