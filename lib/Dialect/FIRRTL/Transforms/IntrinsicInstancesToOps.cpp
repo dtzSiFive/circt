@@ -48,6 +48,7 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
 
       // Replace the instance of this intmodule with firrtl.int.generic.
       // Inputs become operands, outputs are the result (if any).
+      // TODO: Combine locations?
       ImplicitLocOpBuilder builder(op.getLoc(), inst);
 
       SmallVector<Value> inputs;
@@ -114,6 +115,39 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
     // Can't erase from IG.
     // ig.erase(node);
   }
+
+  // Special handling for magic EICG wrapper extmodule.  Deprecate and remove.
+  if (fixupEICGWrapper) {
+    for (auto op :
+         llvm::make_early_inc_range(getOperation().getOps<FExtModuleOp>())) {
+      if (op.getDefname() != "EICG_wrapper")
+        continue;
+
+      for (auto *use : ig.lookup(op)->uses()) {
+        auto inst = use->getInstance<InstanceOp>();
+
+        ImplicitLocOpBuilder builder(op.getLoc(), inst);
+        auto replaceResults = [](OpBuilder &b, auto &&range) {
+          return llvm::map_to_vector(range, [&b](auto v) {
+            auto w = b.create<WireOp>(v.getLoc(), v.getType()).getResult();
+            v.replaceAllUsesWith(w);
+            return w;
+          });
+        };
+
+        auto inputs = replaceResults(builder, inst.getResults().drop_back());
+        // This can't directly use the clock_gate intrinsic, as the test_en operand there
+        // is NOT optional.  Invent a EICG_wrapper for now instead.
+        auto intop = builder.create<GenericIntrinsicOp>(
+            builder.getType<ClockType>(), "EICG_wrapper", inputs,
+            op.getParameters());
+        inst.getResults().back().replaceAllUsesWith(intop.getResult());
+        inst.erase();
+      }
+      op.erase();
+    }
+  }
+
 }
 
 /// This is the pass constructor.

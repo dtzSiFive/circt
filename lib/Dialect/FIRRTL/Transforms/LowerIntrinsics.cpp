@@ -144,66 +144,35 @@ public:
   }
 };
 
-} // namespace
-
-#if 0
-
 class EICGWrapperToClockGateConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  bool check() override {
-    if (!AnnotationSet(mod).empty()) {
-      mod.emitError(name)
-          << " cannot have annotations since it is an intrinsic";
-      return true;
+  bool check(GenericIntrinsic gi) override {
+    if (gi.op.getNumOperands() == 3) {
+      return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
+             gi.sizedInput<UIntType>(2, 1) || gi.typedOutput<ClockType>() ||
+             gi.hasNParam(0);
     }
-    if (mod.getPorts().size() == 4) {
-      return namedPort(0, "in") || namedPort(1, "test_en") ||
-             namedPort(2, "en") || namedPort(3, "out") ||
-             typedPort<ClockType>(0) || sizedPort<UIntType>(1, 1) ||
-             sizedPort<UIntType>(2, 1) || typedPort<ClockType>(3) ||
-             hasNParam(0);
+    if (gi.op.getNumOperands() == 2) {
+      return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
+             gi.typedOutput<ClockType>() || gi.hasNParam(0);
     }
-    if (mod.getPorts().size() == 3) {
-      return namedPort(0, "in") || namedPort(1, "en") || namedPort(2, "out") ||
-             typedPort<ClockType>(0) || sizedPort<UIntType>(1, 1) ||
-             typedPort<ClockType>(2) || hasNParam(0);
-    }
-    mod.emitError(name) << " has " << mod.getPorts().size()
-                        << " ports instead of 3 or 4";
+    gi.emitError() << " has " << gi.op.getNumOperands()
+                   << " ports instead of 3 or 4";
     return true;
   }
 
-  LogicalResult convert(InstanceOp inst) override {
-    if (!AnnotationSet(inst).empty())
-      return inst.emitError(name)
-             << " instance cannot have annotations since it is an intrinsic";
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    if (mod.getPorts().size() == 4) {
-      // Ports: in, test_en, en, out
-      auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-      auto testEn =
-          builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-      auto en = builder.create<WireOp>(inst.getResult(2).getType()).getResult();
-      auto out = builder.create<ClockGateIntrinsicOp>(in, en, testEn);
-      inst.getResult(0).replaceAllUsesWith(in);
-      inst.getResult(1).replaceAllUsesWith(testEn);
-      inst.getResult(2).replaceAllUsesWith(en);
-      inst.getResult(3).replaceAllUsesWith(out);
-    } else {
-      // Ports: in, en, out
-      auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-      auto en = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-      auto out = builder.create<ClockGateIntrinsicOp>(in, en, Value{});
-      inst.getResult(0).replaceAllUsesWith(in);
-      inst.getResult(1).replaceAllUsesWith(en);
-      inst.getResult(2).replaceAllUsesWith(out);
-    }
-    inst.erase();
-    return success();
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    rewriter.replaceOpWithNewOp<ClockGateIntrinsicOp>(gi.op, adaptor.getOperands());
   }
 };
+
+} // namespace
+
+#if 0
+
 
 template <bool isMux2>
 class CirctMuxCellConverter : public IntrinsicConverter {
@@ -719,6 +688,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctClockGateConverter>("circt.clock_gate", "circt_clock_gate");
   lowering.add<CirctClockInverterConverter>("circt.clock_inv",
                                             "circt_clock_inv");
+  // TODO: convert over in instances-to-ops.
+  lowering.add<EICGWrapperToClockGateConverter>("EICG_wrapper");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();
