@@ -162,59 +162,20 @@ public:
   }
 };
 
+class CirctLTLOrConverter : public IntrinsicOpConverter<LTLOrIntrinsicOp> {
+public:
+  using IntrinsicOpConverter::IntrinsicOpConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedInput<UIntType>(1, 1) || gi.sizedOutput<UIntType>(1) ||
+           gi.hasNParam(0);
+  }
+};
+
 } // namespace
 
 #if 0
-
-
-
-class CirctLTLAndConverter : public IntrinsicConverter {
-public:
-  using IntrinsicConverter::IntrinsicConverter;
-
-  bool check() override {
-    return hasNPorts(3) || namedPort(0, "lhs") || namedPort(1, "rhs") ||
-           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
-           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
-           hasNParam(0);
-  }
-
-  LogicalResult convert(InstanceOp inst) override {
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-    auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(lhs);
-    inst.getResult(1).replaceAllUsesWith(rhs);
-    auto out = builder.create<LTLAndIntrinsicOp>(lhs.getType(), lhs, rhs);
-    inst.getResult(2).replaceAllUsesWith(out);
-    inst.erase();
-    return success();
-  }
-};
-
-class CirctLTLOrConverter : public IntrinsicConverter {
-public:
-  using IntrinsicConverter::IntrinsicConverter;
-
-  bool check() override {
-    return hasNPorts(3) || namedPort(0, "lhs") || namedPort(1, "rhs") ||
-           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
-           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
-           hasNParam(0);
-  }
-
-  LogicalResult convert(InstanceOp inst) override {
-    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-    auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(lhs);
-    inst.getResult(1).replaceAllUsesWith(rhs);
-    auto out = builder.create<LTLOrIntrinsicOp>(lhs.getType(), lhs, rhs);
-    inst.getResult(2).replaceAllUsesWith(out);
-    inst.erase();
-    return success();
-  }
-};
 
 class CirctLTLDelayConverter : public IntrinsicConverter {
 public:
@@ -641,6 +602,9 @@ void LowerIntrinsicsPass::runOnOperation() {
                                             "circt_clock_inv");
   lowering.add<CirctMux2CellConverter>("circt.mux2cell", "circt_mux2cell");
   lowering.add<CirctMux4CellConverter>("circt.mux4cell", "circt_mux4cell");
+
+  lowering.add<CirctLTLAndConverter>("circt.ltl.and", "circt_ltl_and");
+  lowering.add<CirctLTLOrConverter>("circt.ltl.or", "circt_ltl_or");
 
   if (failed(lowering.lower(getOperation(), /*allowUnknownIntrinsics=*/true)))
     return signalPassFailure();
