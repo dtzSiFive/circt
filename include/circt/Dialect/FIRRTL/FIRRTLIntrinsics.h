@@ -177,7 +177,7 @@ public:
 };
 
 template <typename OpTy>
-class IntrinsicOpConverter  : public IntrinsicConverter {
+class IntrinsicOpConverter : public IntrinsicConverter {
 public:
   /// Transform the intrinsic to its implementation.
   /// Handles the simple case of just forwarding to new op kind.

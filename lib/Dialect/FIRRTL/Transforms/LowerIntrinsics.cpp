@@ -90,7 +90,8 @@ public:
   }
 };
 
-class CirctClockGateConverter : public IntrinsicOpConverter<ClockGateIntrinsicOp> {
+class CirctClockGateConverter
+    : public IntrinsicOpConverter<ClockGateIntrinsicOp> {
 public:
   using IntrinsicOpConverter::IntrinsicOpConverter;
 
@@ -125,7 +126,8 @@ public:
     // during intmodule->op conversion, as code previously materialized
     // a wire to hold the name of the instance.
     // In the future, input FIRRTL can just be "node clock_inv = ....".
-    rewriter.replaceOpWithNewOp<ClockInverterIntrinsicOp>(gi.op, adaptor.getOperands()[0]);
+    rewriter.replaceOpWithNewOp<ClockInverterIntrinsicOp>(
+        gi.op, adaptor.getOperands()[0]);
 
     // auto name = inst.getInstanceName();
     // Value outWire = builder.create<WireOp>(out.getType(), name).getResult();
@@ -134,7 +136,8 @@ public:
   }
 };
 
-class CirctMux2CellConverter : public IntrinsicOpConverter<Mux2CellIntrinsicOp> {
+class CirctMux2CellConverter
+    : public IntrinsicOpConverter<Mux2CellIntrinsicOp> {
   using IntrinsicOpConverter::IntrinsicOpConverter;
 
   bool check(GenericIntrinsic gi) override {
@@ -452,14 +455,18 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctMux2CellConverter>("circt.mux2cell", "circt_mux2cell");
   lowering.add<CirctMux4CellConverter>("circt.mux4cell", "circt_mux4cell");
 
-  lowering.add<CirctLTLBinaryConverter<LTLAndIntrinsicOp>>("circt.ltl.and", "circt_ltl_and");
-  lowering.add<CirctLTLBinaryConverter<LTLOrIntrinsicOp>>("circt.ltl.or", "circt_ltl_or");
-  lowering.add<CirctLTLBinaryConverter<LTLConcatIntrinsicOp>>("circt.ltl.concat", "circt_ltl_concat");
-  lowering.add<CirctLTLBinaryConverter<LTLImplicationIntrinsicOp>>("circt.ltl.implication",
-                                             "circt_ltl_implication");
+  lowering.add<CirctLTLBinaryConverter<LTLAndIntrinsicOp>>("circt.ltl.and",
+                                                           "circt_ltl_and");
+  lowering.add<CirctLTLBinaryConverter<LTLOrIntrinsicOp>>("circt.ltl.or",
+                                                          "circt_ltl_or");
+  lowering.add<CirctLTLBinaryConverter<LTLConcatIntrinsicOp>>(
+      "circt.ltl.concat", "circt_ltl_concat");
+  lowering.add<CirctLTLBinaryConverter<LTLImplicationIntrinsicOp>>(
+      "circt.ltl.implication", "circt_ltl_implication");
   lowering.add<CirctLTLBinaryConverter<LTLDisableIntrinsicOp>>(
       "circt.ltl.disable", "circt_ltl_disable");
-  lowering.add<CirctLTLUnaryConverter<LTLNotIntrinsicOp>>("circt.ltl.not", "circt_ltl_not");
+  lowering.add<CirctLTLUnaryConverter<LTLNotIntrinsicOp>>("circt.ltl.not",
+                                                          "circt_ltl_not");
   lowering.add<CirctLTLUnaryConverter<LTLEventuallyIntrinsicOp>>(
       "circt.ltl.eventually", "circt_ltl_eventually");
 

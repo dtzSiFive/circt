@@ -145,7 +145,6 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
       op.erase();
     }
   }
-
 }
 
 /// This is the pass constructor.
