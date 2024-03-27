@@ -1595,6 +1595,16 @@ private:
   ParseResult parseRWProbeStaticRefExp(FieldRef &refResult, Type &type,
                                        const Twine &message);
 
+  // Generic intrinsic parsing.
+  ParseResult parseIntrinsic(Value &result, bool isStatement);
+  ParseResult parseIntrinsicStmt() {
+    Value unused;
+    return parseIntrinsic(unused, /*isStatement=*/true);
+  }
+  ParseResult parseIntrinsicExp(Value &result) {
+    return parseIntrinsic(result, /*isStatement=*/false);
+  }
+
   template <typename subop>
   FailureOr<Value> emitCachedSubAccess(Value base,
                                        ArrayRef<NamedAttribute> attrs,
@@ -1942,6 +1952,10 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (requireFeature(nextFIRVersion, "paths") || parsePathExp(result))
       return failure();
     break;
+
+ case FIRToken::kw_intrinsic:
+  if (requireFeature({4, 0, 0}, "generic intrinsics") || parseIntrinsicExp(result))
+    return failure();
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
@@ -2583,7 +2597,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     if (requireFeature({4, 0, 0}, "layers"))
       return failure();
     return parseLayerBlockOrGroup(stmtIndent);
-
+   case FIRToken::kw_intrinsic:
+    if (requireFeature({4, 0, 0}, "generic intrinsics"))
+      return failure();
+    return parseIntrinsicStmt();
   default: {
     // Statement productions that start with an expression.
     Value lhs;
@@ -3305,6 +3322,22 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
     }
     return success();
   }
+}
+
+
+/// intrinsic ::=  'intrinsic' Id (params)? '(' exp* ')' ( ':' type )?
+ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
+  auto startTok = consumeToken(FIRToken::kw_intrinsic);
+  StringRef intrinsic;
+  ArrayAttr parameters;
+  SmallVector<Value> operands;
+  Type type;
+  
+  if (parseId(intrinsic, "expected intrinsic identifier") || parseOptionalParams(parameters) || parseToken(FIRToken::l_paren, "expected '(' in intrinsic expression"))
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+  return failure();
 }
 
 /// path ::= 'path(' StringLit ')'
@@ -4465,6 +4498,7 @@ private:
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             unsigned indent);
+  ParseResult parseOptionalParams(ArrayAttr &resultParameters);
   ParseResult parseParameterList(ArrayAttr &resultParameters);
   ParseResult parseParameter(StringAttr &resultName, TypedAttr &resultValue,
                              SMLoc &resultLoc);
@@ -4784,16 +4818,16 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
   }
 }
 
-/// parameter ::= 'parameter' id '=' intLit NEWLINE
-/// parameter ::= 'parameter' id '=' StringLit NEWLINE
-/// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
-/// parameter ::= 'parameter' id '=' VerbatimStringLit NEWLINE
+/// parameter ::= 'parameter' param NEWLINE
+/// param ::= id '=' intLit
+///       ::= id '=' StringLit
+///       ::= id '=' floatingpoint
+///       ::= id '=' VerbatimStringLit
 ParseResult FIRCircuitParser::parseParameter(StringAttr &resultName,
                                              TypedAttr &resultValue,
                                              SMLoc &resultLoc) {
   mlir::Builder builder(getContext());
 
-  consumeToken(FIRToken::kw_parameter);
   auto loc = getToken().getLoc();
 
   StringRef name;
@@ -4855,7 +4889,7 @@ ParseResult FIRCircuitParser::parseParameter(StringAttr &resultName,
 ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
   SmallVector<Attribute, 8> parameters;
   SmallPtrSet<StringAttr, 8> seen;
-  while (getToken().is(FIRToken::kw_parameter)) {
+  while (consumeIf(FIRToken::kw_parameter)) {
     StringAttr name;
     TypedAttr value;
     SMLoc loc;
@@ -4866,6 +4900,31 @@ ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
                        "redefinition of parameter '" + name.getValue() + "'");
     parameters.push_back(ParamDeclAttr::get(name, value));
   }
+  resultParameters = ArrayAttr::get(getContext(), parameters);
+  return success();
+}
+
+/// params ::= '<' param param* '>'
+ParseResult FIRCircuitParser::parseOptionalParams(ArrayAttr &resultParameters) {
+  if (!consumeIf(FIRToken::less))
+    return success();
+
+  SmallVector<Attribute, 8> parameters;
+  SmallPtrSet<StringAttr, 8> seen;
+  if (parseListUntil(FIRToken::greater, [&]() -> ParseResult {
+        StringAttr name;
+        TypedAttr value;
+        SMLoc loc;
+        if (parseParameter(name, value, loc))
+          return failure();
+        if (!seen.insert(name).second)
+          return emitError(loc, "redefinition of parameter '" +
+                                    name.getValue() + "'");
+        parameters.push_back(ParamDeclAttr::get(name, value));
+        return success();
+      }))
+    return failure();
+
   resultParameters = ArrayAttr::get(getContext(), parameters);
   return success();
 }
