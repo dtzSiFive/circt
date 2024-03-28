@@ -86,16 +86,22 @@ public:
   using ConversionMapTy = IntrinsicLowerings::ConversionMapTy;
 
   IntrinsicOpConversion(MLIRContext *context,
-                        const ConversionMapTy &conversions)
-      : OpConversionPattern(context), conversions(conversions) {}
+                        const ConversionMapTy &conversions,
+                        bool allowUnknownIntrinsics = false)
+      : OpConversionPattern(context), conversions(conversions),
+        allowUnknownIntrinsics(allowUnknownIntrinsics) {}
 
   LogicalResult
   matchAndRewrite(GenericIntrinsicOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto it = conversions.find(op.getIntrinsicAttr());
-    if (it == conversions.end())
-      return failure();
+    if (it == conversions.end()) {
+      if (!allowUnknownIntrinsics)
+        return op.emitError("unknown intrinsic ") << op.getIntrinsicAttr();
+      else
+        return failure();
+    }
 
     auto &conv = *it->second;
     if (conv.check(GenericIntrinsic(op)))
@@ -106,6 +112,7 @@ public:
 
 private:
   const ConversionMapTy &conversions;
+  const bool allowUnknownIntrinsics;
 };
 
 LogicalResult IntrinsicLowerings::lower(FModuleOp mod,
@@ -113,17 +120,18 @@ LogicalResult IntrinsicLowerings::lower(FModuleOp mod,
 
   ConversionTarget target(*context);
 
-  target.addLegalDialect<FIRRTLDialect>();
+  target.markUnknownOpDynamicallyLegal([](Operation *op) { return true; });
   if (allowUnknownIntrinsics)
     target.addDynamicallyLegalOp<GenericIntrinsicOp>(
         [this](GenericIntrinsicOp op) {
-          return !conversions.count(op.getIntrinsicAttr());
+          return !conversions.contains(op.getIntrinsicAttr());
         });
   else
     target.addIllegalOp<GenericIntrinsicOp>();
 
   RewritePatternSet patterns(context);
-  patterns.add<IntrinsicOpConversion>(context, conversions);
+  patterns.add<IntrinsicOpConversion>(context, conversions,
+                                      allowUnknownIntrinsics);
 
   return mlir::applyPartialConversion(mod, target, std::move(patterns));
 }
