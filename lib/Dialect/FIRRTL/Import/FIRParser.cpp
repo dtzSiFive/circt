@@ -1219,7 +1219,6 @@ ParseResult FIRParser::parseParameter(StringAttr &resultName,
   return success();
 }
 
-
 //===----------------------------------------------------------------------===//
 // FIRModuleContext
 //===----------------------------------------------------------------------===//
@@ -2024,10 +2023,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
- case FIRToken::kw_intrinsic:
-  if (requireFeature({4, 0, 0}, "generic intrinsics") || parseIntrinsicExp(result))
-    return failure();
-  break;
+  case FIRToken::kw_intrinsic:
+    if (requireFeature({4, 0, 0}, "generic intrinsics") ||
+        parseIntrinsicExp(result))
+      return failure();
+    break;
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
@@ -2669,7 +2669,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     if (requireFeature({4, 0, 0}, "layers"))
       return failure();
     return parseLayerBlockOrGroup(stmtIndent);
-   case FIRToken::kw_intrinsic:
+  case FIRToken::kw_intrinsic:
     if (requireFeature({4, 0, 0}, "generic intrinsics"))
       return failure();
     return parseIntrinsicStmt();
@@ -3396,26 +3396,27 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
   }
 }
 
-
 /// intrinsic ::=  'intrinsic' Id (params)? '(' exp* ')' ( ':' type )?
 ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
   auto startTok = consumeToken(FIRToken::kw_intrinsic);
   StringRef intrinsic;
   ArrayAttr parameters;
-  
-  if (parseId(intrinsic, "expected intrinsic identifier") || parseOptionalParams(parameters) || parseToken(FIRToken::l_paren, "expected '(' in intrinsic expression"))
+
+  if (parseId(intrinsic, "expected intrinsic identifier") ||
+      parseOptionalParams(parameters) ||
+      parseToken(FIRToken::l_paren, "expected '(' in intrinsic expression"))
     return failure();
 
   SmallVector<Value> operands;
   auto loc = startTok.getLoc();
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-    Value operand;
-    if (parseExp(operand, "expected operand in intrinsic"))
-    return failure();
-    operands.push_back(operand);
-    locationProcessor.setLoc(loc);
-    return success();
-  }))
+        Value operand;
+        if (parseExp(operand, "expected operand in intrinsic"))
+          return failure();
+        operands.push_back(operand);
+        locationProcessor.setLoc(loc);
+        return success();
+      }))
     return failure();
 
   FIRRTLType type;
@@ -3425,7 +3426,7 @@ ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
     return failure();
 
   if (parseOptionalInfo())
-     return failure();
+    return failure();
 
   locationProcessor.setLoc(loc);
 
@@ -3460,7 +3461,6 @@ ParseResult FIRStmtParser::parseOptionalParams(ArrayAttr &resultParameters) {
   resultParameters = ArrayAttr::get(getContext(), parameters);
   return success();
 }
-
 
 /// path ::= 'path(' StringLit ')'
 // NOLINTNEXTLINE(misc-no-recursion)
