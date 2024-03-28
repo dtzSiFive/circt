@@ -282,6 +282,9 @@ struct FIRParser {
 
   ParseResult parseOptionalRUW(RUWAttr &result);
 
+  ParseResult parseParameter(StringAttr &resultName, TypedAttr &resultValue,
+                             SMLoc &resultLoc);
+
   /// The version of FIRRTL to use for this parser.
   FIRVersion version;
 
@@ -1150,6 +1153,73 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   return success();
 }
 
+/// param ::= id '=' intLit
+///       ::= id '=' StringLit
+///       ::= id '=' floatingpoint
+///       ::= id '=' VerbatimStringLit
+ParseResult FIRParser::parseParameter(StringAttr &resultName,
+                                      TypedAttr &resultValue,
+                                      SMLoc &resultLoc) {
+  mlir::Builder builder(getContext());
+
+  auto loc = getToken().getLoc();
+
+  StringRef name;
+  if (parseId(name, "expected parameter name") ||
+      parseToken(FIRToken::equal, "expected '=' in parameter"))
+    return failure();
+
+  TypedAttr value;
+  switch (getToken().getKind()) {
+  default:
+    return emitError("expected parameter value"), failure();
+  case FIRToken::integer:
+  case FIRToken::signed_integer: {
+    APInt result;
+    if (parseIntLit(result, "invalid integer parameter"))
+      return failure();
+
+    // If the integer parameter is less than 32-bits, sign extend this to a
+    // 32-bit value.  This needs to eventually emit as a 32-bit value in
+    // Verilog and we want to get the size correct immediately.
+    if (result.getBitWidth() < 32)
+      result = result.sext(32);
+
+    value = builder.getIntegerAttr(
+        builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
+        result);
+    break;
+  }
+  case FIRToken::string: {
+    // Drop the double quotes and unescape.
+    value = builder.getStringAttr(getToken().getStringValue());
+    consumeToken(FIRToken::string);
+    break;
+  }
+  case FIRToken::verbatim_string: {
+    // Drop the single quotes and unescape the ones inside.
+    auto text = builder.getStringAttr(getToken().getVerbatimStringValue());
+    value = hw::ParamVerbatimAttr::get(text);
+    consumeToken(FIRToken::verbatim_string);
+    break;
+  }
+  case FIRToken::floatingpoint:
+    double v;
+    if (!llvm::to_float(getTokenSpelling(), v))
+      return emitError("invalid float parameter syntax"), failure();
+
+    value = builder.getF64FloatAttr(v);
+    consumeToken(FIRToken::floatingpoint);
+    break;
+  }
+
+  resultName = builder.getStringAttr(name);
+  resultValue = value;
+  resultLoc = loc;
+  return success();
+}
+
+
 //===----------------------------------------------------------------------===//
 // FIRModuleContext
 //===----------------------------------------------------------------------===//
@@ -1604,6 +1674,7 @@ private:
   ParseResult parseIntrinsicExp(Value &result) {
     return parseIntrinsic(result, /*isStatement=*/false);
   }
+  ParseResult parseOptionalParams(ArrayAttr &resultParameters);
 
   template <typename subop>
   FailureOr<Value> emitCachedSubAccess(Value base,
@@ -1956,6 +2027,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
  case FIRToken::kw_intrinsic:
   if (requireFeature({4, 0, 0}, "generic intrinsics") || parseIntrinsicExp(result))
     return failure();
+  break;
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
@@ -3330,15 +3402,60 @@ ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
   auto startTok = consumeToken(FIRToken::kw_intrinsic);
   StringRef intrinsic;
   ArrayAttr parameters;
-  SmallVector<Value> operands;
-  Type type;
   
   if (parseId(intrinsic, "expected intrinsic identifier") || parseOptionalParams(parameters) || parseToken(FIRToken::l_paren, "expected '(' in intrinsic expression"))
     return failure();
 
-  locationProcessor.setLoc(startTok.getLoc());
-  return failure();
+  SmallVector<Value> operands;
+  auto loc = startTok.getLoc();
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+    Value operand;
+    if (parseExp(operand, "expected operand in intrinsic"))
+    return failure();
+    operands.push_back(operand);
+    locationProcessor.setLoc(loc);
+    return success();
+  }))
+    return failure();
+
+  FIRRTLType type;
+  if (!isStatement &&
+      (parseToken(FIRToken::colon, "expected ':' in intrinsic expression") ||
+       parseType(type, "expected intrinsic return type")))
+    return failure();
+
+  auto op = builder.create<GenericIntrinsicOp>(
+      type, builder.getStringAttr(intrinsic), operands, parameters);
+  if (!isStatement)
+    result = op.getResult();
+  return success();
 }
+
+/// params ::= '<' param param* '>'
+ParseResult FIRStmtParser::parseOptionalParams(ArrayAttr &resultParameters) {
+  if (!consumeIf(FIRToken::less))
+    return success();
+
+  SmallVector<Attribute, 8> parameters;
+  SmallPtrSet<StringAttr, 8> seen;
+  if (parseListUntil(FIRToken::greater, [&]() -> ParseResult {
+        StringAttr name;
+        TypedAttr value;
+        SMLoc loc;
+        if (parseParameter(name, value, loc))
+          return failure();
+        if (!seen.insert(name).second)
+          return emitError(loc, "redefinition of parameter '" +
+                                    name.getValue() + "'");
+        parameters.push_back(ParamDeclAttr::get(name, value));
+        return success();
+      }))
+    return failure();
+
+  resultParameters = ArrayAttr::get(getContext(), parameters);
+  return success();
+}
+
 
 /// path ::= 'path(' StringLit ')'
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -4498,10 +4615,7 @@ private:
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             unsigned indent);
-  ParseResult parseOptionalParams(ArrayAttr &resultParameters);
   ParseResult parseParameterList(ArrayAttr &resultParameters);
-  ParseResult parseParameter(StringAttr &resultName, TypedAttr &resultValue,
-                             SMLoc &resultLoc);
   ParseResult parseRefList(ArrayRef<PortInfo> portList,
                            ArrayAttr &internalPathResults);
 
@@ -4818,74 +4932,8 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
   }
 }
 
-/// parameter ::= 'parameter' param NEWLINE
-/// param ::= id '=' intLit
-///       ::= id '=' StringLit
-///       ::= id '=' floatingpoint
-///       ::= id '=' VerbatimStringLit
-ParseResult FIRCircuitParser::parseParameter(StringAttr &resultName,
-                                             TypedAttr &resultValue,
-                                             SMLoc &resultLoc) {
-  mlir::Builder builder(getContext());
-
-  auto loc = getToken().getLoc();
-
-  StringRef name;
-  if (parseId(name, "expected parameter name") ||
-      parseToken(FIRToken::equal, "expected '=' in parameter"))
-    return failure();
-
-  TypedAttr value;
-  switch (getToken().getKind()) {
-  default:
-    return emitError("expected parameter value"), failure();
-  case FIRToken::integer:
-  case FIRToken::signed_integer: {
-    APInt result;
-    if (parseIntLit(result, "invalid integer parameter"))
-      return failure();
-
-    // If the integer parameter is less than 32-bits, sign extend this to a
-    // 32-bit value.  This needs to eventually emit as a 32-bit value in
-    // Verilog and we want to get the size correct immediately.
-    if (result.getBitWidth() < 32)
-      result = result.sext(32);
-
-    value = builder.getIntegerAttr(
-        builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
-        result);
-    break;
-  }
-  case FIRToken::string: {
-    // Drop the double quotes and unescape.
-    value = builder.getStringAttr(getToken().getStringValue());
-    consumeToken(FIRToken::string);
-    break;
-  }
-  case FIRToken::verbatim_string: {
-    // Drop the single quotes and unescape the ones inside.
-    auto text = builder.getStringAttr(getToken().getVerbatimStringValue());
-    value = hw::ParamVerbatimAttr::get(text);
-    consumeToken(FIRToken::verbatim_string);
-    break;
-  }
-  case FIRToken::floatingpoint:
-    double v;
-    if (!llvm::to_float(getTokenSpelling(), v))
-      return emitError("invalid float parameter syntax"), failure();
-
-    value = builder.getF64FloatAttr(v);
-    consumeToken(FIRToken::floatingpoint);
-    break;
-  }
-
-  resultName = builder.getStringAttr(name);
-  resultValue = value;
-  resultLoc = loc;
-  return success();
-}
-
 /// parameter-list ::= parameter*
+/// parameter ::= 'parameter' param NEWLINE
 ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
   SmallVector<Attribute, 8> parameters;
   SmallPtrSet<StringAttr, 8> seen;
@@ -4900,31 +4948,6 @@ ParseResult FIRCircuitParser::parseParameterList(ArrayAttr &resultParameters) {
                        "redefinition of parameter '" + name.getValue() + "'");
     parameters.push_back(ParamDeclAttr::get(name, value));
   }
-  resultParameters = ArrayAttr::get(getContext(), parameters);
-  return success();
-}
-
-/// params ::= '<' param param* '>'
-ParseResult FIRCircuitParser::parseOptionalParams(ArrayAttr &resultParameters) {
-  if (!consumeIf(FIRToken::less))
-    return success();
-
-  SmallVector<Attribute, 8> parameters;
-  SmallPtrSet<StringAttr, 8> seen;
-  if (parseListUntil(FIRToken::greater, [&]() -> ParseResult {
-        StringAttr name;
-        TypedAttr value;
-        SMLoc loc;
-        if (parseParameter(name, value, loc))
-          return failure();
-        if (!seen.insert(name).second)
-          return emitError(loc, "redefinition of parameter '" +
-                                    name.getValue() + "'");
-        parameters.push_back(ParamDeclAttr::get(name, value));
-        return success();
-      }))
-    return failure();
-
   resultParameters = ArrayAttr::get(getContext(), parameters);
   return success();
 }
