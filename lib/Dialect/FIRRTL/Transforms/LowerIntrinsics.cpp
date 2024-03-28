@@ -172,7 +172,7 @@ public:
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.sizedOutput<UIntType>(1) || gi.hasNParam(1, 2) ||
+           gi.sizedOutput<UIntType>(1) || gi.hasNParam(1, 1) ||
            gi.namedIntParam("delay") || gi.namedIntParam("length", true);
   }
 
