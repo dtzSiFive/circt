@@ -425,29 +425,25 @@ void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
 }
 
 void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op, std::optional<PPExtString> wordBeforeLHS) {
-  emitAssignLike(
-      // LHS
-      [&]() { ps << PPExtString(param.getName().strref()); },
-      // RHS
-      [&]() {
-        TypeSwitch<Attribute>(param.getValue())
-            .Case<IntegerAttr>(
-                [&](auto attr) { ps.addAsString(attr.getValue()); })
-            .Case<FloatAttr>([&](auto attr) {
-              SmallString<16> str;
-              attr.getValue().toString(str);
-              ps << str;
-            })
-            .Case<StringAttr>(
-                [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
-            .Default([&](auto attr) {
-              emitOpError(op, "with unsupported parameter attribute: ") << attr;
-              ps << "<unsupported-attr ";
-              ps.addAsString(attr);
-              ps << ">";
-            });
-      },
-      PPExtString("="), wordBeforeLHS);
+  if (wordBeforeLHS) {
+    ps << *wordBeforeLHS << PP::nbsp;
+  }
+  ps << PPExtString(param.getName().strref()) << PP::nbsp << "=" << PP::nbsp;
+  TypeSwitch<Attribute>(param.getValue())
+      .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
+      .Case<FloatAttr>([&](auto attr) {
+        SmallString<16> str;
+        attr.getValue().toString(str);
+        ps << str;
+      })
+      .Case<StringAttr>(
+          [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+      .Default([&](auto attr) {
+        emitOpError(op, "with unsupported parameter attribute: ") << attr;
+        ps << "<unsupported-attr ";
+        ps.addAsString(attr);
+        ps << ">";
+      });
 }
 
 void Emitter::emitGenericIntrinsic(GenericIntrinsicOp op) {
