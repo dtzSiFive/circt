@@ -3425,8 +3425,9 @@ ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
        parseType(type, "expected intrinsic return type")))
     return failure();
 
-  if (parseOptionalInfo())
-    return failure();
+  if (isStatement)
+    if (parseOptionalInfo())
+      return failure();
 
   locationProcessor.setLoc(loc);
 
