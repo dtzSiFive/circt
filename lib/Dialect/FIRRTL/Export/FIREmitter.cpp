@@ -613,7 +613,10 @@ void Emitter::emitDeclaration(OptionOp op) {
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
-  return isExpression(op) && !isa<InvalidValueOp>(op);
+  return isExpression(op) && !isa<InvalidValueOp>(op) &&
+         // Booo
+         (!isa<GenericIntrinsicOp>(op) ||
+          cast<GenericIntrinsicOp>(op).getNumResults() != 0);
 }
 
 void Emitter::emitStatementsInBlock(Block &block) {
