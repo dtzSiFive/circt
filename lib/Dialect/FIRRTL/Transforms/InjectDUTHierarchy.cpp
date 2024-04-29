@@ -255,7 +255,7 @@ void InjectDUTHierarchy::runOnOperation() {
       assert(namepath.size() > 1 && "namepath size must be greater than one");
       SmallVector<Attribute> newNamepath{hw::InnerRefAttr::get(
           wrapper.getNameAttr(),
-          cast<hw::InnerRefAttr>(namepath.front().getTarget())};
+          cast<hw::InnerRefAttr>(namepath.front()).getTarget())};
       auto tail = namepath.drop_front();
       newNamepath.append(tail.begin(), tail.end());
       nla->setAttr("namepath", b.getArrayAttr(newNamepath));
