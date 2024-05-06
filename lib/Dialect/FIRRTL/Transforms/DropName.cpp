@@ -68,10 +68,14 @@ private:
     size_t changedNames = 0;
     auto droppableNameAttr =
         NameKindEnumAttr::get(&getContext(), NameKindEnum::DroppableName);
+    auto emptyString = StringAttr::get(&getContext(), "");
     getOperation()->walk([&](FNamableOp op) {
       switch (pred(op)) {
       case ModAction::Drop:
-        op.dropName();
+        // This is an inlined version of op.dropName(), using attributes
+        // we cache and only create once above.
+        op->setAttr("name", emptyString);
+        op.setNameKindAttr(droppableNameAttr);
         ++namesDropped;
         break;
       case ModAction::Demote:
