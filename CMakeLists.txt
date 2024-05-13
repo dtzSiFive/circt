@@ -82,6 +82,11 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
 
+  # MLIR doesn't export this target, nor any variable specifying its binary dir.
+  # Look through LLVM's binary directory as a hint.
+  find_program(MLIR_TABLEGEN_EXE "mlir-tblgen" HINTS ${LLVM_TOOLS_BINARY_DIR}
+    NO_DEFAULT_PATH)
+
   # Handle unittests when building out-of-tree against an installed version of
   # LLVM/MLIR (not a build tree). Adapted from `llvm/flang/CMakeLists.txt`.
   set(CIRCT_GTEST_AVAILABLE 0)
@@ -141,7 +146,6 @@ else()
   set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir ) # --src-root
   set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include ) # --includedir
   set(MLIR_TABLEGEN_OUTPUT_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
-  set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
   include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
   include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
 
