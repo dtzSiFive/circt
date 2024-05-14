@@ -30,6 +30,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
 
+#include "circt/Support/Debug.h"
 #include "circt/Dialect/FIRRTL/FIRRTLConnectionGraph.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
