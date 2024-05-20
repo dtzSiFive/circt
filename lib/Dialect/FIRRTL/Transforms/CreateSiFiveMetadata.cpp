@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -38,11 +39,12 @@ namespace {
 struct ObjectModelIR {
   ObjectModelIR(
       CircuitOp circtOp, FModuleOp dutMod, InstanceGraph &instanceGraph,
-      DenseMap<Operation *, hw::InnerSymbolNamespace> &moduleNamespaces)
+      DenseMap<Operation *, hw::InnerSymbolNamespace> &moduleNamespaces,
+      HierPathCache &hierPathCache)
       : circtOp(circtOp), dutMod(dutMod),
         circtNamespace(CircuitNamespace(circtOp)),
         instancePathCache(InstancePathCache(instanceGraph)),
-        moduleNamespaces(moduleNamespaces) {}
+        hierPathCache(hierPathCache), moduleNamespaces(moduleNamespaces) {}
 
   // Add the tracker annotation to the op and get a PathOp to the op.
   PathOp createPathRef(Operation *op, hw::HierPathOp nla,
@@ -257,10 +259,7 @@ struct ObjectModelIR {
       }
       if (namepath.empty())
         continue;
-      auto nla = nlaBuilder.create<hw::HierPathOp>(
-          mem->getLoc(),
-          nlaBuilder.getStringAttr(circtNamespace.newName("memNLA")),
-          nlaBuilder.getArrayAttr(namepath));
+      auto nla = hierPathCache.getOpFor(nlaBuilder.getArrayAttr(namepath));
 
       // Create the path operation.
       memoryHierPaths.emplace_back(createPathRef(finalInst, nla, builderOM));
@@ -386,6 +385,7 @@ struct ObjectModelIR {
   FModuleOp dutMod;
   CircuitNamespace circtNamespace;
   InstancePathCache instancePathCache;
+  HierPathCache &hierPathCache;
   /// Cached module namespaces.
   DenseMap<Operation *, hw::InnerSymbolNamespace> &moduleNamespaces;
   ClassOp memorySchemaClass, extraPortsClass;
@@ -843,7 +843,9 @@ void CreateSiFiveMetadataPass::runOnOperation() {
                      dutModuleSet.insert(node->getModule());
                    });
   }
-  ObjectModelIR omir(circuitOp, dutMod, instanceGraph, moduleNamespaces);
+
+  HierPathCache cache(circuitOp, getChildAnalysis<SymbolTable>(circuitOp));
+  ObjectModelIR omir(circuitOp, dutMod, instanceGraph, moduleNamespaces, cache);
 
   if (failed(emitRetimeModulesMetadata(omir)) ||
       failed(emitSitestBlackboxMetadata(omir)) ||
