@@ -34,6 +34,7 @@ public:
             SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
             BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
             TagExtractOp, OpenSubfieldOp, OpenSubindexOp, ObjectSubfieldOp,
+            ObjectAnyRefCastOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -65,7 +66,8 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
-            DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp>(
+            DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp,
+            IntegerAddOp, IntegerMulOp, IntegerShrOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitExpr(expr, args...);
             })
@@ -121,6 +123,7 @@ public:
   HANDLE(OpenSubfieldOp, Unhandled);
   HANDLE(OpenSubindexOp, Unhandled);
   HANDLE(ObjectSubfieldOp, Unhandled);
+  HANDLE(ObjectAnyRefCastOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
   HANDLE(AddPrimOp, Binary);
@@ -220,6 +223,9 @@ public:
   HANDLE(ListCreateOp, Unhandled);
   HANDLE(PathOp, Unhandled);
   HANDLE(UnresolvedPathOp, Unhandled);
+  HANDLE(IntegerAddOp, Unhandled);
+  HANDLE(IntegerMulOp, Unhandled);
+  HANDLE(IntegerShrOp, Unhandled);
 #undef HANDLE
 };
 
@@ -237,7 +243,7 @@ public:
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
                        VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp, LayerBlockOp>(
+                       VerifCoverIntrinsicOp, LayerBlockOp, MatchOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -286,6 +292,7 @@ public:
   HANDLE(VerifCoverIntrinsicOp);
   HANDLE(UnclockedAssumeIntrinsicOp);
   HANDLE(LayerBlockOp);
+  HANDLE(MatchOp);
 
 #undef HANDLE
 };
@@ -298,10 +305,11 @@ public:
   ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<InstanceOp, ObjectOp, MemOp, NodeOp, RegOp, RegResetOp,
-                       WireOp, VerbatimWireOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitDecl(opNode, args...);
-        })
+        .template Case<InstanceOp, InstanceChoiceOp, ObjectOp, MemOp, NodeOp,
+                       RegOp, RegResetOp, WireOp, VerbatimWireOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitDecl(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidDecl(op, args...);
         });
@@ -325,6 +333,7 @@ public:
   }
 
   HANDLE(InstanceOp);
+  HANDLE(InstanceChoiceOp);
   HANDLE(ObjectOp);
   HANDLE(MemOp);
   HANDLE(NodeOp);
@@ -357,7 +366,7 @@ public:
   /// Special handling for generic intrinsic op which aren't quite expressions
   /// nor statements in the usual FIRRTL sense.
   /// Refactor into specific visitor instead of adding more here.
-  ResultType visitIntrinsicOp(GenericIntrinsicOp *op, ExtraArgs... args) {
+  ResultType visitIntrinsicOp(GenericIntrinsicOp op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
 
@@ -369,7 +378,21 @@ public:
     return this->dispatchDeclVisitor(op, args...);
   }
   ResultType visitInvalidDecl(Operation *op, ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitInvalidOp(op, args...);
+    auto *thisCast = static_cast<ConcreteType *>(this);
+    return TypeSwitch<Operation *, ResultType>(op)
+        .template Case<GenericIntrinsicOp>(
+            [&](auto genIntrinsicOp) -> ResultType {
+              return thisCast->visitIntrinsicOp(genIntrinsicOp, args...);
+            })
+        .Default([&](auto expr) -> ResultType {
+          // Assert this operation isn't from FIRRTLDialect to catch
+          // operations missing from these visitors.
+          // Check here so this check fires when visitInvalidOp has
+          // been implemented.
+          assert(!isa_and_nonnull<FIRRTLDialect>(op->getDialect()) &&
+                 "FIRRTL dialect op missing from visitor");
+          return thisCast->visitInvalidOp(op, args...);
+        });
   }
 
   // Default to chaining visitUnhandledXXX to visitUnhandledOp.
@@ -385,6 +408,7 @@ public:
 
   /// visitInvalidOp is an override point for non-FIRRTL dialect operations.
   ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
+    assert(!isa_and_nonnull<FIRRTLDialect>(op->getDialect()) && "FIRRTL dialect op missing from visitor");
     return ResultType();
   }
 
