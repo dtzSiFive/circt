@@ -5668,27 +5668,41 @@ static void printElidePortAnnotations(OpAsmPrinter &p, Operation *op,
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseNameKind(OpAsmParser &parser,
-                                 firrtl::NameKindEnumAttr &result) {
+                                 firrtl::NameKindEnum &result) {
   StringRef keyword;
 
   if (!parser.parseOptionalKeyword(&keyword,
                                    {"interesting_name", "droppable_name"})) {
     auto kind = symbolizeNameKindEnum(keyword);
-    result = NameKindEnumAttr::get(parser.getContext(), kind.value());
+    result = kind.value();
     return success();
   }
 
   // Default is droppable name.
-  result =
-      NameKindEnumAttr::get(parser.getContext(), NameKindEnum::DroppableName);
+  result = NameKindEnum::DroppableName;
   return success();
+}
+
+static ParseResult parseNameKind(OpAsmParser &parser,
+                                 firrtl::NameKindEnumAttr &result) {
+  firrtl::NameKindEnum value;
+  if (parseNameKind(parser, value))
+    return failure();
+  result = NameKindEnumAttr::get(parser.getContext(), value);
+  return success();
+}
+
+static void printNameKind(OpAsmPrinter &p, Operation *op,
+                          firrtl::NameKindEnum value,
+                          ArrayRef<StringRef> extraElides = {}) {
+  if (value != NameKindEnum::DroppableName)
+    p << " " << stringifyNameKindEnum(value);
 }
 
 static void printNameKind(OpAsmPrinter &p, Operation *op,
                           firrtl::NameKindEnumAttr attr,
                           ArrayRef<StringRef> extraElides = {}) {
-  if (attr.getValue() != NameKindEnum::DroppableName)
-    p << " " << stringifyNameKindEnum(attr.getValue());
+  return printNameKind(p, op, attr.getValue(), extraElides);
 }
 
 //===----------------------------------------------------------------------===//
