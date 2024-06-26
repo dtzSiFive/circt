@@ -27,12 +27,12 @@ let cppNamespace = "::circt::firrtl" in {
 def DroppableName: I32EnumAttrCase<"DroppableName", 0, "droppable_name">;
 def InterestingName: I32EnumAttrCase<"InterestingName", 1, "interesting_name">;
 
-def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
+def NameKindEnum: I32EnumAttr<"NameKindEnum", "name kind",
               [DroppableName, InterestingName]> {
   let genSpecializedAttr = 0;
 }
 
-def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
+def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnum, "name_kind">;
 
 //===----------------------------------------------------------------------===//
 // Module Instantiation Conventions

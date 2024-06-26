@@ -226,4 +226,19 @@ circt::firrtl::detail::replaceWithNewForceability(Forceable op, bool forceable,
   return cast<Forceable>(replace);
 }
 
+LogicalResult
+circt::firrtl::convertFromAttribute(NameKindEnum &storage, Attribute attr,
+                     function_ref<InFlightDiagnostic()> emitError) {
+  auto nameKindAttr = dyn_cast<NameKindEnumAttr>(attr);
+  if (!nameKindAttr)
+    return emitError() << "expected NameKindEnumAttr, but got " << attr;
+  storage = nameKindAttr.getValue();
+  return success();
+}
+
+Attribute
+circt::firrtl::convertToAttribute(MLIRContext *ctx, NameKindEnum storage) {
+  return NameKindEnumAttr::get(ctx, storage);
+}
+
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc"

@@ -37,7 +37,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, DeclareOpInterfaceMethod
     Define a new behavioral combinational memory. Combinational memories have a
     write latency of 1 and a read latency of 0.
   }];
-  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+  let arguments = (ins StrAttr:$name, EnumProperty<"circt::firrtl::NameKindEnum">:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        OptionalAttr<MemoryInitAttr>:$init);
@@ -59,7 +59,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<
     Define a new behavioral sequential memory.  Sequential memories have a
     write latency and a read latency of 1.
   }];
-  let arguments = (ins RUWAttr:$ruw, StrAttr:$name, NameKindAttr:$nameKind,
+  let arguments = (ins RUWAttr:$ruw, StrAttr:$name, EnumProperty<"circt::firrtl::NameKindEnum">:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        OptionalAttr<MemoryInitAttr>:$init);

@@ -102,6 +102,14 @@ replaceWithNewForceability(Forceable op, bool forceable,
                            ::mlir::PatternRewriter *rewriter = nullptr);
 } // end namespace detail
 
+
+LogicalResult
+convertFromAttribute(NameKindEnum &storage, Attribute attr,
+                     function_ref<InFlightDiagnostic()> emitError);
+Attribute
+convertToAttribute(MLIRContext *ctx, NameKindEnum storage);
+
+
 //===----------------------------------------------------------------------===//
 // ClassLike Helpers
 //===----------------------------------------------------------------------===//

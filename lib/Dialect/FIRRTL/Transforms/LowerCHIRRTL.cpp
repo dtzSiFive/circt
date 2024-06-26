@@ -361,7 +361,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   auto memory = memBuilder.create<MemOp>(
       resultTypes, readLatency, writeLatency, depth, ruw,
       memBuilder.getArrayAttr(resultNames), name,
-      cmem->getAttrOfType<firrtl::NameKindEnumAttr>("nameKind").getValue(),
+      cast<firrtl::FNamableOp>(cmem).getNameKind(),
       annotations, memBuilder.getArrayAttr(portAnnotations),
       symOp.getInnerSymAttr(),
       cmem->getAttrOfType<firrtl::MemoryInitAttr>("init"), StringAttr());
