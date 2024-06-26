@@ -18,6 +18,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDEnums.h.inc"
 #include "circt/Dialect/LLHD/IR/LLHDTypes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"

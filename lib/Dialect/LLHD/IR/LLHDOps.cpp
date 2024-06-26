@@ -264,16 +264,13 @@ LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
 // SigStructExtractOp and PtrStructExtractOp
 //===----------------------------------------------------------------------===//
 
-template <class SigPtrType>
+template <class SigPtrType, class AdaptorType>
 static LogicalResult inferReturnTypesOfStructExtractOp(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+    MLIRContext *context, std::optional<Location> loc, AdaptorType adaptor, SmallVectorImpl<Type> &results) {
   Type type =
       cast<hw::StructType>(
-          cast<SigPtrType>(operands[0].getType()).getUnderlyingType())
-          .getFieldType(
-              cast<StringAttr>(attrs.getNamed("field")->getValue()).getValue());
+          cast<SigPtrType>(adaptor.getInput().getType()).getUnderlyingType())
+          .getFieldType(adaptor.getField());
   if (!type) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
@@ -288,16 +285,18 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::SigType>(
-      context, loc, operands, attrs, properties, regions, results);
+  SigStructExtractOpAdaptor adaptor(operands, attrs, properties, regions);
+  return inferReturnTypesOfStructExtractOp<llhd::SigType>(context, loc, adaptor,
+                                                          results);
 }
 
 LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
-      context, loc, operands, attrs, properties, regions, results);
+  PtrStructExtractOpAdaptor adaptor(operands, attrs, properties, regions);
+  return inferReturnTypesOfStructExtractOp<llhd::PtrType>(context, loc, adaptor,
+                                                          results);
 }
 
 //===----------------------------------------------------------------------===//

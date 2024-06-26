@@ -824,7 +824,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto waitOp = cast<WaitOp>(op);
-    WaitOpAdaptor transformed(operands, op->getAttrDictionary());
+    WaitOpAdaptor transformed(operands, op->getAttrDictionary(), op->getPropertiesStorage());
     auto llvmFunc = op->getParentOfType<LLVM::LLVMFuncOp>();
 
     auto voidTy = getVoidType();
