@@ -20,6 +20,7 @@
 #include "circt/Dialect/SystemC/SystemCOpInterfaces.h"
 #include "circt/Dialect/SystemC/SystemCTypes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/Dialect/EmitC/IR/EmitC.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/CallInterfaces.h"
