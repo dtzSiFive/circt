@@ -451,37 +451,32 @@ def FNamableOp : OpInterface<"FNamableOp"> {
     related to name preservation semantics. }];
 
   let methods = [
+
+    InterfaceMethod<"Get the namekind.",
+    "circt::firrtl::NameKindEnum", "getNameKind", (ins), [{}], /*defaultImplementation*/[{
+      return $_op.getProperties().nameKind;
+    }]>,
+
+    InterfaceMethod<"Set a namekind.",
+    "void", "setNameKind", (ins "circt::firrtl::NameKindEnum":$nameKind), [{}], /*defaultImplementation*/[{
+      $_op.getProperties().nameKind = nameKind;
+    }]>,
+
+    InterfaceMethod<"Get the name.", "mlir::StringAttr", "getNameAttr">,
+    InterfaceMethod<"Return the name.", "llvm::StringRef", "getName">,
+
+    InterfaceMethod<"Set the name.",
+    "void", "setNameAttr", (ins "mlir::StringAttr":$name)>,
+
     InterfaceMethod<"Return true if the name is droppable.",
     "bool", "hasDroppableName", (ins), [{}], /*defaultImplementation=*/[{
-      return this->getOperation()->template
-             getAttrOfType<NameKindEnumAttr>("nameKind").getValue()
-             == NameKindEnum::DroppableName;
+      return $_op.getNameKind() == circt::firrtl::NameKindEnum::DroppableName;
     }]>,
     InterfaceMethod<"Completely drop a name.",
     "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
-      auto* op = this->getOperation();
-      auto* ctx = op->getContext();
-      op->setAttr("nameKind",
-        NameKindEnumAttr::get(ctx,
-                              NameKindEnum::DroppableName));
-      op->setAttr("name", StringAttr::get(ctx, ""));
+      $_op.setNameKind(circt::firrtl::NameKindEnum::DroppableName);
+      $_op.setNameAttr(StringAttr::get($_op->getContext(), ""));
     }]>,
-    InterfaceMethod<"Set a namekind.",
-    "void", "setNameKindAttr", (ins "firrtl::NameKindEnumAttr":$nameKind),
-                                       [{}], /*defaultImplementation=*/[{
-      this->getOperation()->setAttr("nameKind", nameKind);
-    }]>,
-    InterfaceMethod<"Return the name.",
-    "mlir::StringAttr", "getNameAttr", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return this->getOperation()->template
-             getAttrOfType<mlir::StringAttr>("name");
-    }]>,
-    InterfaceMethod<"Return the name.",
-    "llvm::StringRef", "getName", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return getNameAttr();
-    }]>
   ];
 }
 
