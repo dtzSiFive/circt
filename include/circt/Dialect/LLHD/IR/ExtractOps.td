@@ -276,7 +276,7 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
 //===----------------------------------------------------------------------===//
 
 def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [Pure,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
+  InferTypeOpAdaptor]> {
   let summary = "Extract a field from a signal of a struct.";
   let description = [{
     The `llhd.sig.struct_extract` operation allows access to the field of the
@@ -306,7 +306,7 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [Pure,
 }
 
 def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [Pure,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
+  InferTypeOpAdaptor]> {
   let summary = "Extract a field from a pointer to a struct.";
   let description = [{
     The `llhd.ptr.struct_extract` operation allows access to the field of the

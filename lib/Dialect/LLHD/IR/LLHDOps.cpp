@@ -282,19 +282,15 @@ static LogicalResult inferReturnTypesOfStructExtractOp(
 }
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  SigStructExtractOpAdaptor adaptor(operands, attrs, properties, regions);
+    MLIRContext *context, std::optional<Location> loc, Adaptor adaptor,
+    SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::SigType>(context, loc, adaptor,
                                                           results);
 }
 
 LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  PtrStructExtractOpAdaptor adaptor(operands, attrs, properties, regions);
+    MLIRContext *context, std::optional<Location> loc, Adaptor adaptor,
+    SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::PtrType>(context, loc, adaptor,
                                                           results);
 }
