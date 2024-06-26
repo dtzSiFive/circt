@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
