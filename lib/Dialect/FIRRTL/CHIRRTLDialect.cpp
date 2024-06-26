@@ -70,7 +70,6 @@ static void printCHIRRTLOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr,
   if (actualName == expectedName ||
       (expectedName.empty() && isdigit(actualName[0])))
     elides.push_back("name");
-  elides.push_back("nameKind");
 
   // Elide "annotations" if it is empty.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
