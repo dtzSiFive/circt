@@ -15,9 +15,6 @@ def Pipeline_Dialect : Dialect {
   let name = "pipeline";
   let cppNamespace = "::circt::pipeline";
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
-
   let dependentDialects = [
     "circt::seq::SeqDialect"
   ];

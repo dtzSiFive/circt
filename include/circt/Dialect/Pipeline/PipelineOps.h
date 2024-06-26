@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_PIPELINE_PIPELINEOPS_H
 #define CIRCT_DIALECT_PIPELINE_PIPELINEOPS_H
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
