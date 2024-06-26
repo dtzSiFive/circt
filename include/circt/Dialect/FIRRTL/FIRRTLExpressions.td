@@ -39,7 +39,6 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      mlir::OpaqueProperties properties,
                                       std::optional<Location> loc);
   }];
 
@@ -53,10 +52,9 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     /// constants.
     static LogicalResult validateArguments(ValueRange operands,
                                            ArrayRef<NamedAttribute> attrs,
-                                           mlir::OpaqueProperties properties,
                                            Location loc)
   }] # !if(!empty(parseValidator), ";", !subst("$_impl", parseValidator, [{ {
-    return $_impl(operands, attrs, properties, loc);
+    return $_impl(operands, attrs, loc);
   } }]));
 
   // Additional class declarations to emit alongside the type inference.
@@ -87,11 +85,10 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     /// constants, and infer the appropriate return type for the operation.
     static FIRRTLType validateAndInferReturnType(ValueRange operands,
                                                  ArrayRef<NamedAttribute> attrs,
-                                                 mlir::OpaqueProperties properties,
                                                  Location loc) {
-      if (failed(validateArguments(operands, attrs, properties, loc)))
+      if (failed(validateArguments(operands, attrs, loc)))
         return {};
-      return inferReturnType(operands, attrs, properties, loc);
+      return inferReturnType(operands, attrs, loc);
     }
 
     // Returns when two result types are compatible for this op; method used by
@@ -562,7 +559,6 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      mlir::OpaqueProperties properties,
                                       std::optional<Location> loc) {
       return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()),
                      firrtl::type_cast<FIRRTLType>(operands[1].getType()),
@@ -680,7 +676,6 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     /// Infer the return type of this operation.
     static FIRRTLType inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
-                                      mlir::OpaqueProperties properties,
                                       std::optional<Location> loc) {
       return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()), loc);
     }
@@ -1044,7 +1039,6 @@ def ObjectSubfieldOp : FIRRTLOp<"object.subfield",
     /// in order to support foreign types in ports.
     static Type inferReturnType(ValueRange operands,
                                 ArrayRef<NamedAttribute> attrs,
-                                mlir::OpaqueProperties properties,
                                 std::optional<Location> loc);
 
     /// Return a `FieldRef` to the accessed field.

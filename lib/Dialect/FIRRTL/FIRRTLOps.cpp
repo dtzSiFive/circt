@@ -5225,11 +5225,7 @@ LogicalResult impl::validateOneOperandOneConst(ValueRange operands,
 
 FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
-                                       mlir::OpaqueProperties properties,
                                        std::optional<Location> loc) {
-  HeadPrimOpAdaptor adaptor(operands);
-adaptor.getAmountAttr();
-auto foo = adaptor.getProperties().amount;
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
