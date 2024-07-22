@@ -344,8 +344,14 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       // passing the input as a value instead of a ref. Inside the layer, we
       // convert (ref.send) the value back into a ref.
       auto type = operand.getType();
-      if (auto refType = dyn_cast<RefType>(type))
+      if (auto refType = dyn_cast<RefType>(type)) {
+        // Detect and reject if rwprobe.
+        if (refType.getForceable()) {
+          mlir::emitError(operand.getLoc(), "rwprobe operand");
+          llvm::report_fatal_error("rwprobe input port");
+        }
         type = refType.getType();
+      }
 
       ports.push_back({builder.getStringAttr(portName), type, Direction::In,
                        /*sym=*/{},
