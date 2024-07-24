@@ -4282,8 +4282,21 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
-      addIfProceduralBlock(
-          pred, [&]() { builder.create<sv::ForceOp>(destVal, src); });
+      addIfProceduralBlock(pred, [&]() {
+        if (op.getBreakNet()) {
+          auto spill = builder.create<sv::RegOp>(
+              src.getType(), builder.getStringAttr("break_net"));
+          // Add symbol to keep this around, as the current mechanism.
+          getOrAddInnerSym(
+              op.getContext(), hw::InnerSymAttr(), 0,
+              [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
+          builder.create<sv::BPAssignOp>(spill, src);
+          builder.create<sv::ForceOp>(destVal,
+                                      builder.create<sv::ReadInOutOp>(spill));
+          return;
+        }
+        builder.create<sv::ForceOp>(destVal, src);
+      });
     });
   });
   return success();
