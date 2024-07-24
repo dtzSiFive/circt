@@ -126,7 +126,11 @@ public:
             // Dataflow from dst to src, for RWProbe.
             probesReferToSameData(def.getSrc(), def.getDest());
           })
-          .Case<RefForceOp, RefForceInitialOp>(
+          .Case<RefForceOp>([&](RefForceOp ref) {
+            if (!ref.getBreakNet())
+              handleRefForce(ref.getDest(), ref.getSrc());
+          })
+          .Case<RefForceInitialOp>(
               [&](auto ref) { handleRefForce(ref.getDest(), ref.getSrc()); })
           .Case<InstanceOp>([&](auto inst) { handleInstanceOp(inst); })
           .Case<SubindexOp>([&](SubindexOp sub) {
