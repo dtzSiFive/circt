@@ -171,6 +171,7 @@ TOK_LPKEYWORD(cover)
 TOK_LPKEYWORD(path)
 
 TOK_LPKEYWORD(force)
+TOK_LPKEYWORD(force_var)
 TOK_LPKEYWORD(force_initial)
 TOK_LPKEYWORD(release)
 TOK_LPKEYWORD(release_initial)

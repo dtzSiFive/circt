@@ -2616,6 +2616,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_define:
     return parseRefDefine();
   case FIRToken::lp_force:
+  case FIRToken::lp_force_var:
     return parseRefForce();
   case FIRToken::lp_force_initial:
     return parseRefForceInitial();
@@ -3614,7 +3615,13 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
 
 /// force ::= 'force(' exp exp ref_expr exp ')' info?
 ParseResult FIRStmtParser::parseRefForce() {
-  auto startTok = consumeToken(FIRToken::lp_force);
+  auto &startTok = getToken();
+
+  bool breaknet = false;
+  if (consumeIf(FIRToken::lp_force_var))
+   breaknet = true;
+  else
+   consumeToken(FIRToken::lp_force);
 
   Value clock, pred, dest, src;
   if (parseExp(clock, "expected clock expression in force") ||
@@ -3652,7 +3659,7 @@ ParseResult FIRStmtParser::parseRefForce() {
       dest = builder.create<RefCastOp>(compatibleRWProbe, dest);
   }
 
-  builder.create<RefForceOp>(clock, pred, dest, src);
+  builder.create<RefForceOp>(clock, pred, dest, src, breaknet);
 
   return success();
 }
