@@ -1064,7 +1064,10 @@ void Emitter::emitStatement(RefDefineOp op) {
 }
 
 void Emitter::emitStatement(RefForceOp op) {
-  emitStatementFunctionOp(PPExtString("force"), op);
+  if (op.getBreakNet())
+    emitStatementFunctionOp(PPExtString("force_var"), op);
+  else
+    emitStatementFunctionOp(PPExtString("force"), op);
 }
 
 void Emitter::emitStatement(RefForceInitialOp op) {
