@@ -29,7 +29,7 @@ firrtl.circuit "SimpleSink" {
   firrtl.layer @Aggregates bind {}
 
   firrtl.module @Foo(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
-    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 
   // CHECK: firrtl.module @SimpleSink
@@ -66,24 +66,24 @@ firrtl.circuit "SimpleSink" {
     // CHECK-NEXT: }
 
     %wire = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %wire, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %wire, %a : !firrtl.uint<1>
     firrtl.layerblock @Wire {
       %layer_wire = firrtl.node %wire : !firrtl.uint<1>
     }
     // CHECK-NEXT: firrtl.layerblock @Wire {
     // CHECK-NEXT:   %wire = firrtl.wire
-    // CHECK-NEXT:   firrtl.strictconnect %wire, %a
+    // CHECK-NEXT:   firrtl.matchingconnect %wire, %a
     // CHECK-NEXT:   %layer_wire = firrtl.node %wire
     // CHECK-NEXT: }
 
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    firrtl.strictconnect %reg, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %reg, %a : !firrtl.uint<1>
     firrtl.layerblock @Reg {
       %layeyr_reg = firrtl.node %reg : !firrtl.uint<1>
     }
     // CHECK-NEXT: firrtl.layerblock @Reg {
     // CHECK-NEXT:   %reg = firrtl.reg %clock
-    // CHECK-NEXT:   firrtl.strictconnect %reg, %a
+    // CHECK-NEXT:   firrtl.matchingconnect %reg, %a
     // CHECK-NEXT:   %layeyr_reg = firrtl.node %reg
     // CHECK-NEXT: }
 
@@ -99,13 +99,13 @@ firrtl.circuit "SimpleSink" {
     // CHECK-NEXT: }
 
     %foo_a, %foo_b = firrtl.instance foo @Foo(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
-    firrtl.strictconnect %foo_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %foo_a, %a : !firrtl.uint<1>
     firrtl.layerblock @Instance {
       %layer_instance = firrtl.node %foo_b : !firrtl.uint<1>
     }
     // CHECK-NEXT: firrtl.layerblock @Instance {
     // CHECK-NEXT:   %foo_a, %foo_b = firrtl.instance foo @Foo
-    // CHECK-NEXT:   firrtl.strictconnect %foo_a, %a
+    // CHECK-NEXT:   firrtl.matchingconnect %foo_a, %a
     // CHECK-NEXT:   %layer_instance = firrtl.node %foo_b
     // CHECK-NEXT: }
 
@@ -144,31 +144,31 @@ firrtl.circuit "SimpleSink" {
     //===------------------------------------------------------------------===//
     %reg_cycle_a = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     %reg_cycle_b = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    firrtl.strictconnect %reg_cycle_a, %reg_cycle_b : !firrtl.uint<1>
-    firrtl.strictconnect %reg_cycle_b, %reg_cycle_a : !firrtl.uint<1>
+    firrtl.matchingconnect %reg_cycle_a, %reg_cycle_b : !firrtl.uint<1>
+    firrtl.matchingconnect %reg_cycle_b, %reg_cycle_a : !firrtl.uint<1>
     firrtl.layerblock @RegCycle {
       %layer_reg_cycle = firrtl.node %reg_cycle_b : !firrtl.uint<1>
     }
     // CHECK-NEXT: firrtl.layerblock @RegCycle {
     // CHECK-NEXT:   %reg_cycle_a = firrtl.reg %clock
     // CHECK-NEXT:   %reg_cycle_b = firrtl.reg %clock
-    // CHECK-NEXT:   firrtl.strictconnect %reg_cycle_a, %reg_cycle_b
-    // CHECK-NEXT:   firrtl.strictconnect %reg_cycle_b, %reg_cycle_a
+    // CHECK-NEXT:   firrtl.matchingconnect %reg_cycle_a, %reg_cycle_b
+    // CHECK-NEXT:   firrtl.matchingconnect %reg_cycle_b, %reg_cycle_a
     // CHECK-NEXT:   %layer_reg_cycle = firrtl.node %reg_cycle_b
     // CHECK-NEXT: }
 
     %bar_a, %bar_b = firrtl.instance bar @Foo(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     %baz_a, %baz_b = firrtl.instance baz @Foo(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_a, %baz_b : !firrtl.uint<1>
-    firrtl.strictconnect %baz_a, %bar_b : !firrtl.uint<1>
+    firrtl.matchingconnect %bar_a, %baz_b : !firrtl.uint<1>
+    firrtl.matchingconnect %baz_a, %bar_b : !firrtl.uint<1>
     firrtl.layerblock @InstanceCycle {
       %layer_instance_cycle = firrtl.node %baz_b : !firrtl.uint<1>
     }
     // CHECK-NEXT: firrtl.layerblock @InstanceCycle {
     // CHECK-NEXT:   %bar_a, %bar_b = firrtl.instance bar @Foo(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     // CHECK-NEXT:   %baz_a, %baz_b = firrtl.instance baz @Foo(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
-    // CHECK-NEXT:   firrtl.strictconnect %bar_a, %baz_b : !firrtl.uint<1>
-    // CHECK-NEXT:   firrtl.strictconnect %baz_a, %bar_b : !firrtl.uint<1>
+    // CHECK-NEXT:   firrtl.matchingconnect %bar_a, %baz_b : !firrtl.uint<1>
+    // CHECK-NEXT:   firrtl.matchingconnect %baz_a, %bar_b : !firrtl.uint<1>
     // CHECK-NEXT:   %layer_instance_cycle = firrtl.node %baz_b : !firrtl.uint<1>
     // CHECK-NEXT: }
 
