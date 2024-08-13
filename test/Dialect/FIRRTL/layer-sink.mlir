@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl.module(firrtl-layer-sink)))" %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl.module(firrtl-layer-sink)))" %s --split-input-file | FileCheck %s
 
 // Test that simple things with uses only in layers are sunk.
 //
@@ -207,3 +207,27 @@ firrtl.circuit "SimpleSink" {
     // CHECK-NEXT: }
   }
 }
+
+// -----
+
+// Check that operations are sunk without breaking the IR.
+// CHECK-LABEL: "DontMoveOpsAlreadyInLayer"
+firrtl.circuit "DontMoveOpsAlreadyInLayer" {
+  firrtl.layer @L bind { }
+  // CHECK: @DontMoveOpsAlreadyInLayer
+  firrtl.module @DontMoveOpsAlreadyInLayer() {
+    // CHECK-NEXT: layerblock @L
+    // CHECK-NEXT: %w = firrtl.wire
+    // CHECK-NEXT: matchingconnect %w, %w
+    // CHECK-NEXT: %w2 = firrtl.wire
+    // CHECK-NEXT: matchingconnect %w2, %w
+    %w = firrtl.wire : !firrtl.uint<5>
+    firrtl.layerblock @L {
+      %w2 = firrtl.wire : !firrtl.uint<5>
+      firrtl.matchingconnect %w2, %w : !firrtl.uint<5>
+    }
+    firrtl.matchingconnect %w, %w : !firrtl.uint<5>
+  }
+}
+
+

@@ -101,11 +101,11 @@ Operation *LayerSink::foldParent(Operation *initial, Operation *x) {
   auto leader = layerSets.findLeader(x);
   if (leader != layerSets.member_end())
     xParent = leaderToParent.lookup(*leader);
-
   if (!initial)
     return xParent;
 
-  while (initial != xParent)
+  // LCA of initial, xParent.
+  while (!initial->isAncestor(xParent))
     initial = initial->getParentOp();
 
   return initial;
@@ -129,11 +129,16 @@ Operation *LayerSink::processScc(llvm::scc_iterator<FIRRTLOperation *> &i) {
     if (isa_and_nonnull<FModuleOp>(bestParent))
       break;
 
+    if (isa<FModuleOp>(op)) {
+      bestParent = op;
+      break;
+    }
+
     // Process connect destinations only.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
       auto dest = connect.getDest();
       if (auto blockArg = dyn_cast<BlockArgument>(dest)) {
-        bestParent = blockArg.getDefiningOp();
+        bestParent = blockArg.getOwner()->getParentOp();
         continue;
       }
       auto *definingOp = dest.getDefiningOp();
@@ -220,11 +225,10 @@ void LayerSink::runOnOperation() {
     auto leaderIt = parentToLeader.find(bestParent);
     if (leaderIt == parentToLeader.end()) {
       leaderToParent.insert({first, bestParent});
-      parentToLeader.insert({bestParent, first});
-      leaderIt = parentToLeader.find(bestParent);
+      std::tie(leaderIt, std::ignore) =
+          parentToLeader.insert({bestParent, first});
       layerSets.insert(first);
-    } else
-      layerSets.unionSets(leaderIt->second, first);
+    }
 
     for (auto *op : *i)
       layerSets.unionSets(leaderIt->second, op);
@@ -237,6 +241,9 @@ void LayerSink::runOnOperation() {
     if (!leaderIt->isLeader())
       continue;
 
+    assert(parentToLeader.lookup(leaderToParent.lookup(leaderIt->getData())) ==
+           leaderIt->getData());
+
     SmallVector<Operation *> layerOpsReverseModuleOrdered(
         layerSets.member_begin(leaderIt), layerSets.member_end());
     llvm::sort(layerOpsReverseModuleOrdered.begin(),
@@ -245,15 +252,13 @@ void LayerSink::runOnOperation() {
                  // ModuleOp's shouldn't end up here!
                  assert(!isa<FModuleOp>(a));
                  assert(!isa<FModuleOp>(b));
-                 auto aBlock = a->getBlock(), bBlock = b->getBlock();
-                 if (aBlock == bBlock)
-                   return !a->isBeforeInBlock(b);
-                 while (!isa<FModuleOp>(aBlock->getParentOp())) {
-                   aBlock = aBlock->getParent()->getParentOp()->getBlock();
-                   if (aBlock == bBlock)
-                     return true;
-                 }
-                 return false;
+
+                 // Does b dom a (no control flow)
+                 auto bBlock = b->getBlock();
+                 auto *aInB = bBlock->findAncestorOpInBlock(*a);
+                 if (!aInB)
+                   return false;
+                 return b->isBeforeInBlock(aInB);
                });
 
     auto commonParent = leaderToParent.find(leaderIt->getData());
@@ -263,7 +268,9 @@ void LayerSink::runOnOperation() {
 
     for (auto *op : layerOpsReverseModuleOrdered) {
       auto &region = commonParent->second->getRegion(0);
-      op->moveBefore(&region.front(), region.front().begin());
+      // Don't re-sink if already under this region.
+      if (!commonParent->second->isAncestor(op))
+        op->moveBefore(&region.front(), region.front().begin());
     }
   }
 }
