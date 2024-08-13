@@ -242,11 +242,14 @@ void LayerSink::runOnOperation() {
     llvm::sort(layerOpsReverseModuleOrdered.begin(),
                layerOpsReverseModuleOrdered.end(),
                [](Operation *a, Operation *b) {
+                 // ModuleOp's shouldn't end up here!
+                 assert(!isa<FModuleOp>(a));
+                 assert(!isa<FModuleOp>(b));
                  auto aBlock = a->getBlock(), bBlock = b->getBlock();
                  if (aBlock == bBlock)
                    return !a->isBeforeInBlock(b);
-                 while (isa<FModuleOp>(aBlock->getParentOp())) {
-                   aBlock = a->getParentOp()->getBlock();
+                 while (!isa<FModuleOp>(aBlock->getParentOp())) {
+                   aBlock = aBlock->getParent()->getParentOp()->getBlock();
                    if (aBlock == bBlock)
                      return true;
                  }
