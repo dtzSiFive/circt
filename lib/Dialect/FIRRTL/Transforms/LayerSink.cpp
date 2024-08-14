@@ -268,8 +268,8 @@ void LayerSink::runOnOperation() {
 
     for (auto *op : layerOpsReverseModuleOrdered) {
       auto &region = commonParent->second->getRegion(0);
-      // Don't re-sink if already under this region.
-      if (!commonParent->second->isAncestor(op))
+      // Don't re-sink if already under this layerblock.
+      if (op->getParentOfType<LayerBlockOp>() != commonParent->second)
         op->moveBefore(&region.front(), region.front().begin());
     }
   }
