@@ -65,7 +65,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createDropNamesPass(opt.getPreserveMode()));
 
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
         mlir::createCSEPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -154,7 +154,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
         createSimpleCanonicalizerPass());
 
   // Run the infer-rw pass, which merges read and write ports of a memory with
@@ -208,7 +208,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.
   if (!opt.shouldDisableOptimization()) {
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         circt::firrtl::createRegisterOptimizerPass());
