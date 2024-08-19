@@ -65,7 +65,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createDropNamesPass(opt.getPreserveMode()));
 
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
         mlir::createCSEPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
