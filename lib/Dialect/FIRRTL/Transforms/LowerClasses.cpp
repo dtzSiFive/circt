@@ -1743,49 +1743,62 @@ struct ObjectFieldOpConversion : public OpConversionPattern<ObjectFieldOp> {
 
 // Helpers for dialect conversion setup.
 
-static void populateConversionTarget(ConversionTarget &target) {
-  // FIRRTL dialect operations inside ClassOps or not using only OM types must
-  // be legalized.
-  target.addDynamicallyLegalDialect<FIRRTLDialect>(
-      [](Operation *op) { return !op->getParentOfType<om::ClassLike>(); });
+namespace {
+struct ConversionTargetHelper {
+  ConversionTargetHelper() {
+    firrtlTypeChecker.addWalk([](Type type) {
+      return failure(isa<FIRRTLDialect>(type.getDialect()));
+    });
+  }
 
-  // OM dialect operations are legal if they don't use FIRRTL types.
-  target.addDynamicallyLegalDialect<OMDialect>([](Operation *op) {
-    auto containsFIRRTLType = [](Type type) {
-      return type
-          .walk([](Type type) {
-            return failure(isa<FIRRTLDialect>(type.getDialect()));
-          })
-          .wasInterrupted();
-    };
-    auto noFIRRTLOperands =
-        llvm::none_of(op->getOperandTypes(), [&containsFIRRTLType](Type type) {
-          return containsFIRRTLType(type);
+  void populateConversionTarget(ConversionTarget &target) {
+    // FIRRTL dialect operations inside ClassOps or not using only OM types must
+    // be legalized.
+    target.addDynamicallyLegalDialect<FIRRTLDialect>(
+        [](Operation *op) { return !op->getParentOfType<om::ClassLike>(); });
+
+    // OM dialect operations are legal if they don't use FIRRTL types.
+    target.addDynamicallyLegalDialect<OMDialect>([this](Operation *op) {
+      auto noFIRRTLOperands = containsNoFIRRTLTypes(op->getOperandTypes());
+      auto noFIRRTLResults = containsNoFIRRTLTypes(op->getResultTypes());
+      return noFIRRTLOperands && noFIRRTLResults;
+    });
+
+    // the OM op class.extern.field doesn't have operands or results, so we must
+    // check it's type for a firrtl dialect.
+    target.addDynamicallyLegalOp<ClassExternFieldOp>(
+        [this](ClassExternFieldOp op) {
+          return !containsFIRRTLType(op.getType());
         });
-    auto noFIRRTLResults =
-        llvm::none_of(op->getResultTypes(), [&containsFIRRTLType](Type type) {
-          return containsFIRRTLType(type);
+
+    // OM Class ops are legal if they don't use FIRRTL types for block
+    // arguments.
+    target.addDynamicallyLegalOp<om::ClassOp, om::ClassExternOp>(
+        [this](Operation *op) -> std::optional<bool> {
+          auto classLike = dyn_cast<om::ClassLike>(op);
+          if (!classLike)
+            return std::nullopt;
+
+          return containsNoFIRRTLTypes(
+              classLike.getBodyBlock()->getArgumentTypes());
         });
-    return noFIRRTLOperands && noFIRRTLResults;
-  });
+  }
 
-  // the OM op class.extern.field doesn't have operands or results, so we must
-  // check it's type for a firrtl dialect.
-  target.addDynamicallyLegalOp<ClassExternFieldOp>(
-      [](ClassExternFieldOp op) { return !isa<FIRRTLType>(op.getType()); });
+  template <typename R>
+  bool containsNoFIRRTLTypes(R &&r) {
+    return llvm::none_of(std::forward<R>(r), [this](Type type) {
+      return containsFIRRTLType(type);
+    });
+  }
 
-  // OM Class ops are legal if they don't use FIRRTL types for block arguments.
-  target.addDynamicallyLegalOp<om::ClassOp, om::ClassExternOp>(
-      [](Operation *op) -> std::optional<bool> {
-        auto classLike = dyn_cast<om::ClassLike>(op);
-        if (!classLike)
-          return std::nullopt;
+  bool containsFIRRTLType(Type type) {
+    return firrtlTypeChecker.walk<WalkOrder::PreOrder>(type).wasInterrupted();
+  };
 
-        return llvm::none_of(
-            classLike.getBodyBlock()->getArgumentTypes(),
-            [](Type type) { return isa<FIRRTLDialect>(type.getDialect()); });
-      });
-}
+  // Used to walk types checking for legality, caches results.
+  AttrTypeWalker firrtlTypeChecker;
+};
+} // namespace
 
 static void populateTypeConverter(TypeConverter &converter) {
   // Convert FIntegerType to IntegerType.
@@ -1901,7 +1914,8 @@ LogicalResult LowerClassesPass::dialectConversion(
     Operation *op, const PathInfoTable &pathInfoTable,
     const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable) {
   ConversionTarget target(getContext());
-  populateConversionTarget(target);
+  ConversionTargetHelper targetHelper;
+  targetHelper.populateConversionTarget(target);
 
   TypeConverter typeConverter;
   populateTypeConverter(typeConverter);
