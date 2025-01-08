@@ -48,6 +48,8 @@ add_circt_dialect_library(CIRCTFIRRTL
   CIRCTSV
   MLIRIR
   MLIRPass
+  # TODO: NOT THIS!
+  CIRCTImportFIRFile
   )
 
 add_circt_library(CIRCTFIRRTLReductions

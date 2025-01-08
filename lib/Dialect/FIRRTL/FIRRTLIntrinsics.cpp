@@ -9,6 +9,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
+
+#include "llvm/Support/JSON.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
@@ -706,6 +709,45 @@ public:
   }
 };
 
+class ViewConverter : public IntrinsicConverter {
+public:
+  bool check(GenericIntrinsic gi) override {
+    if (gi.hasNoOutput() || gi.namedParam("info"))
+      return true;
+
+    auto view = llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
+    if (auto err = view.takeError()) {
+      handleAllErrors(std::move(err), [&](const llvm::json::ParseError &a) {
+        gi.emitError() << "error parsing view JSON: " << a.message();
+      });
+      return true;
+    }
+
+    SmallVector<Attribute> annos;
+    llvm::json::Path::Root root;
+    if (!importAnnotationsFromJSONRaw(view.get(), annos, root, gi.op.getContext())) {
+      return true;
+    }
+
+    return false;
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto view = llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
+    if (view)
+      llvm::report_fatal_error("parse failed second time");
+
+    SmallVector<Attribute> annos;
+    llvm::json::Path::Root root;
+    auto success = importAnnotationsFromJSONRaw(view.get(), annos, root, gi.op.getContext());
+    (void)success;
+    assert(success);
+
+    llvm::errs() << annos[0] << "\n";
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -771,4 +813,6 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
   lowering.add<CirctDPICallConverter>("circt.dpi_call", "circt_dpi_call");
+
+  lowering.add<ViewConverter>("sifive.view", "sifive_view");
 }
