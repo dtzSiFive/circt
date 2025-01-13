@@ -734,13 +734,16 @@ public:
     llvm::errs() << "value (attr): " << value << "\n";
     value.dump();
 
-    auto augmentedType = dyn_cast<AugmentedBundleTypeAttr>(value);
+    // TODO: Check
+    auto dict = dyn_cast<DictionaryAttr>(value);
+    if (!dict) {
+      gi.emitError() << " info not a dictionary";
+      return true;
+    }
+    auto augmentedType = AugmentedBundleTypeAttr::get(gi.op.getContext(), dict);
     if (!augmentedType) {
       gi.emitError() << "view info must be augmented bundle type attribute";
       return true;
-    }
-    // TODO: Check if this is required to be present re:AugmentedBundleTypeAttr
-    if (!augmentedType.getDefName()) {
     }
       
 
@@ -748,18 +751,19 @@ public:
     return false;
   }
 
+  // TODO: Consider checkAndConvert (failure requires no changes?), avoid duplicate work.
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                PatternRewriter &rewriter) override {
     llvm::errs() << "VIEW! A4\n";
     auto view = llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
-    if (view)
+    if (!view)
       llvm::report_fatal_error("parse failed second time");
 
     llvm::json::Path::Root root;
     auto value = convertJSONToAttribute(gi.op.getContext(), view.get(), root);
     assert(value);
 
-    auto augmentedType = dyn_cast<AugmentedBundleTypeAttr>(value);
+    auto augmentedType = AugmentedBundleTypeAttr::get(gi.op.getContext(), cast<DictionaryAttr>(value));
     assert(augmentedType);
 
     auto name = gi.getParamValue<StringAttr>("info").getValue();
