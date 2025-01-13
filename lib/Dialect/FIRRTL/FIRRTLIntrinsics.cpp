@@ -712,62 +712,39 @@ public:
 
 class ViewConverter : public IntrinsicConverter {
 public:
-  bool check(GenericIntrinsic gi) override {
-    llvm::errs() << "VIEW!\n";
+  LogicalResult checkAndConvert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
     if (gi.hasNoOutput() || gi.namedParam("info") || gi.namedParam("name"))
-      return true;
+      return failure();
 
-    llvm::errs() << "VIEW! A1\n";
     auto view = llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
     if (auto err = view.takeError()) {
       handleAllErrors(std::move(err), [&](const llvm::json::ParseError &a) {
         gi.emitError() << "error parsing view JSON: " << a.message();
       });
-      return true;
+      return failure();
     }
 
-    llvm::errs() << "VIEW! A2\n";
     llvm::json::Path::Root root;
 
     auto value = convertJSONToAttribute(gi.op.getContext(), view.get(), root);
     assert(value);
-    llvm::errs() << "value (attr): " << value << "\n";
-    value.dump();
+    // llvm::errs() << "value (attr): " << value << "\n";
+    // value.dump();
 
     // TODO: Check
     auto dict = dyn_cast<DictionaryAttr>(value);
-    if (!dict) {
-      gi.emitError() << " info not a dictionary";
-      return true;
-    }
+    if (!dict)
+      return gi.emitError() << " info not a dictionary";
     auto augmentedType = AugmentedBundleTypeAttr::get(gi.op.getContext(), dict);
-    if (!augmentedType) {
-      gi.emitError() << "view info must be augmented bundle type attribute";
-      return true;
-    }
+    if (!augmentedType)
+      return gi.emitError() << "view info must be augmented bundle type attribute";
       
-
-    llvm::errs() << "VIEW! A3\n";
-    return false;
-  }
-
-  // TODO: Consider checkAndConvert (failure requires no changes?), avoid duplicate work.
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-               PatternRewriter &rewriter) override {
-    llvm::errs() << "VIEW! A4\n";
-    auto view = llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
-    if (!view)
-      llvm::report_fatal_error("parse failed second time");
-
-    llvm::json::Path::Root root;
-    auto value = convertJSONToAttribute(gi.op.getContext(), view.get(), root);
-    assert(value);
-
-    auto augmentedType = AugmentedBundleTypeAttr::get(gi.op.getContext(), cast<DictionaryAttr>(value));
-    assert(augmentedType);
+    // Check complete, convert!
 
     auto name = gi.getParamValue<StringAttr>("info").getValue();
     rewriter.replaceOpWithNewOp<ViewIntrinsicOp>(gi.op, name, augmentedType, adaptor.getOperands());
+    return success();
   }
 };
 
