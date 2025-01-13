@@ -11,6 +11,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 
+#include "circt/Support/JSON.h"
+
 #include "llvm/Support/JSON.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -712,9 +714,11 @@ public:
 class ViewConverter : public IntrinsicConverter {
 public:
   bool check(GenericIntrinsic gi) override {
-    if (gi.hasNoOutput() || gi.namedParam("info"))
+    llvm::errs() << "VIEW!\n";
+    if (gi.hasNoOutput() || gi.namedParam("info") || gi.namedParam("name"))
       return true;
 
+    llvm::errs() << "VIEW! A1\n";
     auto view = llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
     if (auto err = view.takeError()) {
       handleAllErrors(std::move(err), [&](const llvm::json::ParseError &a) {
@@ -723,28 +727,44 @@ public:
       return true;
     }
 
-    SmallVector<Attribute> annos;
+    llvm::errs() << "VIEW! A2\n";
     llvm::json::Path::Root root;
-    if (!importAnnotationsFromJSONRaw(view.get(), annos, root, gi.op.getContext())) {
+
+    auto value = convertJSONToAttribute(gi.op.getContext(), view.get(), root);
+    assert(value);
+    llvm::errs() << "value (attr): " << value << "\n";
+    value.dump();
+
+    auto augmentedType = dyn_cast<AugmentedBundleTypeAttr>(value);
+    if (!augmentedType) {
+      gi.emitError() << "view info must be augmented bundle type attribute";
       return true;
     }
+    // TODO: Check if this is required to be present re:AugmentedBundleTypeAttr
+    if (!augmentedType.getDefName()) {
+    }
+      
 
+    llvm::errs() << "VIEW! A3\n";
     return false;
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                PatternRewriter &rewriter) override {
+    llvm::errs() << "VIEW! A4\n";
     auto view = llvm::json::parse(gi.getParamValue<StringAttr>("info").getValue());
     if (view)
       llvm::report_fatal_error("parse failed second time");
 
-    SmallVector<Attribute> annos;
     llvm::json::Path::Root root;
-    auto success = importAnnotationsFromJSONRaw(view.get(), annos, root, gi.op.getContext());
-    (void)success;
-    assert(success);
+    auto value = convertJSONToAttribute(gi.op.getContext(), view.get(), root);
+    assert(value);
 
-    llvm::errs() << annos[0] << "\n";
+    auto augmentedType = dyn_cast<AugmentedBundleTypeAttr>(value);
+    assert(augmentedType);
+
+    auto name = gi.getParamValue<StringAttr>("info").getValue();
+    rewriter.replaceOpWithNewOp<ViewIntrinsicOp>(gi.op, name, augmentedType, adaptor.getOperands());
   }
 };
 

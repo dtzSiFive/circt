@@ -2,6 +2,8 @@ set(CIRCT_FIRRTL_Sources
   CHIRRTLDialect.cpp
   CHIRRTLTypes.cpp
   FieldRefCache.cpp
+  # TODO: fixup FIRAnnotations.h after moving this
+  FIRAnnotations.cpp
   FIRRTLAnnotationHelper.cpp
   FIRRTLAnnotations.cpp
   FIRRTLAttributes.cpp
@@ -48,8 +50,6 @@ add_circt_dialect_library(CIRCTFIRRTL
   CIRCTSV
   MLIRIR
   MLIRPass
-  # TODO: NOT THIS!
-  CIRCTImportFIRFile
   )
 
 add_circt_library(CIRCTFIRRTLReductions
