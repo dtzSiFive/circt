@@ -200,6 +200,14 @@ public:
   /// Transform the intrinsic to its implementation.
   virtual void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                        PatternRewriter &rewriter) = 0;
+
+  virtual LogicalResult checkAndConvert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+                       PatternRewriter &rewriter) {
+    if (check(gi))
+      return failure();
+    convert(gi, adaptor, rewriter);
+    return success();
+  };
 };
 
 template <typename OpTy>

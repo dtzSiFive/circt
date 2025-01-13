@@ -131,11 +131,10 @@ public:
     }
 
     auto &conv = *it->second;
-    if (conv.check(GenericIntrinsic(op)))
-      return failure();
-    conv.convert(GenericIntrinsic(op), adaptor, rewriter);
-    ++numConversions;
-    return success();
+    auto result = conv.checkAndConvert(GenericIntrinsic(op), adaptor, rewriter);
+    if (succeeded(result))
+      ++numConversions;
+    return result;
   }
 
 private:
