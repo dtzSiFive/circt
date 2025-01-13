@@ -195,11 +195,14 @@ public:
   /// Checks whether the intrinsic is well-formed.
   ///
   /// This or's multiple ParseResults together, returning true on failure.
-  virtual bool check(GenericIntrinsic gi) = 0;
+  virtual bool check(GenericIntrinsic gi) {
+    llvm::report_fatal_error("check() or checkAndConvert() must be implemented");
+    return true;
+  }
 
   /// Transform the intrinsic to its implementation.
   virtual void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-                       PatternRewriter &rewriter) = 0;
+                       PatternRewriter &rewriter) {}
 
   virtual LogicalResult checkAndConvert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                        PatternRewriter &rewriter) {
