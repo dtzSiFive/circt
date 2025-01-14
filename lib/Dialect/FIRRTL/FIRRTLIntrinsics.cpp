@@ -742,7 +742,7 @@ public:
       
     // Check complete, convert!
 
-    auto name = gi.getParamValue<StringAttr>("info").getValue();
+    auto name = gi.getParamValue<StringAttr>("name").getValue();
     rewriter.replaceOpWithNewOp<ViewIntrinsicOp>(gi.op, name, augmentedType, adaptor.getOperands());
     return success();
   }
