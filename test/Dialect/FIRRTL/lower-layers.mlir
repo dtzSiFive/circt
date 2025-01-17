@@ -782,6 +782,6 @@ firrtl.circuit "Verbatim" {
 // CHECK:        firrtl.module private @Verbatim_ViewLayer() {
 // CHECK-NEXT:     firrtl.constant 1
 // CHECK-NEXT:     %[[N:.+]] = firrtl.node sym @[[SYM:.+]] %
-// CHECK-NEXT:     sv.verbatim 
+// CHECK-NEXT:     sv.verbatim
 // CHECK-SAME:     !firrtl.uint<10> {symbols = [#hw.innerNameRef<@Verbatim_ViewLayer::@[[SYM]]>]}
 // CHECK-NEXT:   }
