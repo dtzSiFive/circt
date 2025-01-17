@@ -763,3 +763,25 @@ firrtl.circuit "RWTH" {
     }
   }
 }
+
+
+// -----
+
+// Check sv.verbatim inner refs are updated, as occurs with views under layers.
+// CHECK-LABEL: circuit "Verbatim"
+firrtl.circuit "Verbatim" {
+  firrtl.layer @ViewLayer  bind { }
+  firrtl.module @Verbatim() {
+    firrtl.layerblock @ViewLayer {
+      %c1_ui10 = firrtl.constant 1 : !firrtl.uint<10>
+      %n = firrtl.node sym @node %c1_ui10 : !firrtl.uint<10>
+      sv.verbatim "// node: {{0}}, {{1}}"(%n) : !firrtl.uint<10> {symbols = [#hw.innerNameRef<@Verbatim::@node>]}
+    }
+  }
+}
+// CHECK:        firrtl.module private @Verbatim_ViewLayer() {
+// CHECK-NEXT:     firrtl.constant 1
+// CHECK-NEXT:     %[[N:.+]] = firrtl.node sym @[[SYM:.+]] %
+// CHECK-NEXT:     sv.verbatim 
+// CHECK-SAME:     !firrtl.uint<10> {symbols = [#hw.innerNameRef<@Verbatim_ViewLayer::@[[SYM]]>]}
+// CHECK-NEXT:   }
