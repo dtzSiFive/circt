@@ -70,6 +70,9 @@ struct NLAContext {
   /// at the corresponding path step.  Falls back to the source NLA's
   /// `refPart(idx)` when not present.
   DenseMap<Attribute, StringAttr> renames;
+
+  NLAContext(StringAttr outputSym, StringAttr root)
+      : outputSym(outputSym), root(root), renames() {}
 };
 
 /// A representation of a source `hw.hierpath` (non-local annotation) that
@@ -161,7 +164,7 @@ public:
       symIdx.insert({nla.modPart(i), i});
     rootSet.insert(nla.root());
     // Default context inherits the source NLA's identity.
-    contexts.push_back({nla.getSymNameAttr(), nla.root(), {}});
+    contexts.push_back({nla.getSymNameAttr(), nla.root()});
   }
 
   /// This default, erroring constructor exists because the pass uses
@@ -413,7 +416,7 @@ public:
       StringAttr sourceSym = nla.getSymNameAttr();
       newSym = StringAttr::get(nla.getContext(),
                                circuitNamespace->newName(sourceSym.getValue()));
-      contexts.push_back({newSym, modName, {}});
+      contexts.push_back({newSym, modName});
     }
     rootSet.insert(modName);
     symIdx.insert({modName, 0});
