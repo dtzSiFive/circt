@@ -110,6 +110,11 @@ class MutableNLA {
   /// applyUpdates rewrites them, but only the owner erases it.
   bool ownsNLA = true;
 
+  /// Set by applyUpdates when the underlying hw::HierPathOp has been
+  /// replaced (a new HierPathOp was written) or is dead (no replacement).
+  /// Used by eraseOriginal to decide whether to erase nla.
+  bool replacedOrDead = false;
+
   /// Lookup a reference and apply any renames to it.  This requires both the
   /// module where the NEW reference lives (to lookup the rename) and the
   /// original ID of the reference (to fallback to if the reference was not
@@ -161,6 +166,7 @@ public:
   hw::HierPathOp applyUpdates() {
     // An NLA which is dead has no writeback; the driver erases it later.
     if (isDead()) {
+      replacedOrDead = true;
       return nullptr;
     }
 
@@ -237,14 +243,17 @@ public:
     // Defer erasing the underlying hw::HierPathOp: per-context clones still
     // need to read its path components during their writeBack.  The driver
     // will call eraseOriginal() after all applyUpdates have run.
+    replacedOrDead = true;
     return last;
   }
 
-  /// Erase the underlying hw::HierPathOp.  Only valid on owners; called by
-  /// the driver after all applyUpdates have finished writing back.
+  /// Erase the underlying hw::HierPathOp if applyUpdates replaced it (or
+  /// determined it was dead).  Only valid on owners; called by the driver
+  /// after all applyUpdates have finished writing back.
   void eraseOriginal() {
     assert(ownsNLA);
-    nla.erase();
+    if (replacedOrDead)
+      nla.erase();
   }
 
   void dump() {
