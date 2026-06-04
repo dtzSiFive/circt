@@ -1754,9 +1754,17 @@ LogicalResult Inliner::run() {
   for (auto sym : sourceSymsInOrder)
     nlaMap.find(sym)->second->eraseSource();
 
-  // Garbage collect any annotations which are now dead.  Duplicate annotations
-  // which are now split.
-  for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleOp>()) {
+  // Garbage collect any annotations which are now dead.  Duplicate
+  // annotations which are now split.
+  //
+  // Iterate FModuleLike so that annotations on extmodule definitions
+  // (e.g., `firrtl.transforms.BlackBoxInlineAnno` placed on an
+  // FExtModuleOp) are also covered.  Without this, a non-local
+  // annotation on an extmodule whose NLA was retop'd into multiple
+  // contexts would only reference the source NLA's sym; the
+  // additional output HierPathOps would have no consumer and be
+  // dropped by SymbolDCE.
+  for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleLike>()) {
     SmallVector<Attribute> newAnnotations;
     auto processNLAs = [&](Annotation anno) -> bool {
       if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {

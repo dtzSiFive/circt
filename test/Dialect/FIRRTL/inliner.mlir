@@ -1641,7 +1641,9 @@ firrtl.circuit "InlineRetopMultipleDirect" {
   // CHECK-NEXT: hw.hierpath private @nla [@InlineRetopMultipleDirect::@[[X1SYM:[_a-zA-Z0-9]+]], @A]
   // CHECK-NEXT: hw.hierpath private @nla_0 [@InlineRetopMultipleDirect::@[[X2SYM:[_a-zA-Z0-9]+]], @A]
   hw.hierpath private @nla [@X::@sym, @A]
-  // CHECK-NEXT: firrtl.extmodule private @A() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  // The extmodule annotation must be duplicated to reference both @nla and
+  // @nla_0; otherwise SymbolDCE later drops @nla_0 as unused.
+  // CHECK-NEXT: firrtl.extmodule private @A() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}, {circt.nonlocal = @nla_0, class = "test"}]}
   firrtl.extmodule private @A() attributes {
     annotations = [{circt.nonlocal = @nla, class = "test"}]
   }
