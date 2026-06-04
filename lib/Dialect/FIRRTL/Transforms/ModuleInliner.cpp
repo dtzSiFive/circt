@@ -104,6 +104,12 @@ class MutableNLA {
   /// module.
   DenseMap<Attribute, StringAttr> renames;
 
+  /// True if this MutableNLA owns the underlying hw::HierPathOp (and is
+  /// therefore responsible for erasing it during applyUpdates).  Per-context
+  /// clones share the same hw::HierPathOp with the owning original until
+  /// applyUpdates rewrites them, but only the owner erases it.
+  bool ownsNLA = true;
+
   /// Lookup a reference and apply any renames to it.  This requires both the
   /// module where the NEW reference lives (to lookup the rename) and the
   /// original ID of the reference (to fallback to if the reference was not
@@ -212,10 +218,22 @@ public:
 
     hw::HierPathOp last;
     assert(!dead || !newTops.empty());
+    if (!ownsNLA) {
+      // Per-context clone: write back its own newTop entry/entries, do not
+      // erase the shared underlying hw::HierPathOp (the owner will).
+      for (auto root : newTops)
+        last = writeBack(root.getModule(), root.getName());
+      return last;
+    }
     if (!dead)
       last = writeBack(nla.root(), nla.getNameAttr());
-    for (auto root : newTops)
-      last = writeBack(root.getModule(), root.getName());
+    else {
+      // Owner that has been retop'd: write back only the FIRST newTop.
+      // Subsequent newTops correspond to per-context clones in nlaMap that
+      // will write themselves back with their own renames.
+      auto first = newTops.front();
+      last = writeBack(first.getModule(), first.getName());
+    }
 
     nla.erase();
     return last;
@@ -388,6 +406,28 @@ public:
     assert(symIdx.count(module) && "Mutable NLA did not contain symbol");
     assert(!renames.count(module) && "Module already renamed");
     renames.insert({module, innerSym});
+  }
+
+  /// True if this MutableNLA owns the underlying hw::HierPathOp.
+  bool ownsNLAOp() const { return ownsNLA; }
+
+  /// Build a per-context clone of this MutableNLA representing the single
+  /// retop entry `newTop`.  The clone shares the underlying hw::HierPathOp
+  /// (so writeBack can read its path components), but tracks its own
+  /// `renames` map so distinct inlining contexts do not collide.  The
+  /// owning original remains in nlaMap and is responsible for erasing the
+  /// underlying hw::HierPathOp during applyUpdates.
+  MutableNLA cloneForContext(InnerRefAttr newTop) const {
+    MutableNLA clone = *this;
+    clone.ownsNLA = false;
+    clone.dead = true;
+    clone.newTops.clear();
+    clone.newTops.push_back(newTop);
+    clone.rootSet.clear();
+    clone.rootSet.insert(newTop.getModule());
+    clone.symIdx.insert({newTop.getModule(), 0});
+    clone.renames.clear();
+    return clone;
   }
 };
 } // namespace
@@ -782,11 +822,13 @@ bool Inliner::renameInstance(
         validHierPaths.push_back(old);
       else
         // The HierPathOp could have been renamed, check for the other retoped
-        // names, if they are active at the inlining context.
+        // names, if they are active at the inlining context.  Push the
+        // retop'd (clone) sym so subsequent setInnerSym lands on the
+        // per-context MutableNLA, not the shared original.
         for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
           if (activeHierpaths.find(additionalSym.getName()) !=
               activeHierpaths.end()) {
-            validHierPaths.push_back(old);
+            validHierPaths.push_back(additionalSym.getName());
             break;
           }
     }
@@ -1217,10 +1259,19 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
+        auto &mnla = nlaMap[sym];
+        // Skip if this NLA is rooted at childModule: the root has been
+        // retop'd already (or will be by the rootMap block below) and it is
+        // an error to inlineModule on the root.  This guards against state
+        // left over from a previous walk of the same module body (e.g., a
+        // reTop on a prior instance added an inner sym + instOpHierPaths
+        // entry that we now re-encounter).
+        if (mnla.getNLA().root() == childModule.getNameAttr())
+          continue;
         if (toBeFlattened)
-          nlaMap[sym].flattenModule(childModule);
+          mnla.flattenModule(childModule);
         else
-          nlaMap[sym].inlineModule(childModule);
+          mnla.inlineModule(childModule);
       }
     }
 
@@ -1233,11 +1284,29 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     // this new NLA.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[childModule.getNameAttr()].empty()) {
-      for (auto sym : rootMap[childModule.getNameAttr()]) {
-        auto &mnla = nlaMap[sym];
-        // Retop to the new parent, which is the topmost module (and not
-        // immediate parent) in case of recursive inlining.
-        sym = mnla.reTop(inlineToParent);
+      // Snapshot to avoid invalidation if we insert clones into nlaMap below.
+      SmallVector<Attribute> origSyms(
+          rootMap[childModule.getNameAttr()].begin(),
+          rootMap[childModule.getNameAttr()].end());
+      for (auto origSymAttr : origSyms) {
+        auto origSym = cast<StringAttr>(origSymAttr);
+        StringAttr newSym;
+        Attribute origNLAName;
+        {
+          auto &mnla = nlaMap[origSym];
+          origNLAName = mnla.getNLA().getNameAttr();
+          // Retop to the new parent, which is the topmost module (and not
+          // immediate parent) in case of recursive inlining.
+          newSym = mnla.reTop(inlineToParent);
+        }
+        // Subsequent reTops allocate a fresh sym; create a per-context
+        // MutableNLA clone under it so this context's setInnerSym calls do
+        // not collide with the original or earlier contexts.
+        if (newSym != origSym) {
+          MutableNLA clone = nlaMap[origSym].cloneForContext(
+              InnerRefAttr::get(inlineToParent.getNameAttr(), newSym));
+          nlaMap.insert({newSym, std::move(clone)});
+        }
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(
@@ -1245,11 +1314,11 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
           instance.setInnerSymAttr(hw::InnerSymAttr::get(instSym));
         }
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
-            cast<StringAttr>(sym));
+            newSym);
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
         // any symbols appropriately for that instance.
-        symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
+        symbolRenames.insert({origNLAName, newSym});
       }
     }
     auto instInnerSym = getInnerSymName(instance);
@@ -1320,10 +1389,16 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
+        auto &mnla = nlaMap[sym];
+        // Skip if this NLA is rooted at target: it has been (or will be)
+        // retop'd by the rootMap block below; calling inlineModule on the
+        // root asserts.
+        if (mnla.getNLA().root() == target.getNameAttr())
+          continue;
         if (toBeFlattened)
-          nlaMap[sym].flattenModule(target);
+          mnla.flattenModule(target);
         else
-          nlaMap[sym].inlineModule(target);
+          mnla.inlineModule(target);
       }
     }
 
@@ -1332,19 +1407,36 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     // a HierPathOp is added to this Op.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[target.getNameAttr()].empty() && !toBeFlattened) {
-      for (auto sym : rootMap[target.getNameAttr()]) {
-        auto &mnla = nlaMap[sym];
-        sym = mnla.reTop(module);
+      // Snapshot to avoid invalidation if we insert clones into nlaMap below.
+      SmallVector<Attribute> origSyms(rootMap[target.getNameAttr()].begin(),
+                                      rootMap[target.getNameAttr()].end());
+      for (auto origSymAttr : origSyms) {
+        auto origSym = cast<StringAttr>(origSymAttr);
+        StringAttr newSym;
+        Attribute origNLAName;
+        {
+          auto &mnla = nlaMap[origSym];
+          origNLAName = mnla.getNLA().getNameAttr();
+          newSym = mnla.reTop(module);
+        }
+        // Subsequent reTops allocate a fresh sym; create a per-context
+        // MutableNLA clone under it so this context's setInnerSym calls do
+        // not collide with the original or earlier contexts.
+        if (newSym != origSym) {
+          MutableNLA clone = nlaMap[origSym].cloneForContext(
+              InnerRefAttr::get(module.getNameAttr(), newSym));
+          nlaMap.insert({newSym, std::move(clone)});
+        }
         StringAttr instSym = getOrAddInnerSym(
             instance, [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
               return mic.modNamespace;
             });
         instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
-            cast<StringAttr>(sym));
+            newSym);
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
         // any symbols appropriately for that instance.
-        symbolRenames.insert({mnla.getNLA().getNameAttr(), sym});
+        symbolRenames.insert({origNLAName, newSym});
       }
     }
     auto instInnerSym = getInnerSymName(instance);
@@ -1565,9 +1657,16 @@ LogicalResult Inliner::run() {
     }
   });
 
-  // Writeback all NLAs to MLIR.
+  // Writeback all NLAs to MLIR.  Per-context clones share the underlying
+  // hw::HierPathOp with their owner and read its path components during
+  // writeBack; the owner erases that op in its applyUpdates.  So clones
+  // must run first.
   for (auto &nla : nlaMap)
-    nla.getSecond().applyUpdates();
+    if (!nla.getSecond().ownsNLAOp())
+      nla.getSecond().applyUpdates();
+  for (auto &nla : nlaMap)
+    if (nla.getSecond().ownsNLAOp())
+      nla.getSecond().applyUpdates();
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
