@@ -55,20 +55,15 @@ using InnerRefToNewNameMap = DenseMap<hw::InnerRefAttr, StringAttr>;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Per-output-context state for a non-local annotation.  An NLA whose root
-/// module is multi-instantiated (via inlining) produces one output
-/// `hw.hierpath` per instantiation context, each with its own
-/// inner-symbol renames.  This struct holds that per-context state.
+/// Per-instantiation-context state for a non-local annotation being rewritten.
 struct NLAContext {
-  /// Sym name of the output `hw.hierpath` to emit for this context.
+  /// Sym name of the output `hw.hierpath` for this context.
   StringAttr outputSym;
 
-  /// Root module name for this context's output path.
+  /// Root module name for this context.
   StringAttr root;
 
-  /// Mapping of (post-inlining) module name to renamed inner-sym to use
-  /// at the corresponding path step.  Falls back to the source NLA's
-  /// `refPart(idx)` when not present.
+  /// Renamed inner-syms keyed by (post-inlining) module name.
   DenseMap<Attribute, StringAttr> renames;
 
   NLAContext(StringAttr outputSym, StringAttr root)
@@ -108,41 +103,29 @@ class MutableNLA {
   /// A namespace that can be used to generate new symbol names if needed.
   CircuitNamespace *circuitNamespace;
 
-  /// A mapping of (path module name) -> (path index).  Built from the
-  /// source path at construction; `reTop` adds entries for retop'd-to
-  /// modules at index 0.
+  /// Maps path module name to index in the source path.
   DenseMap<Attribute, unsigned> symIdx;
 
-  /// Records which elements of the path are inlined.  Path-level state
-  /// shared across all contexts.  A bit set to true indicates the module
-  /// is still in the path; false indicates inlined/flattened.
+  /// Which path elements are still present.  True = module remains in path;
+  /// false = inlined/flattened away.
   BitVector inlinedSymbols;
 
-  /// True if the NLA targets nothing live (e.g., its module-only leaf was
-  /// flattened).  When true, no contexts will produce output.
+  /// True if the NLA has no live targets (leaf was inlined/flattened away).
   bool dead = false;
 
-  /// True if the NLA is only used to target a module (no ports or ops use
-  /// the HierPathOp).  Used to compute `dead` when the leaf is inlined or
-  /// flattened.  Path-level state.
+  /// True if the NLA targets only a module, not a port or op within it.
   bool moduleOnly = false;
 
-  /// Set of modules where this NLA has been (or originally was) rooted.
-  /// Updated on construction (with the source root) and on each `reTop`.
-  /// Used by `hasRoot`.
+  /// All modules at which this NLA is (or has been) rooted.
   DenseSet<StringAttr> rootSet;
 
   /// Length of the source NLA's path.
   unsigned int size;
 
-  /// One entry per output `hw.hierpath` to emit.  `contexts[0]` is
-  /// created at construction with the source's identity; subsequent
-  /// entries are added by `reTop`.
+  /// One entry per output `hw.hierpath` to emit.
   SmallVector<NLAContext> contexts;
 
-  /// True after the first `reTop` call.  On the first call, the default
-  /// context (`contexts[0]`) is repurposed (its `root` is reassigned)
-  /// rather than a new context appended, so the source sym is reused.
+  /// True after the first `reTop` call.
   bool retopped = false;
 
   /// Look up the inner-sym to use for path step `idx` in context `ctx`.
@@ -167,26 +150,8 @@ public:
     contexts.push_back({nla.getSymNameAttr(), nla.root()});
   }
 
-  /// This default, erroring constructor exists because the pass uses
-  /// `DenseMap<Attribute, MutableNLA>`.  `DenseMap` requires a default
-  /// constructor for the value type because its `[]` operator (which returns a
-  /// reference) must default construct the value type for a non-existent key.
-  /// This default constructor is never supposed to be used because the pass
-  /// prepopulates a `DenseMap<Attribute, MutableNLA>` before it runs and
-  /// thereby guarantees that `[]` will always hit and never need to use the
-  /// default constructor.
-  MutableNLA() {
-    llvm_unreachable(
-        "the default constructor for MutableNLA should never be used");
-  }
-
-  /// Mark this NLA as targeting nothing live (e.g., its module-only leaf
-  /// was flattened).  When set, `applyUpdates` writes nothing.
   void markDead() { dead = true; }
 
-  /// True after the first call to `reTop`.  Retop'd NLAs are expected to
-  /// have their original root module inlined away; the cleanup loop in
-  /// `Inliner::run` checks this so it doesn't mark them dead.
   bool isRetopped() const { return retopped; }
 
   /// Mark the NLA as only used to target a module (no ports/ops use it).
@@ -399,12 +364,9 @@ public:
       markDead();
   }
 
-  /// Re-top the NLA at `module`.  On the first call, repurpose the default
-  /// context (`contexts[0]`) by changing its root to `module`; the
-  /// outputSym stays the source NLA's sym so a leaf annotation referencing
-  /// that sym remains valid after writeback.  On subsequent calls, append
-  /// a new context with a freshly allocated outputSym.  Returns the
-  /// outputSym of the (new or repurposed) context.
+  /// Re-root the NLA at `module`.  Returns the output sym for this context.
+  /// The first call reuses the source sym (so existing leaf annotations stay
+  /// valid); subsequent calls allocate a fresh sym.
   StringAttr reTop(FModuleOp module) {
     StringAttr modName = module.getNameAttr();
     StringAttr newSym;
@@ -423,8 +385,7 @@ public:
     return newSym;
   }
 
-  /// All output syms this MutableNLA will emit, in creation order.
-  /// `contexts[0]` (the default) is first; subsequent are retop additions.
+  /// Output syms for all instantiation contexts, in creation order.
   SmallVector<StringAttr> getOutputSyms() const {
     SmallVector<StringAttr> syms;
     syms.reserve(contexts.size());
@@ -433,9 +394,8 @@ public:
     return syms;
   }
 
-  /// Record a renamed inner-symbol on the context whose output sym is
-  /// `outputSym`.  The caller knows the output sym from the lookup that
-  /// led here (typically from `instOpHierPaths`).
+  /// Record a renamed inner-symbol for `module` on the context identified by
+  /// `outputSym`.
   void setInnerSym(StringAttr outputSym, Attribute module,
                    StringAttr innerSym) {
     assert(symIdx.count(module) && "module not in this NLA's path");
@@ -696,22 +656,18 @@ private:
       return;
     }
     DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
-    // Capture the parent's active set before mutating it so we can use it to
-    // pick the per-context clone of an NLA traversing or rooted here.
+    // Intersect with the parent active set, preserving per-context output syms:
+    // a retop'd sym not literally in instPaths still belongs if its MutableNLA
+    // is represented there under a different output sym.
     auto parent = activeHierpaths;
     activeHierpaths.clear();
-    // For each entry active in the parent path, keep it if it (or its
-    // original, if this is a per-context clone sym) traverses the current
-    // instance.  This is the per-context-aware version of the simple set
-    // intersection: a clone sym in `parent` is treated as equivalent to its
-    // original in `instPaths`.
     for (auto sym : parent) {
       if (hPaths.contains(sym)) {
         activeHierpaths.insert(sym);
         continue;
       }
-      // sym may be a per-context output sym whose source NLA is in
-      // instPaths (different output sym, same MutableNLA).
+      // sym is a per-context output sym; check whether any hPath shares its
+      // MutableNLA.
       for (auto h : hPaths) {
         auto it = nlaMap.find(h);
         if (it == nlaMap.end())
@@ -725,10 +681,8 @@ private:
           break;
       }
     }
-    // Also, the NLAs that have current instance as the top must be added to
-    // the active set.  When an NLA has been retop'd into multiple
-    // per-context outputs, prefer the output sym that is active in the
-    // parent path; otherwise fall back to the source sym.
+    // Add NLAs rooted at this instance.  For retop'd NLAs, prefer the output
+    // sym already active in the parent path; fall back to the source sym.
     for (auto hPath : instPaths) {
       auto it = nlaMap.find(hPath);
       if (it == nlaMap.end())
@@ -764,16 +718,11 @@ private:
   /// stable for the duration of the pass.
   SmallVector<MutableNLA> nlaStorage;
 
-  /// Lookup by OUTPUT sym -> pointer into nlaStorage.  An output sym is
-  /// either the source NLA's sym (for the default context), or a freshly
-  /// allocated sym for a per-instantiation context produced by `reTop`.
-  /// Multiple output syms can map to the same `MutableNLA*` when an NLA
-  /// has been retop'd.
+  /// Maps output sym -> MutableNLA.  After reTop, multiple syms (one per
+  /// instantiation context) can map to the same MutableNLA.
   DenseMap<Attribute, MutableNLA *> nlaMap;
 
-  /// Source-order list of source NLA syms.  Populated during the initial
-  /// circuit walk in `run()` so that downstream iteration over NLAs is
-  /// deterministic and matches IR source order.
+  /// Source NLA syms in IR order, for deterministic writeback iteration.
   SmallVector<StringAttr> sourceSymsInOrder;
 
   /// A mapping of module names to NLA symbols that originate from that module.
@@ -1735,16 +1684,8 @@ LogicalResult Inliner::run() {
   for (auto sym : sourceSymsInOrder)
     nlaMap.find(sym)->second->applyUpdates();
 
-  // Garbage collect any annotations which are now dead.  Duplicate
-  // annotations which are now split.
-  //
-  // Iterate FModuleLike so that annotations on extmodule definitions
-  // (e.g., `firrtl.transforms.BlackBoxInlineAnno` placed on an
-  // FExtModuleOp) are also covered.  Without this, a non-local
-  // annotation on an extmodule whose NLA was retop'd into multiple
-  // contexts would only reference the source NLA's sym; the
-  // additional output HierPathOps would have no consumer and be
-  // dropped by SymbolDCE.
+  // Update non-local annotations at non-root modules to reflect the
+  // post-inlining NLA state.
   for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleLike>()) {
     SmallVector<Attribute> newAnnotations;
     auto processNLAs = [&](Annotation anno) -> bool {
@@ -1754,31 +1695,25 @@ LogicalResult Inliner::run() {
           return false;
         auto *mnla = it->second;
 
-        // Garbage collect dead NLA references.  This cleans up NLAs that
-        // go through modules which we never visited.
+        // NLA was killed; drop the annotation.
         if (mnla->isDead())
           return true;
 
-        // If the NLA becomes local after mutation (or sometimes an NLA is
-        // annotated even when the annotation is local in the first place),
-        // remove the nonlocal field.
+        // NLA became local after inlining; strip the nonlocal marker.
         if (mnla->isLocal()) {
           anno.removeMember("circt.nonlocal");
           newAnnotations.push_back(anno.getAttr());
           return true;
         }
 
-        // Do nothing if there are no additional output syms to add or if
-        // we're dealing with a root module.  Root modules have already
-        // been updated earlier in the pass.  We only need to update NLA
-        // paths which are not the root.
+        // Each instantiation context needs its own annotation copy.
+        // Root modules are handled during instance renaming; skip them here.
         auto outputSyms = mnla->getOutputSyms();
         if (outputSyms.size() <= 1 || mnla->hasRoot(fmodule))
           return false;
 
-        // Add annotations referencing the additional output syms (those
-        // beyond the default context, whose sym matches the source NLA's
-        // sym and is already on the existing annotation).
+        // The annotation already carries the first output sym; emit one
+        // additional copy per extra context.
         NamedAttrList newAnnotation;
         for (auto outSym : ArrayRef(outputSyms).drop_front()) {
           for (auto pair : anno.getDict()) {
