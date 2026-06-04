@@ -1724,6 +1724,43 @@ firrtl.circuit "InlineRetopMultipleDistinctWrappers" {
 
 // -----
 
+// Test the multi-instantiation pattern where the NLA path traverses MULTIPLE
+// inline modules (not just the root).  The leaf inner sym must be uniquified
+// per-instantiation context and each per-context HierPathOp must reference
+// its own context's renamed leaf.  Previously asserted in setInnerSym /
+// default-ctor; with per-context clones but no path-internal equivalence in
+// setActiveHierPaths, both output HierPathOps used the un-renamed leaf inner
+// sym (so one of the two paths didn't match its intended instance).
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopMultiplePathInternal"
+firrtl.circuit "InlineRetopMultiplePathInternal" {
+  // The two output HierPathOps must reference DIFFERENT inner syms (one per
+  // instance).  This is the property the bug violated.
+  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopMultiplePathInternal::@[[LEAF1:[_a-zA-Z0-9]+]], @D]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopMultiplePathInternal::@[[LEAF2:[_a-zA-Z0-9]+]], @D]
+  hw.hierpath private @nla [@B::@c, @C::@d, @D]
+  firrtl.extmodule private @D() attributes {
+    annotations = [{circt.nonlocal = @nla, class = "test"}]
+  }
+  firrtl.module private @C() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance d sym @d @D()
+  }
+  firrtl.module private @B() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance c sym @c @C()
+  }
+  // CHECK:     firrtl.module @InlineRetopMultiplePathInternal
+  // CHECK-DAG:   firrtl.instance b1_c_d sym @[[LEAF_A:[_a-zA-Z0-9]+]] @D()
+  // CHECK-DAG:   firrtl.instance b2_c_d sym @[[LEAF_B:[_a-zA-Z0-9]+]] @D()
+  firrtl.module @InlineRetopMultiplePathInternal() {
+    firrtl.instance b1 @B()
+    firrtl.instance b2 @B()
+  }
+  // The set {[[LEAF1]], [[LEAF2]]} must equal the set {[[LEAF_A]], [[LEAF_B]]}.
+  // CHECK-NOT: hw.hierpath
+}
+
+// -----
+
 // Test the multi-instantiation pattern at three inline levels deep.
 //
 // CHECK-LABEL: firrtl.circuit "InlineRetopMultipleDeep"
