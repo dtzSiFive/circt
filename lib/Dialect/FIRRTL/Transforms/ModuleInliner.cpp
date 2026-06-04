@@ -555,10 +555,12 @@ private:
     }
   };
 
-  /// Returns true if the NLA matches the current path.  This will only return
-  /// false if there is a mismatch indicating that the NLA definitely is
-  /// referring to some other path.
-  bool doesNLAMatchCurrentPath(hw::HierPathOp nla);
+  /// Return the active output sym for the MutableNLA identified by
+  /// `annotationSym` — the output sym that is present in `activeHierpaths`.
+  /// Returns a null StringAttr if no context is active on the current path.
+  /// Handles retop'd NLAs where the annotation sym (source sym / context 0)
+  /// differs from the active context's sym.
+  StringAttr findActiveOutputSym(StringAttr annotationSym);
 
   /// Rename an operation and unique any symbols it has.
   /// Returns true iff symbol was changed.
@@ -746,11 +748,21 @@ private:
 };
 } // namespace
 
-/// Check if the NLA applies to our instance path. This works by verifying the
-/// instance paths backwards starting from the current module. We drop the back
-/// element from the NLA because it obviously matches the current operation.
-bool Inliner::doesNLAMatchCurrentPath(hw::HierPathOp nla) {
-  return (activeHierpaths.find(nla.getSymNameAttr()) != activeHierpaths.end());
+/// Return the output sym of the active context for the given annotation sym,
+/// or a null StringAttr if no context is active on the current path.
+///
+/// Annotations reference the source NLA sym (which equals context 0's output
+/// sym).  For retop'd NLAs the active context may be a different context whose
+/// output sym was freshly allocated.  This function searches all output syms
+/// so it works regardless of whether the NLA has been retop'd.
+StringAttr Inliner::findActiveOutputSym(StringAttr annotationSym) {
+  auto it = nlaMap.find(annotationSym);
+  if (it == nlaMap.end())
+    return {};
+  for (auto outSym : it->second->getOutputSyms())
+    if (activeHierpaths.count(outSym))
+      return outSym;
+  return {};
 }
 
 /// If this operation or any child operation has a name, add the prefix to that
@@ -794,15 +806,11 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
       auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       if (!sym)
         continue;
-      // If this is a breadcrumb, we update the annotation path
-      // unconditionally. If this is the leaf of the NLA, we need to make
-      // sure we only update the annotation if the current path matches the
-      // NLA. This matters when the same module is inlined twice and the NLA
-      // only applies to one of them.
       auto *mnla = nlaMap[sym.getAttr()];
-      if (!doesNLAMatchCurrentPath(mnla->getNLA()))
+      auto activeSym = findActiveOutputSym(sym.getAttr());
+      if (!activeSym)
         continue;
-      mnla->setInnerSym(sym.getAttr(), il.mic.module.getModuleNameAttr(),
+      mnla->setInnerSym(activeSym, il.mic.module.getModuleNameAttr(),
                         newSymStrAttr);
     }
   }
@@ -929,17 +937,16 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
       // If the annotation is not non-local, copy it to the clone.
       if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         auto *mnla = nlaMap[sym.getAttr()];
-        // If the NLA does not match the path, we don't want to copy it over.
-        if (!doesNLAMatchCurrentPath(mnla->getNLA()))
+        auto activeSym = findActiveOutputSym(sym.getAttr());
+        if (!activeSym)
           continue;
-        // Update any NLAs with the new symbol name.
-        // This does not handle per-field symbols used in NLA's.
         if (oldRootSymName != newRootSymName)
-          mnla->setInnerSym(sym.getAttr(),
+          mnla->setInnerSym(activeSym,
                             il.mic.module.getModuleNameAttr(), newRootSymName);
-        // If all paths of the NLA have been inlined, make it local.
-        if (mnla->isLocal() || localSymbols.count(sym.getAttr()))
+        if (mnla->isLocal() || localSymbols.count(activeSym))
           anno.removeMember("circt.nonlocal");
+        else if (activeSym != sym.getAttr())
+          anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(activeSym));
       }
       newAnnotations.push_back(anno.getAttr());
     }
@@ -971,14 +978,14 @@ void Inliner::cloneAndRename(
     // If the annotation is not non-local, it will apply to all inlined
     // instances of this op. Add it to the cloned op.
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-      // Retrieve the corresponding NLA.
       auto *mnla = nlaMap[sym.getAttr()];
-      // If the NLA does not match the path we don't want to copy it over.
-      if (!doesNLAMatchCurrentPath(mnla->getNLA()))
+      auto activeSym = findActiveOutputSym(sym.getAttr());
+      if (!activeSym)
         continue;
-      // The NLA has become local, rewrite the annotation to be local.
-      if (mnla->isLocal() || localSymbols.count(sym.getAttr()))
+      if (mnla->isLocal() || localSymbols.count(activeSym))
         anno.removeMember("circt.nonlocal");
+      else if (activeSym != sym.getAttr())
+        anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(activeSym));
     }
     // Attach this annotation to the cloned operation.
     newAnnotations.push_back(anno);
