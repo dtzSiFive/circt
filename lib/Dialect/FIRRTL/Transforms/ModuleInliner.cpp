@@ -95,14 +95,11 @@ struct NLAContext {
 ///   1. Constructed from a source `hw.hierpath` op in `Inliner::run()`.
 ///   2. `inlineModule`/`flattenModule`/`reTop`/`setInnerSym` accumulate
 ///      mutations during inlining.
-///   3. `applyUpdates` emits one new `hw.hierpath` per context (or none,
-///      if `dead` or unchanged).
-///   4. `eraseSource` removes the source `hw.hierpath` op.  Two-step
-///      because per-context writebacks read `nla.modPart`/`refPart` for
-///      path steps that aren't renamed.
+///   3. `applyUpdates` emits one new `hw.hierpath` per context and erases
+///      the source op, or leaves it unchanged if nothing changed.
 class MutableNLA {
   /// Source `hw.hierpath` op.  Also the IR insertion anchor for emitted
-  /// outputs and the thing erased by `eraseSource`.
+  /// outputs; erased by `applyUpdates` when writeback occurs.
   hw::HierPathOp nla;
 
   /// A namespace that can be used to generate new symbol names if needed.
@@ -144,11 +141,6 @@ class MutableNLA {
   /// context (`contexts[0]`) is repurposed (its `root` is reassigned)
   /// rather than a new context appended, so the source sym is reused.
   bool retopped = false;
-
-  /// Set by `applyUpdates` to indicate `eraseSource` should erase `nla`.
-  /// True when we wrote at least one replacement op or determined the NLA
-  /// was dead.  False when we returned the source op unchanged.
-  bool shouldEraseSource = false;
 
   /// Look up the inner-sym to use for path step `idx` in context `ctx`.
   /// Uses the context's renames; falls back to the source NLA's refPart.
@@ -201,35 +193,25 @@ public:
   hw::HierPathOp getNLA() { return nla; }
 
   /// Writeback updates accumulated in this MutableNLA: emit one new
-  /// `hw.hierpath` op per `NLAContext`.  Sets `shouldEraseSource` so that
-  /// the driver's later `eraseSource` call can remove the source op.
+  /// `hw.hierpath` op per `NLAContext`, then erase the source op.
+  ///
+  /// Fast path: if nothing changed (not retop'd, no inlining, no renames),
+  /// the source op is left in place unchanged.
   ///
   /// This method should only ever be called once.  After calling this,
-  /// further mutations are not supported.  `eraseSource` is the only
-  /// other call that may be made later, and only by the driver.
+  /// the MutableNLA must not be used further.
   void applyUpdates() {
-    if (dead) {
-      // No outputs to write; erase the source op.
-      shouldEraseSource = true;
-      return;
-    }
-    // No-op fast path: not retop'd, no path inlining, no renames.
-    if (!retopped && inlinedSymbols.all() && contexts[0].renames.empty()) {
+    // Fast path: source op is unchanged, leave it in place.
+    if (!dead && !retopped && inlinedSymbols.all() &&
+        contexts[0].renames.empty()) {
       assert(contexts.size() == 1);
       return;
     }
     OpBuilder b(nla);
-    for (auto &ctx : contexts)
-      writeBackContext(b, ctx);
-    shouldEraseSource = true;
-  }
-
-  /// Erase the source `hw.hierpath` if `applyUpdates` decided we needed
-  /// a writeback.  Called by the driver after every `applyUpdates` to
-  /// avoid invalidating the source op while peer contexts read from it.
-  void eraseSource() {
-    if (shouldEraseSource)
-      nla.erase();
+    if (!dead)
+      for (auto &ctx : contexts)
+        writeBackContext(b, ctx);
+    nla.erase();
   }
 
 private:
@@ -1745,14 +1727,10 @@ LogicalResult Inliner::run() {
   });
 
   // Writeback all NLAs to MLIR.  Each MutableNLA emits one new
-  // hw.hierpath per context; the source op is erased afterward.  We
-  // iterate sources in IR source order; contexts within each source are
-  // emitted in their creation-order vector position.  This produces a
-  // deterministic IR layout independent of `nlaMap`'s hash-bucket order.
+  // hw.hierpath per context (or leaves the source op unchanged if nothing
+  // changed).  Iterate in IR source order for a deterministic layout.
   for (auto sym : sourceSymsInOrder)
     nlaMap.find(sym)->second->applyUpdates();
-  for (auto sym : sourceSymsInOrder)
-    nlaMap.find(sym)->second->eraseSource();
 
   // Garbage collect any annotations which are now dead.  Duplicate
   // annotations which are now split.
