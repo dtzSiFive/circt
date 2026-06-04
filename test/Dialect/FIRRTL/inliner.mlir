@@ -1624,3 +1624,130 @@ firrtl.circuit "InlineBothModules" {
     %xmr = sv.xmr.ref @path : !hw.inout<i5>
   }
 }
+
+// -----
+
+// Test that an inline private module whose hw.hierpath is rooted at it can be
+// instantiated multiple times by the public top.  Each instantiation context
+// must get its own retop'd HierPathOp; sharing per-context state previously
+// asserted in setInnerSym ("Module already renamed").
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopMultipleDirect"
+firrtl.circuit "InlineRetopMultipleDirect" {
+  // The original NLA's sym is reused for one context; another is allocated
+  // for the second.  Both should retop to the public root.
+  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopMultipleDirect::@{{[_a-zA-Z0-9]+}}, @A]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopMultipleDirect::@{{[_a-zA-Z0-9]+}}, @A]
+  hw.hierpath private @nla [@X::@sym, @A]
+  // CHECK: firrtl.extmodule private @A() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @A() attributes {
+    annotations = [{circt.nonlocal = @nla, class = "test"}]
+  }
+  firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance a sym @sym @A()
+  }
+  // CHECK:     firrtl.module @InlineRetopMultipleDirect
+  // CHECK-DAG:   firrtl.instance x1_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK-DAG:   firrtl.instance x2_a sym @{{[_a-zA-Z0-9]+}} @A()
+  firrtl.module @InlineRetopMultipleDirect() {
+    firrtl.instance x1 @X()
+    firrtl.instance x2 @X()
+  }
+}
+
+// -----
+
+// Test that an inline private module whose hw.hierpath is rooted at it can be
+// inlined through a separate inline ancestor that is itself instantiated
+// multiple times.  This previously crashed in `inlineModule` ("unable to
+// inline the root module") because reTop on the first walk added an inner
+// sym to the shared instance op which the second walk picked up.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopMultipleViaWrapper"
+firrtl.circuit "InlineRetopMultipleViaWrapper" {
+  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopMultipleViaWrapper::@{{[_a-zA-Z0-9]+}}, @A]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopMultipleViaWrapper::@{{[_a-zA-Z0-9]+}}, @A]
+  hw.hierpath private @nla [@X::@sym, @A]
+  firrtl.extmodule private @A() attributes {
+    annotations = [{circt.nonlocal = @nla, class = "test"}]
+  }
+  firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance a sym @sym @A()
+  }
+  firrtl.module private @Wrapper() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance x @X()
+  }
+  // CHECK:     firrtl.module @InlineRetopMultipleViaWrapper
+  // CHECK-DAG:   firrtl.instance w1_x_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK-DAG:   firrtl.instance w2_x_a sym @{{[_a-zA-Z0-9]+}} @A()
+  firrtl.module @InlineRetopMultipleViaWrapper() {
+    firrtl.instance w1 @Wrapper()
+    firrtl.instance w2 @Wrapper()
+  }
+}
+
+// -----
+
+// Test the same multi-instantiation pattern with two distinct inline
+// wrappers (so dedup cannot merge them) instantiating the same inline NLA
+// root.  Exercises clone insertion under a freshly allocated retop sym;
+// previously asserted in MutableNLA's default constructor (UNREACHABLE)
+// because the freshly allocated sym was not in nlaMap.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopMultipleDistinctWrappers"
+firrtl.circuit "InlineRetopMultipleDistinctWrappers" {
+  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopMultipleDistinctWrappers::@{{[_a-zA-Z0-9]+}}, @A]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopMultipleDistinctWrappers::@{{[_a-zA-Z0-9]+}}, @A]
+  hw.hierpath private @nla [@X::@sym, @A]
+  firrtl.extmodule private @A() attributes {
+    annotations = [{circt.nonlocal = @nla, class = "test"}]
+  }
+  firrtl.extmodule private @Distinguish()
+  firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance a sym @sym @A()
+  }
+  firrtl.module private @Wrapper1() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance x @X()
+  }
+  firrtl.module private @Wrapper2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance x @X()
+    firrtl.instance d @Distinguish()
+  }
+  // CHECK:     firrtl.module @InlineRetopMultipleDistinctWrappers
+  // CHECK-DAG:   firrtl.instance w1_x_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK-DAG:   firrtl.instance w2_x_a sym @{{[_a-zA-Z0-9]+}} @A()
+  firrtl.module @InlineRetopMultipleDistinctWrappers() {
+    firrtl.instance w1 @Wrapper1()
+    firrtl.instance w2 @Wrapper2()
+  }
+}
+
+// -----
+
+// Test the multi-instantiation pattern at three inline levels deep.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopMultipleDeep"
+firrtl.circuit "InlineRetopMultipleDeep" {
+  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopMultipleDeep::@{{[_a-zA-Z0-9]+}}, @A]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopMultipleDeep::@{{[_a-zA-Z0-9]+}}, @A]
+  hw.hierpath private @nla [@X::@sym, @A]
+  firrtl.extmodule private @A() attributes {
+    annotations = [{circt.nonlocal = @nla, class = "test"}]
+  }
+  firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance a sym @sym @A()
+  }
+  firrtl.module private @Wrapper() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance x @X()
+  }
+  firrtl.module private @W2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance w @Wrapper()
+  }
+  // CHECK:     firrtl.module @InlineRetopMultipleDeep
+  // CHECK-DAG:   firrtl.instance a_w_x_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK-DAG:   firrtl.instance b_w_x_a sym @{{[_a-zA-Z0-9]+}} @A()
+  firrtl.module @InlineRetopMultipleDeep() {
+    firrtl.instance a @W2()
+    firrtl.instance b @W2()
+  }
+}
