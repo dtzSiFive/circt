@@ -691,12 +691,34 @@ private:
     }
     DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
     // Capture the parent's active set before mutating it so we can use it to
-    // pick the per-context clone of an NLA rooted here.
+    // pick the per-context clone of an NLA traversing or rooted here.
     auto parent = activeHierpaths;
-    // Only the hierPaths that this instance participates in, and is active in
-    // the current path must be kept active for the child modules.
-    llvm::set_intersect(activeHierpaths, hPaths);
-    // Also, the nlas, that have current instance as the top must be added to
+    activeHierpaths.clear();
+    // For each entry active in the parent path, keep it if it (or its
+    // original, if this is a per-context clone sym) traverses the current
+    // instance.  This is the per-context-aware version of the simple set
+    // intersection: a clone sym in `parent` is treated as equivalent to its
+    // original in `instPaths`.
+    for (auto sym : parent) {
+      if (hPaths.contains(sym)) {
+        activeHierpaths.insert(sym);
+        continue;
+      }
+      // sym may be a clone whose original is in instPaths.
+      for (auto h : hPaths) {
+        auto it = nlaMap.find(h);
+        if (it == nlaMap.end())
+          continue;
+        for (auto add : it->second.getAdditionalSymbols())
+          if (add.getName() == sym) {
+            activeHierpaths.insert(sym);
+            break;
+          }
+        if (activeHierpaths.contains(sym))
+          break;
+      }
+    }
+    // Also, the nlas that have current instance as the top must be added to
     // the active set.  When the original NLA has been retop'd into multiple
     // per-context clones, prefer the clone whose sym is active in the parent
     // path; otherwise fall back to the original.
