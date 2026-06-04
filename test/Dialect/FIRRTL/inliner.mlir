@@ -1792,3 +1792,35 @@ firrtl.circuit "InlineRetopMultipleDeep" {
     firrtl.instance b @W2()
   }
 }
+
+// -----
+
+// Test that a multiply-instantiated inline module whose body contains another
+// inline module with an NLA-annotated op produces correct local annotations on
+// every inlined copy, not just the first.
+//
+// The NLA path becomes fully local after inlining (both W and B are inlined
+// away).  Each of the two instances of W contributes one copy of the wire;
+// both copies must carry the local annotation.  Previously the second copy
+// silently lost its annotation because cloneAndRename checked the annotation
+// sym (@nla, the source / context-0 sym) against activeHierpaths, which held
+// @nla_0 for the second context.
+//
+// CHECK-LABEL: firrtl.circuit "InlineLocalAfterRetop"
+firrtl.circuit "InlineLocalAfterRetop" {
+  hw.hierpath private @nla [@W::@b_inst, @B::@w_sym]
+  firrtl.module private @B() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w_sym {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+  }
+  firrtl.module private @W() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance b sym @b_inst @B()
+  }
+  // Both inlined wires must carry the local annotation.
+  // CHECK:     firrtl.module @InlineLocalAfterRetop
+  // CHECK-DAG:   firrtl.wire {{.*}} {annotations = [{class = "test"}]}
+  // CHECK-DAG:   firrtl.wire {{.*}} {annotations = [{class = "test"}]}
+  firrtl.module @InlineLocalAfterRetop() {
+    firrtl.instance w1 @W()
+    firrtl.instance w2 @W()
+  }
+}
