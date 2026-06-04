@@ -754,6 +754,17 @@ private:
   /// A mapping of NLA symbol name to mutable NLA.
   DenseMap<Attribute, MutableNLA> nlaMap;
 
+  /// Source-order list of "owner" NLA syms (those backed directly by an
+  /// `hw.hierpath` op in the source IR).  Populated during the initial
+  /// circuit walk in `run()` so that downstream iteration over the original
+  /// NLAs is deterministic and matches IR source order.
+  SmallVector<StringAttr> ownerSymsInOrder;
+
+  /// Creation-order list of per-context clone NLA syms.  Each entry is a
+  /// fresh sym allocated during `reTop` for a multi-instantiation context.
+  /// Used to drive deterministic writeback ordering for clones.
+  SmallVector<StringAttr> cloneSymsInOrder;
+
   /// A mapping of module names to NLA symbols that originate from that module.
   DenseMap<Attribute, SmallVector<Attribute>> rootMap;
 
@@ -1361,6 +1372,7 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
           MutableNLA clone = nlaMap[origSym].cloneForContext(
               InnerRefAttr::get(inlineToParent.getNameAttr(), newSym));
           nlaMap.insert({newSym, std::move(clone)});
+          cloneSymsInOrder.push_back(newSym);
         }
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
@@ -1481,6 +1493,7 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
           MutableNLA clone = nlaMap[origSym].cloneForContext(
               InnerRefAttr::get(module.getNameAttr(), newSym));
           nlaMap.insert({newSym, std::move(clone)});
+          cloneSymsInOrder.push_back(newSym);
         }
         StringAttr instSym = getOrAddInnerSym(
             instance, [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
@@ -1619,11 +1632,13 @@ LogicalResult Inliner::run() {
   // Gather all NLA's, build information about the instance ops used:
   for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
     auto mnla = MutableNLA(nla, &circuitNamespace);
-    nlaMap.insert({nla.getSymNameAttr(), mnla});
-    rootMap[mnla.getNLA().root()].push_back(nla.getSymNameAttr());
+    auto symName = nla.getSymNameAttr();
+    nlaMap.insert({symName, mnla});
+    ownerSymsInOrder.push_back(symName);
+    rootMap[mnla.getNLA().root()].push_back(symName);
     for (auto p : nla.getNamepath())
       if (auto ref = dyn_cast<InnerRefAttr>(p))
-        instOpHierPaths[ref].push_back(nla.getSymNameAttr());
+        instOpHierPaths[ref].push_back(symName);
   }
   // Mark 'module-only' the NLA's that only target modules.
   // These may be deleted when their module is inlined/flattened.
@@ -1715,17 +1730,16 @@ LogicalResult Inliner::run() {
   // Writeback all NLAs to MLIR.  Per-context clones share the underlying
   // hw::HierPathOp with their owner and read its path components during
   // writeBack, so the owner cannot erase it inside applyUpdates.  Run owners
-  // first (so their HierPathOps appear before clones' in the IR, matching
-  // pre-clone behavior), then clones, then finally erase the originals.
-  for (auto &nla : nlaMap)
-    if (nla.getSecond().ownsNLAOp())
-      nla.getSecond().applyUpdates();
-  for (auto &nla : nlaMap)
-    if (!nla.getSecond().ownsNLAOp())
-      nla.getSecond().applyUpdates();
-  for (auto &nla : nlaMap)
-    if (nla.getSecond().ownsNLAOp())
-      nla.getSecond().eraseOriginal();
+  // in IR source order first (so their HierPathOps appear before clones' in
+  // the IR, matching pre-clone behavior), then clones in creation order,
+  // then finally erase the originals.  Both lists give deterministic IR
+  // layout that does not depend on `nlaMap`'s hash-bucket order.
+  for (auto sym : ownerSymsInOrder)
+    nlaMap.find(sym)->second.applyUpdates();
+  for (auto sym : cloneSymsInOrder)
+    nlaMap.find(sym)->second.applyUpdates();
+  for (auto sym : ownerSymsInOrder)
+    nlaMap.find(sym)->second.eraseOriginal();
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.

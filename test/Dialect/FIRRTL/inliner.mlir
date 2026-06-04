@@ -1634,21 +1634,23 @@ firrtl.circuit "InlineBothModules" {
 //
 // CHECK-LABEL: firrtl.circuit "InlineRetopMultipleDirect"
 firrtl.circuit "InlineRetopMultipleDirect" {
-  // The original NLA's sym is reused for one context; another is allocated
-  // for the second.  Both should retop to the public root.
-  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopMultipleDirect::@{{[_a-zA-Z0-9]+}}, @A]
-  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopMultipleDirect::@{{[_a-zA-Z0-9]+}}, @A]
+  // The original NLA's sym is reused for the first context (so the leaf
+  // annotation on @A remains valid); a fresh sym is allocated for the
+  // second.  Owners are written in IR source order, clones in creation
+  // order, so pairing is deterministic.
+  // CHECK-NEXT: hw.hierpath private @nla [@InlineRetopMultipleDirect::@[[X1SYM:[_a-zA-Z0-9]+]], @A]
+  // CHECK-NEXT: hw.hierpath private @nla_0 [@InlineRetopMultipleDirect::@[[X2SYM:[_a-zA-Z0-9]+]], @A]
   hw.hierpath private @nla [@X::@sym, @A]
-  // CHECK: firrtl.extmodule private @A() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  // CHECK-NEXT: firrtl.extmodule private @A() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
   firrtl.extmodule private @A() attributes {
     annotations = [{circt.nonlocal = @nla, class = "test"}]
   }
   firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     firrtl.instance a sym @sym @A()
   }
-  // CHECK:     firrtl.module @InlineRetopMultipleDirect
-  // CHECK-DAG:   firrtl.instance x1_a sym @{{[_a-zA-Z0-9]+}} @A()
-  // CHECK-DAG:   firrtl.instance x2_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK:      firrtl.module @InlineRetopMultipleDirect
+  // CHECK-NEXT:   firrtl.instance x1_a sym @[[X1SYM]] @A()
+  // CHECK-NEXT:   firrtl.instance x2_a sym @[[X2SYM]] @A()
   firrtl.module @InlineRetopMultipleDirect() {
     firrtl.instance x1 @X()
     firrtl.instance x2 @X()
