@@ -55,104 +55,108 @@ using InnerRefToNewNameMap = DenseMap<hw::InnerRefAttr, StringAttr>;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// A representation of an NLA that can be mutated.  This is intended to be
-/// used in situations where you want to make a series of modifications to an
-/// NLA while also being able to query information about it.  Finally, the NLA
-/// is written back to the IR to replace the original NLA.
+/// Per-output-context state for a non-local annotation.  An NLA whose root
+/// module is multi-instantiated (via inlining) produces one output
+/// `hw.hierpath` per instantiation context, each with its own
+/// inner-symbol renames.  This struct holds that per-context state.
+struct NLAContext {
+  /// Sym name of the output `hw.hierpath` to emit for this context.
+  StringAttr outputSym;
+
+  /// Root module name for this context's output path.
+  StringAttr root;
+
+  /// Mapping of (post-inlining) module name to renamed inner-sym to use
+  /// at the corresponding path step.  Falls back to the source NLA's
+  /// `refPart(idx)` when not present.
+  DenseMap<Attribute, StringAttr> renames;
+};
+
+/// A representation of a source `hw.hierpath` (non-local annotation) that
+/// can be mutated, then written back to the IR as one or more output
+/// `hw.hierpath`s.
 ///
-/// One `MutableNLA` represents exactly one OUTPUT `hw.hierpath` op that the
-/// pass will eventually emit.  When a private inline module that is the root
-/// of a non-local annotation is instantiated multiple times, each
-/// instantiation context needs its own output HierPathOp with its own
-/// per-context inner-symbol renames.  Those additional contexts are
-/// represented by `MutableNLA`s constructed via `cloneForContext`; they share
-/// the underlying source `hw::HierPathOp` (held in `nla`) for path-data
-/// lookup but track their own `renames` map.
+/// One `MutableNLA` is constructed per source `hw.hierpath` op in the
+/// circuit and holds:
+///   * Path structure (immutable across contexts): `nla`, `symIdx`, `size`.
+///     `nla` is also the IR insertion anchor and what gets erased on
+///     writeback.
+///   * Path-level mutations (shared across contexts): `inlinedSymbols`,
+///     `dead`, `moduleOnly`, `rootSet`.
+///   * One or more per-context entries (`contexts`).  `contexts[0]` is
+///     created at construction with the source NLA's identity (its
+///     `outputSym` is the source sym; its `root` is the source root).
+///     `reTop` either repurposes this default context (the first call) or
+///     appends a fresh context with a freshly allocated sym (subsequent
+///     calls).  `contexts[0]` keeping the source sym means a leaf
+///     annotation referencing the source sym remains valid after writeback.
 ///
-/// Lifecycle for the source NLA op:
-///   1. The first `MutableNLA` for a given source NLA is constructed in
-///      `Inliner::run()` from the source IR's `hw.hierpath` op.  This
-///      `MutableNLA` "backs" the source op (`backsSourceOp == true`).
-///   2. Per-instantiation-context clones are added by `cloneForContext`.
-///      They have `backsSourceOp == false`; they do not own the source op.
-///   3. `applyUpdates` writes a new `hw.hierpath` op (or chooses not to,
-///      if the NLA is dead or unchanged), and sets `replacedOrDead` to
-///      record whether the source op needs to be erased.
-///   4. After every `MutableNLA` has had `applyUpdates` called, the driver
-///      calls `eraseOriginal` on each `MutableNLA` with `backsSourceOp`,
-///      which actually erases the source op (if `replacedOrDead`).  The
-///      two-step erasure is required because clones still need to read
-///      `nla.modPart`/`refPart` during their own writeback.
+/// Lifecycle:
+///   1. Constructed from a source `hw.hierpath` op in `Inliner::run()`.
+///   2. `inlineModule`/`flattenModule`/`reTop`/`setInnerSym` accumulate
+///      mutations during inlining.
+///   3. `applyUpdates` emits one new `hw.hierpath` per context (or none,
+///      if `dead` or unchanged).
+///   4. `eraseSource` removes the source `hw.hierpath` op.  Two-step
+///      because per-context writebacks read `nla.modPart`/`refPart` for
+///      path steps that aren't renamed.
 class MutableNLA {
-  // Storage of the NLA this represents.
+  /// Source `hw.hierpath` op.  Also the IR insertion anchor for emitted
+  /// outputs and the thing erased by `eraseSource`.
   hw::HierPathOp nla;
 
-  // A namespace that can be used to generate new symbol names if needed.
+  /// A namespace that can be used to generate new symbol names if needed.
   CircuitNamespace *circuitNamespace;
 
-  /// A mapping of symbol to index in the NLA.
+  /// A mapping of (path module name) -> (path index).  Built from the
+  /// source path at construction; `reTop` adds entries for retop'd-to
+  /// modules at index 0.
   DenseMap<Attribute, unsigned> symIdx;
 
-  /// Records which elements of the path are inlined.  A bit set to true
-  /// indicates the module is still in the path.  A bit set to false indicates
-  /// the module has been inlined/flattened and removed from the path.
+  /// Records which elements of the path are inlined.  Path-level state
+  /// shared across all contexts.  A bit set to true indicates the module
+  /// is still in the path; false indicates inlined/flattened.
   BitVector inlinedSymbols;
 
-  /// Indicates if the _original_ NLA is dead and should be deleted.  Updates
-  /// may still need to be written if the peerContextRoots vector below is non-empty.
+  /// True if the NLA targets nothing live (e.g., its module-only leaf was
+  /// flattened).  When true, no contexts will produce output.
   bool dead = false;
 
-  /// Indicates if the NLA is only used to target a module
-  /// (i.e., no ports or operations use this HierPathOp).
-  /// This is needed to help determine when the HierPathOp is dead:
-  /// if we inline/flatten a module, NLA's targeting (only) that module
-  /// are now dead.
+  /// True if the NLA is only used to target a module (no ports or ops use
+  /// the HierPathOp).  Used to compute `dead` when the leaf is inlined or
+  /// flattened.  Path-level state.
   bool moduleOnly = false;
 
-  /// On a `MutableNLA` that backs the source op (the "primary"): the list
-  /// of (root module, output sym) entries for the per-instantiation
-  /// contexts that share this source NLA.  Populated by `reTop`; the
-  /// first entry uses the source NLA's original sym (so a leaf annotation
-  /// referencing that sym remains valid after writeback), subsequent
-  /// entries get freshly allocated syms.  Used by `getAdditionalSymbols`
-  /// to find peer context syms in `Inliner` lookups.
-  ///
-  /// On a clone created by `cloneForContext`: a single entry describing
-  /// THIS clone's output (root module, output sym).
-  SmallVector<InnerRefAttr> peerContextRoots;
-
-  /// Set of root modules where this NLA has been retop'd (or originally
-  /// rooted).  Used by `hasRoot` for the path-internal active-set logic.
+  /// Set of modules where this NLA has been (or originally was) rooted.
+  /// Updated on construction (with the source root) and on each `reTop`.
+  /// Used by `hasRoot`.
   DenseSet<StringAttr> rootSet;
 
-  /// Stores the size of the NLA path.
+  /// Length of the source NLA's path.
   unsigned int size;
 
-  /// A mapping of module name to _new_ inner symbol name.  For convenience of
-  /// how this pass works (operations are inlined *into* a new module), the key
-  /// is the NEW module, after inlining/flattening as opposed to on the old
-  /// module.
-  DenseMap<Attribute, StringAttr> renames;
+  /// One entry per output `hw.hierpath` to emit.  `contexts[0]` is
+  /// created at construction with the source's identity; subsequent
+  /// entries are added by `reTop`.
+  SmallVector<NLAContext> contexts;
 
-  /// True if this `MutableNLA` was constructed directly from the source
-  /// IR's `hw.hierpath` op (i.e., backs that source op).  Per-context
-  /// clones (constructed via `cloneForContext`) have this set to false;
-  /// they share the source op with the primary for path-data lookup but
-  /// do not erase it.  See class doc comment for the lifecycle.
-  bool backsSourceOp = true;
+  /// True after the first `reTop` call.  On the first call, the default
+  /// context (`contexts[0]`) is repurposed (its `root` is reassigned)
+  /// rather than a new context appended, so the source sym is reused.
+  bool retopped = false;
 
-  /// Set by applyUpdates when the underlying hw::HierPathOp has been
-  /// replaced (a new HierPathOp was written) or is dead (no replacement).
-  /// Used by eraseOriginal to decide whether to erase nla.
-  bool replacedOrDead = false;
+  /// Set by `applyUpdates` to indicate `eraseSource` should erase `nla`.
+  /// True when we wrote at least one replacement op or determined the NLA
+  /// was dead.  False when we returned the source op unchanged.
+  bool shouldEraseSource = false;
 
-  /// Lookup a reference and apply any renames to it.  This requires both the
-  /// module where the NEW reference lives (to lookup the rename) and the
-  /// original ID of the reference (to fallback to if the reference was not
-  /// renamed).
-  StringAttr lookupRename(Attribute lastMod, unsigned idx = 0) {
-    if (renames.count(lastMod))
-      return renames[lastMod];
+  /// Look up the inner-sym to use for path step `idx` in context `ctx`.
+  /// Uses the context's renames; falls back to the source NLA's refPart.
+  StringAttr lookupRename(const NLAContext &ctx, Attribute lastMod,
+                          unsigned idx) {
+    auto it = ctx.renames.find(lastMod);
+    if (it != ctx.renames.end())
+      return it->second;
     return nla.refPart(idx);
   }
 
@@ -163,6 +167,9 @@ public:
         size(nla.getNamepath().size()) {
     for (size_t i = 0, e = size; i != e; ++i)
       symIdx.insert({nla.modPart(i), i});
+    rootSet.insert(nla.root());
+    // Default context inherits the source NLA's identity.
+    contexts.push_back({nla.getSymNameAttr(), nla.root(), {}});
   }
 
   /// This default, erroring constructor exists because the pass uses
@@ -178,117 +185,98 @@ public:
         "the default constructor for MutableNLA should never be used");
   }
 
-  /// Set the state of the mutable NLA to indicate that the _original_ NLA
-  /// should be removed when updates are applied.
+  /// Mark this NLA as targeting nothing live (e.g., its module-only leaf
+  /// was flattened).  When set, `applyUpdates` writes nothing.
   void markDead() { dead = true; }
 
-  /// Set the state of the mutable NLA to indicate the only target is a module.
+  /// True after the first call to `reTop`.  Retop'd NLAs are expected to
+  /// have their original root module inlined away; the cleanup loop in
+  /// `Inliner::run` checks this so it doesn't mark them dead.
+  bool isRetopped() const { return retopped; }
+
+  /// Mark the NLA as only used to target a module (no ports/ops use it).
   void markModuleOnly() { moduleOnly = true; }
 
-  /// Return the original NLA that this was pointing at.
+  /// Return the source `hw.hierpath` op.
   hw::HierPathOp getNLA() { return nla; }
 
-  /// Writeback updates accumulated in this MutableNLA to the IR.  This method
-  /// should only ever be called once and, if a writeback occurrs, the
-  /// MutableNLA is NOT updated for further use.  Interacting with the
-  /// MutableNLA in any way after calling this method may result in crashes.
-  /// (This is done to save unnecessary state cleanup of a pass-private
-  /// utility.)
-  hw::HierPathOp applyUpdates() {
-    // An NLA which is dead has no writeback; the driver erases it later.
-    if (isDead()) {
-      replacedOrDead = true;
-      return nullptr;
+  /// Writeback updates accumulated in this MutableNLA: emit one new
+  /// `hw.hierpath` op per `NLAContext`.  Sets `shouldEraseSource` so that
+  /// the driver's later `eraseSource` call can remove the source op.
+  ///
+  /// This method should only ever be called once.  After calling this,
+  /// further mutations are not supported.  `eraseSource` is the only
+  /// other call that may be made later, and only by the driver.
+  void applyUpdates() {
+    if (dead) {
+      // No outputs to write; erase the source op.
+      shouldEraseSource = true;
+      return;
     }
-
-    // The NLA was never updated, just return the NLA and do not writeback
-    // anything.
-    if (inlinedSymbols.all() && peerContextRoots.empty() && renames.empty())
-      return nla;
-
-    // The NLA has updates.  Generate a new NLA with the same symbol and delete
-    // the original NLA.
+    // No-op fast path: not retop'd, no path inlining, no renames.
+    if (!retopped && inlinedSymbols.all() && contexts[0].renames.empty()) {
+      assert(contexts.size() == 1);
+      return;
+    }
     OpBuilder b(nla);
-    auto writeBack = [&](StringAttr root, StringAttr sym) -> hw::HierPathOp {
-      SmallVector<Attribute> namepath;
-      StringAttr lastMod;
-
-      // Root of the namepath. If the next module has been inlined, set lastMod
-      // to root and skip adding to the namepath. Otherwise, add the root with
-      // its inner ref.
-      if (!inlinedSymbols.test(1)) {
-        lastMod = root;
-      } else {
-        namepath.push_back(InnerRefAttr::get(root, lookupRename(root)));
-      }
-
-      // Everything in the middle of the namepath (excluding the root and leaf).
-      for (signed i = 1, e = inlinedSymbols.size() - 1; i != e; ++i) {
-        if (!inlinedSymbols.test(i + 1)) {
-          if (!lastMod)
-            lastMod = nla.modPart(i);
-          continue;
-        }
-
-        // Update the inner symbol if it has been renamed.
-        auto modPart = lastMod ? lastMod : nla.modPart(i);
-        auto refPart = lookupRename(modPart, i);
-        namepath.push_back(InnerRefAttr::get(modPart, refPart));
-        lastMod = {};
-      }
-
-      // Leaf of the namepath.
-      auto modPart = lastMod ? lastMod : nla.modPart(size - 1);
-      auto refPart = lookupRename(modPart, size - 1);
-
-      if (refPart)
-        namepath.push_back(InnerRefAttr::get(modPart, refPart));
-      else
-        namepath.push_back(FlatSymbolRefAttr::get(modPart));
-
-      auto hp = hw::HierPathOp::create(b, b.getUnknownLoc(), sym,
-                                       b.getArrayAttr(namepath));
-      hp.setVisibility(nla.getVisibility());
-      return hp;
-    };
-
-    hw::HierPathOp last;
-    assert(!dead || !peerContextRoots.empty());
-    if (!backsSourceOp) {
-      // Per-context clone: write back its own peer-context root (single
-      // entry).  Do not erase the source `hw.hierpath` op -- the primary
-      // (the `MutableNLA` with `backsSourceOp == true`) will erase it
-      // after all `applyUpdates` complete.
-      for (auto root : peerContextRoots)
-        last = writeBack(root.getModule(), root.getName());
-      return last;
-    }
-    if (!dead)
-      last = writeBack(nla.root(), nla.getNameAttr());
-    else {
-      // Primary that has been retop'd: write back only the FIRST
-      // peer-context entry (which reuses the source sym).  Subsequent
-      // peer-context entries are written by the per-context clones
-      // sitting under those syms in `nlaMap`.
-      auto first = peerContextRoots.front();
-      last = writeBack(first.getModule(), first.getName());
-    }
-
-    // Defer erasing the underlying hw::HierPathOp: per-context clones still
-    // need to read its path components during their writeBack.  The driver
-    // will call eraseOriginal() after all applyUpdates have run.
-    replacedOrDead = true;
-    return last;
+    for (auto &ctx : contexts)
+      writeBackContext(b, ctx);
+    shouldEraseSource = true;
   }
 
-  /// Erase the underlying hw::HierPathOp if applyUpdates replaced it (or
-  /// determined it was dead).  Only valid on owners; called by the driver
-  /// after all applyUpdates have finished writing back.
-  void eraseOriginal() {
-    assert(backsSourceOp);
-    if (replacedOrDead)
+  /// Erase the source `hw.hierpath` if `applyUpdates` decided we needed
+  /// a writeback.  Called by the driver after every `applyUpdates` to
+  /// avoid invalidating the source op while peer contexts read from it.
+  void eraseSource() {
+    if (shouldEraseSource)
       nla.erase();
   }
+
+private:
+  /// Build and emit one output `hw.hierpath` for `ctx`, applying inline
+  /// state and the context's renames to the source path.
+  hw::HierPathOp writeBackContext(OpBuilder &b, const NLAContext &ctx) {
+    SmallVector<Attribute> namepath;
+    StringAttr lastMod;
+
+    // Root of the namepath.  If the next module has been inlined, set
+    // lastMod to root and skip adding to the namepath.  Otherwise, add
+    // the root with its inner ref.
+    if (!inlinedSymbols.test(1)) {
+      lastMod = ctx.root;
+    } else {
+      namepath.push_back(
+          InnerRefAttr::get(ctx.root, lookupRename(ctx, ctx.root, 0)));
+    }
+
+    // Middle of the namepath (excluding root and leaf).
+    for (signed i = 1, e = inlinedSymbols.size() - 1; i != e; ++i) {
+      if (!inlinedSymbols.test(i + 1)) {
+        if (!lastMod)
+          lastMod = nla.modPart(i);
+        continue;
+      }
+      auto modPart = lastMod ? lastMod : nla.modPart(i);
+      auto refPart = lookupRename(ctx, modPart, i);
+      namepath.push_back(InnerRefAttr::get(modPart, refPart));
+      lastMod = {};
+    }
+
+    // Leaf.
+    auto modPart = lastMod ? lastMod : nla.modPart(size - 1);
+    auto refPart = lookupRename(ctx, modPart, size - 1);
+    if (refPart)
+      namepath.push_back(InnerRefAttr::get(modPart, refPart));
+    else
+      namepath.push_back(FlatSymbolRefAttr::get(modPart));
+
+    auto hp = hw::HierPathOp::create(b, b.getUnknownLoc(), ctx.outputSym,
+                                     b.getArrayAttr(namepath));
+    hp.setVisibility(nla.getVisibility());
+    return hp;
+  }
+
+public:
 
   void dump() {
     llvm::errs() << "  - orig:           " << nla << "\n"
@@ -302,15 +290,19 @@ public:
       llvm::errs() << llvm::formatv("{0:x-}", a);
     });
     llvm::errs() << "]\n"
-                 << "    renames:\n";
-    for (auto rename : renames)
-      llvm::errs() << "      - " << rename.first << " -> " << rename.second
-                   << "\n";
+                 << "    contexts:\n";
+    for (auto &ctx : contexts) {
+      llvm::errs() << "      - outputSym: " << ctx.outputSym << "\n"
+                   << "        root:      " << ctx.root << "\n"
+                   << "        renames:\n";
+      for (auto &rn : ctx.renames)
+        llvm::errs() << "          - " << rn.first << " -> " << rn.second
+                     << "\n";
+    }
   }
 
-  /// Write the current state of this MutableNLA to a string using a format that
-  /// looks like the NLA serialization.  This is intended to be used for
-  /// debugging purposes.
+  /// Write the current state of this MutableNLA in a format that looks like
+  /// NLA serialization.  Intended for debugging.
   friend llvm::raw_ostream &operator<<(llvm::raw_ostream &os, MutableNLA &x) {
     auto writePathSegment = [&](StringAttr mod, StringAttr sym = {}) {
       if (sym)
@@ -320,74 +312,57 @@ public:
         os << "::@" << sym.getValue() << ">";
     };
 
-    auto writeOne = [&](StringAttr root, StringAttr sym) {
-      os << "firrtl.nla @" << sym.getValue() << " [";
-
+    auto writeOne = [&](const NLAContext &ctx) {
+      os << "firrtl.nla @" << ctx.outputSym.getValue() << " [";
       StringAttr lastMod;
       bool needsComma = false;
+      auto lookup = [&](Attribute mod, unsigned idx) -> StringAttr {
+        auto it = ctx.renames.find(mod);
+        if (it != ctx.renames.end())
+          return it->second;
+        return x.nla.refPart(idx);
+      };
 
-      // Root of the namepath. If the next module has been inlined, set lastMod
-      // to root and skip adding to the output. Otherwise, write the root with
-      // its inner ref.
       if (!x.inlinedSymbols.test(1)) {
-        lastMod = root;
+        lastMod = ctx.root;
       } else {
-        writePathSegment(root, x.lookupRename(root));
+        writePathSegment(ctx.root, lookup(ctx.root, 0));
         needsComma = true;
       }
-
-      // Everything in the middle of the namepath (excluding the root and leaf).
       for (signed i = 1, e = x.inlinedSymbols.size() - 1; i != e; ++i) {
         if (!x.inlinedSymbols.test(i + 1)) {
           if (!lastMod)
             lastMod = x.nla.modPart(i);
           continue;
         }
-
         if (needsComma)
           os << ", ";
         auto modPart = lastMod ? lastMod : x.nla.modPart(i);
-        auto refPart = x.nla.refPart(i);
-        if (x.renames.count(modPart))
-          refPart = x.renames[modPart];
-        writePathSegment(modPart, refPart);
+        writePathSegment(modPart, lookup(modPart, i));
         needsComma = true;
         lastMod = {};
       }
-
-      // Leaf of the namepath.
       if (needsComma)
         os << ", ";
       auto modPart = lastMod ? lastMod : x.nla.modPart(x.size - 1);
-      auto refPart = x.nla.refPart(x.size - 1);
-      if (x.renames.count(modPart))
-        refPart = x.renames[modPart];
-      writePathSegment(modPart, refPart);
+      writePathSegment(modPart, lookup(modPart, x.size - 1));
       os << "]";
     };
 
-    SmallVector<InnerRefAttr> tops;
-    if (!x.dead)
-      tops.push_back(InnerRefAttr::get(x.nla.root(), x.nla.getNameAttr()));
-    tops.append(x.peerContextRoots.begin(), x.peerContextRoots.end());
-
-    bool multiary = !x.peerContextRoots.empty();
+    bool multiary = x.contexts.size() > 1;
     if (multiary)
       os << "[";
-    llvm::interleaveComma(tops, os, [&](InnerRefAttr a) {
-      writeOne(a.getModule(), a.getName());
-    });
+    llvm::interleaveComma(x.contexts, os,
+                          [&](const NLAContext &c) { writeOne(c); });
     if (multiary)
       os << "]";
-
     return os;
   }
 
-  /// Returns true if this NLA is dead.  There are several reasons why this
-  /// could be dead:
-  ///   1. This NLA has no uses and was not re-topped.
-  ///   2. This NLA was flattened and its leaf reference is a Module.
-  bool isDead() { return dead && peerContextRoots.empty(); }
+  /// Returns true if this NLA is dead.  Set by `markDead` when its
+  /// module-only leaf was flattened or when its only target was inlined
+  /// away.  When dead, `applyUpdates` writes no outputs.
+  bool isDead() { return dead; }
 
   /// Returns true if this NLA targets only a module.
   bool isModuleOnly() { return moduleOnly; }
@@ -439,48 +414,58 @@ public:
       markDead();
   }
 
+  /// Re-top the NLA at `module`.  On the first call, repurpose the default
+  /// context (`contexts[0]`) by changing its root to `module`; the
+  /// outputSym stays the source NLA's sym so a leaf annotation referencing
+  /// that sym remains valid after writeback.  On subsequent calls, append
+  /// a new context with a freshly allocated outputSym.  Returns the
+  /// outputSym of the (new or repurposed) context.
   StringAttr reTop(FModuleOp module) {
-    StringAttr sym = nla.getSymNameAttr();
-    if (!peerContextRoots.empty())
-      sym = StringAttr::get(nla.getContext(),
-                            circuitNamespace->newName(sym.getValue()));
-    peerContextRoots.push_back(InnerRefAttr::get(module.getNameAttr(), sym));
-    rootSet.insert(module.getNameAttr());
-    symIdx.insert({module.getNameAttr(), 0});
-    markDead();
-    return sym;
+    StringAttr modName = module.getNameAttr();
+    StringAttr newSym;
+    if (!retopped) {
+      contexts[0].root = modName;
+      newSym = contexts[0].outputSym;
+      retopped = true;
+    } else {
+      StringAttr sourceSym = nla.getSymNameAttr();
+      newSym = StringAttr::get(nla.getContext(),
+                               circuitNamespace->newName(sourceSym.getValue()));
+      contexts.push_back({newSym, modName, {}});
+    }
+    rootSet.insert(modName);
+    symIdx.insert({modName, 0});
+    return newSym;
   }
 
-  ArrayRef<InnerRefAttr> getAdditionalSymbols() { return ArrayRef(peerContextRoots); }
-
-  void setInnerSym(Attribute module, StringAttr innerSym) {
-    assert(symIdx.count(module) && "Mutable NLA did not contain symbol");
-    assert(!renames.count(module) && "Module already renamed");
-    renames.insert({module, innerSym});
+  /// All output syms this MutableNLA will emit, in creation order.
+  /// `contexts[0]` (the default) is first; subsequent are retop additions.
+  SmallVector<StringAttr> getOutputSyms() const {
+    SmallVector<StringAttr> syms;
+    syms.reserve(contexts.size());
+    for (auto &ctx : contexts)
+      syms.push_back(ctx.outputSym);
+    return syms;
   }
 
-  /// True if this MutableNLA was constructed directly from the source IR's
-  /// hw::HierPathOp (vs. via cloneForContext) and is therefore responsible
-  /// for erasing the source op when applyUpdates is finished.
-  bool backsSource() const { return backsSourceOp; }
+  /// Record a renamed inner-symbol on the context whose output sym is
+  /// `outputSym`.  The caller knows the output sym from the lookup that
+  /// led here (typically from `instOpHierPaths`).
+  void setInnerSym(StringAttr outputSym, Attribute module,
+                   StringAttr innerSym) {
+    assert(symIdx.count(module) && "module not in this NLA's path");
+    NLAContext *ctx = findContext(outputSym);
+    assert(ctx && "setInnerSym called with unknown outputSym");
+    assert(!ctx->renames.count(module) && "Module already renamed");
+    ctx->renames.insert({module, innerSym});
+  }
 
-  /// Build a per-context clone of this MutableNLA representing the single
-  /// retop entry `newTop`.  The clone shares the underlying hw::HierPathOp
-  /// (so writeBack can read its path components) but tracks its own
-  /// `renames` map so distinct inlining contexts do not collide.  The
-  /// primary remains in nlaMap and is responsible for erasing the
-  /// source `hw.hierpath` op during eraseOriginal.
-  MutableNLA cloneForContext(InnerRefAttr newTop) const {
-    MutableNLA clone = *this;
-    clone.backsSourceOp = false;
-    clone.dead = true;
-    clone.peerContextRoots.clear();
-    clone.peerContextRoots.push_back(newTop);
-    clone.rootSet.clear();
-    clone.rootSet.insert(newTop.getModule());
-    clone.symIdx.insert({newTop.getModule(), 0});
-    clone.renames.clear();
-    return clone;
+  /// Find a context by output sym.  Returns null if not present.
+  NLAContext *findContext(StringAttr outputSym) {
+    for (auto &ctx : contexts)
+      if (ctx.outputSym == outputSym)
+        return &ctx;
+    return nullptr;
   }
 };
 } // namespace
@@ -740,13 +725,14 @@ private:
         activeHierpaths.insert(sym);
         continue;
       }
-      // sym may be a clone whose original is in instPaths.
+      // sym may be a per-context output sym whose source NLA is in
+      // instPaths (different output sym, same MutableNLA).
       for (auto h : hPaths) {
         auto it = nlaMap.find(h);
         if (it == nlaMap.end())
           continue;
-        for (auto add : it->second.getAdditionalSymbols())
-          if (add.getName() == sym) {
+        for (auto outSym : it->second->getOutputSyms())
+          if (outSym == sym) {
             activeHierpaths.insert(sym);
             break;
           }
@@ -754,20 +740,20 @@ private:
           break;
       }
     }
-    // Also, the nlas that have current instance as the top must be added to
-    // the active set.  When the original NLA has been retop'd into multiple
-    // per-context clones, prefer the clone whose sym is active in the parent
-    // path; otherwise fall back to the original.
+    // Also, the NLAs that have current instance as the top must be added to
+    // the active set.  When an NLA has been retop'd into multiple
+    // per-context outputs, prefer the output sym that is active in the
+    // parent path; otherwise fall back to the source sym.
     for (auto hPath : instPaths) {
       auto it = nlaMap.find(hPath);
       if (it == nlaMap.end())
         continue;
-      if (!it->second.hasRoot(moduleName))
+      if (!it->second->hasRoot(moduleName))
         continue;
       StringAttr toAdd = hPath;
-      for (auto add : it->second.getAdditionalSymbols())
-        if (parent.contains(add.getName())) {
-          toAdd = add.getName();
+      for (auto outSym : it->second->getOutputSyms())
+        if (parent.contains(outSym)) {
+          toAdd = outSym;
           break;
         }
       activeHierpaths.insert(toAdd);
@@ -787,19 +773,23 @@ private:
   /// Worklist of modules to process for inlining or flattening.
   SmallVector<FModuleOp, 16> worklist;
 
-  /// A mapping of NLA symbol name to mutable NLA.
-  DenseMap<Attribute, MutableNLA> nlaMap;
+  /// Owns the `MutableNLA`s.  Reserved once up-front in `run()` to the
+  /// number of source `hw.hierpath` ops in the circuit, then populated
+  /// without further reallocation, so pointers into this vector are
+  /// stable for the duration of the pass.
+  SmallVector<MutableNLA> nlaStorage;
 
-  /// Source-order list of "owner" NLA syms (those backed directly by an
-  /// `hw.hierpath` op in the source IR).  Populated during the initial
-  /// circuit walk in `run()` so that downstream iteration over the original
-  /// NLAs is deterministic and matches IR source order.
-  SmallVector<StringAttr> ownerSymsInOrder;
+  /// Lookup by OUTPUT sym -> pointer into nlaStorage.  An output sym is
+  /// either the source NLA's sym (for the default context), or a freshly
+  /// allocated sym for a per-instantiation context produced by `reTop`.
+  /// Multiple output syms can map to the same `MutableNLA*` when an NLA
+  /// has been retop'd.
+  DenseMap<Attribute, MutableNLA *> nlaMap;
 
-  /// Creation-order list of per-context clone NLA syms.  Each entry is a
-  /// fresh sym allocated during `reTop` for a multi-instantiation context.
-  /// Used to drive deterministic writeback ordering for clones.
-  SmallVector<StringAttr> cloneSymsInOrder;
+  /// Source-order list of source NLA syms.  Populated during the initial
+  /// circuit walk in `run()` so that downstream iteration over NLAs is
+  /// deterministic and matches IR source order.
+  SmallVector<StringAttr> sourceSymsInOrder;
 
   /// A mapping of module names to NLA symbols that originate from that module.
   DenseMap<Attribute, SmallVector<Attribute>> rootMap;
@@ -875,10 +865,11 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
       // sure we only update the annotation if the current path matches the
       // NLA. This matters when the same module is inlined twice and the NLA
       // only applies to one of them.
-      auto &mnla = nlaMap[sym.getAttr()];
-      if (!doesNLAMatchCurrentPath(mnla.getNLA()))
+      auto *mnla = nlaMap[sym.getAttr()];
+      if (!doesNLAMatchCurrentPath(mnla->getNLA()))
         continue;
-      mnla.setInnerSym(il.mic.module.getModuleNameAttr(), newSymStrAttr);
+      mnla->setInnerSym(sym.getAttr(), il.mic.module.getModuleNameAttr(),
+                        newSymStrAttr);
     }
   }
 
@@ -923,14 +914,12 @@ bool Inliner::renameInstance(
       if (activeHierpaths.find(old) != activeHierpaths.end())
         validHierPaths.push_back(old);
       else
-        // The HierPathOp could have been renamed, check for the other retoped
-        // names, if they are active at the inlining context.  Push the
-        // retop'd (clone) sym so subsequent setInnerSym lands on the
-        // per-context MutableNLA, not the shared original.
-        for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
-          if (activeHierpaths.find(additionalSym.getName()) !=
-              activeHierpaths.end()) {
-            validHierPaths.push_back(additionalSym.getName());
+        // The HierPathOp could have been renamed, check for the other retop
+        // output syms.  Push the retop'd output sym so subsequent
+        // setInnerSym lands on the right per-context state.
+        for (auto outSym : nlaMap[old]->getOutputSyms())
+          if (activeHierpaths.find(outSym) != activeHierpaths.end()) {
+            validHierPaths.push_back(outSym);
             break;
           }
     }
@@ -951,11 +940,11 @@ bool Inliner::renameInstance(
         newInst->getParentOfType<FModuleOp>().getNameAttr(), newSymAttr);
     instOpHierPaths[newInnerRef] = validHierPaths;
     // Update the innerSym for all the affected HierPathOps.
-    for (auto nla : instOpHierPaths[newInnerRef]) {
-      if (!nlaMap.count(nla))
+    for (auto outSym : instOpHierPaths[newInnerRef]) {
+      auto it = nlaMap.find(outSym);
+      if (it == nlaMap.end())
         continue;
-      auto &mnla = nlaMap[nla];
-      mnla.setInnerSym(newInnerRef.getModule(), newSymAttr);
+      it->second->setInnerSym(outSym, newInnerRef.getModule(), newSymAttr);
     }
   }
 
@@ -1005,16 +994,17 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
     for (auto anno : AnnotationSet::forPort(target, i)) {
       // If the annotation is not non-local, copy it to the clone.
       if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        auto &mnla = nlaMap[sym.getAttr()];
+        auto *mnla = nlaMap[sym.getAttr()];
         // If the NLA does not match the path, we don't want to copy it over.
-        if (!doesNLAMatchCurrentPath(mnla.getNLA()))
+        if (!doesNLAMatchCurrentPath(mnla->getNLA()))
           continue;
         // Update any NLAs with the new symbol name.
         // This does not handle per-field symbols used in NLA's.
         if (oldRootSymName != newRootSymName)
-          mnla.setInnerSym(il.mic.module.getModuleNameAttr(), newRootSymName);
+          mnla->setInnerSym(sym.getAttr(),
+                            il.mic.module.getModuleNameAttr(), newRootSymName);
         // If all paths of the NLA have been inlined, make it local.
-        if (mnla.isLocal() || localSymbols.count(sym.getAttr()))
+        if (mnla->isLocal() || localSymbols.count(sym.getAttr()))
           anno.removeMember("circt.nonlocal");
       }
       newAnnotations.push_back(anno.getAttr());
@@ -1048,12 +1038,12 @@ void Inliner::cloneAndRename(
     // instances of this op. Add it to the cloned op.
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
       // Retrieve the corresponding NLA.
-      auto &mnla = nlaMap[sym.getAttr()];
+      auto *mnla = nlaMap[sym.getAttr()];
       // If the NLA does not match the path we don't want to copy it over.
-      if (!doesNLAMatchCurrentPath(mnla.getNLA()))
+      if (!doesNLAMatchCurrentPath(mnla->getNLA()))
         continue;
       // The NLA has become local, rewrite the annotation to be local.
-      if (mnla.isLocal() || localSymbols.count(sym.getAttr()))
+      if (mnla->isLocal() || localSymbols.count(sym.getAttr()))
         anno.removeMember("circt.nonlocal");
     }
     // Attach this annotation to the cloned operation.
@@ -1270,7 +1260,7 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
       for (auto targetNLA : instOpHierPaths[innerRef])
-        nlaMap[targetNLA].flattenModule(target);
+        nlaMap[targetNLA]->flattenModule(target);
     }
 
     // Add any NLAs which start at this instance to the localSymbols set.
@@ -1361,19 +1351,19 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
-        auto &mnla = nlaMap[sym];
+        auto *mnla = nlaMap[sym];
         // Skip if this NLA is rooted at childModule: the root has been
         // retop'd already (or will be by the rootMap block below) and it is
         // an error to inlineModule on the root.  This guards against state
         // left over from a previous walk of the same module body (e.g., a
         // reTop on a prior instance added an inner sym + instOpHierPaths
         // entry that we now re-encounter).
-        if (mnla.getNLA().root() == childModule.getNameAttr())
+        if (mnla->getNLA().root() == childModule.getNameAttr())
           continue;
         if (toBeFlattened)
-          mnla.flattenModule(childModule);
+          mnla->flattenModule(childModule);
         else
-          mnla.inlineModule(childModule);
+          mnla->inlineModule(childModule);
       }
     }
 
@@ -1386,30 +1376,18 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     // this new NLA.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[childModule.getNameAttr()].empty()) {
-      // Snapshot to avoid invalidation if we insert clones into nlaMap below.
-      SmallVector<Attribute> origSyms(
-          rootMap[childModule.getNameAttr()].begin(),
-          rootMap[childModule.getNameAttr()].end());
-      for (auto origSymAttr : origSyms) {
+      for (auto origSymAttr : rootMap[childModule.getNameAttr()]) {
         auto origSym = cast<StringAttr>(origSymAttr);
-        StringAttr newSym;
-        Attribute origNLAName;
-        {
-          auto &mnla = nlaMap[origSym];
-          origNLAName = mnla.getNLA().getNameAttr();
-          // Retop to the new parent, which is the topmost module (and not
-          // immediate parent) in case of recursive inlining.
-          newSym = mnla.reTop(inlineToParent);
-        }
-        // Subsequent reTops allocate a fresh sym; create a per-context
-        // MutableNLA clone under it so this context's setInnerSym calls do
-        // not collide with the original or earlier contexts.
-        if (newSym != origSym) {
-          MutableNLA clone = nlaMap[origSym].cloneForContext(
-              InnerRefAttr::get(inlineToParent.getNameAttr(), newSym));
-          nlaMap.insert({newSym, std::move(clone)});
-          cloneSymsInOrder.push_back(newSym);
-        }
+        auto *mnla = nlaMap[origSym];
+        auto origNLAName = mnla->getNLA().getNameAttr();
+        // Retop to the new parent, which is the topmost module (and not
+        // immediate parent) in case of recursive inlining.  Returns the
+        // (possibly fresh) outputSym for the resulting per-context entry.
+        StringAttr newSym = mnla->reTop(inlineToParent);
+        // If reTop allocated a fresh sym (a 2nd-or-later context), register
+        // it in nlaMap so future lookups via newSym find the same MutableNLA.
+        if (newSym != origSym)
+          nlaMap[newSym] = mnla;
         StringAttr instSym = getInnerSymName(instance);
         if (!instSym) {
           instSym = StringAttr::get(
@@ -1492,16 +1470,16 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
       for (auto sym : instOpHierPaths[innerRef]) {
-        auto &mnla = nlaMap[sym];
+        auto *mnla = nlaMap[sym];
         // Skip if this NLA is rooted at target: it has been (or will be)
         // retop'd by the rootMap block below; calling inlineModule on the
         // root asserts.
-        if (mnla.getNLA().root() == target.getNameAttr())
+        if (mnla->getNLA().root() == target.getNameAttr())
           continue;
         if (toBeFlattened)
-          mnla.flattenModule(target);
+          mnla->flattenModule(target);
         else
-          mnla.inlineModule(target);
+          mnla->inlineModule(target);
       }
     }
 
@@ -1510,27 +1488,13 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     // a HierPathOp is added to this Op.
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[target.getNameAttr()].empty() && !toBeFlattened) {
-      // Snapshot to avoid invalidation if we insert clones into nlaMap below.
-      SmallVector<Attribute> origSyms(rootMap[target.getNameAttr()].begin(),
-                                      rootMap[target.getNameAttr()].end());
-      for (auto origSymAttr : origSyms) {
+      for (auto origSymAttr : rootMap[target.getNameAttr()]) {
         auto origSym = cast<StringAttr>(origSymAttr);
-        StringAttr newSym;
-        Attribute origNLAName;
-        {
-          auto &mnla = nlaMap[origSym];
-          origNLAName = mnla.getNLA().getNameAttr();
-          newSym = mnla.reTop(module);
-        }
-        // Subsequent reTops allocate a fresh sym; create a per-context
-        // MutableNLA clone under it so this context's setInnerSym calls do
-        // not collide with the original or earlier contexts.
-        if (newSym != origSym) {
-          MutableNLA clone = nlaMap[origSym].cloneForContext(
-              InnerRefAttr::get(module.getNameAttr(), newSym));
-          nlaMap.insert({newSym, std::move(clone)});
-          cloneSymsInOrder.push_back(newSym);
-        }
+        auto *mnla = nlaMap[origSym];
+        auto origNLAName = mnla->getNLA().getNameAttr();
+        StringAttr newSym = mnla->reTop(module);
+        if (newSym != origSym)
+          nlaMap[newSym] = mnla;
         StringAttr instSym = getOrAddInnerSym(
             instance, [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
               return mic.modNamespace;
@@ -1596,9 +1560,14 @@ void Inliner::createDebugScope(InliningLevel &il, InstanceOp instance,
 void Inliner::identifyNLAsTargetingOnlyModules() {
   DenseSet<Operation *> nlaTargetedModules;
 
-  // Identify candidate NLA's: those that end in a module
-  for (auto &[sym, mnla] : nlaMap) {
-    auto nla = mnla.getNLA();
+  // Identify candidate NLA's: those that end in a module.  (Iterate
+  // sourceSymsInOrder so we visit each MutableNLA exactly once, even though
+  // nlaMap may contain multiple aliases per source after reTop.  This is
+  // called before any reTop has run, so this is moot at this point, but
+  // robust regardless.)
+  for (auto sym : sourceSymsInOrder) {
+    auto *mnla = nlaMap[sym];
+    auto nla = mnla->getNLA();
     if (nla.isModule()) {
       auto mod = symbolTable.lookup<FModuleLike>(nla.leafMod());
       assert(mod &&
@@ -1650,11 +1619,12 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
       transformReduce(circuit->getContext(), mods, DenseSet<StringAttr>{},
                       mergeSets, scanForNLARefs);
 
-  // Mark NLA's that were not referenced as module-only
-  for (auto &[_, mnla] : nlaMap) {
-    auto nla = mnla.getNLA();
+  // Mark NLA's that were not referenced as module-only.
+  for (auto sym : sourceSymsInOrder) {
+    auto *mnla = nlaMap[sym];
+    auto nla = mnla->getNLA();
     if (nla.isModule() && !nonModOnlyNLAs.count(nla.getSymNameAttr()))
-      mnla.markModuleOnly();
+      mnla->markModuleOnly();
   }
 }
 
@@ -1665,15 +1635,23 @@ Inliner::Inliner(CircuitOp circuit, SymbolTable &symbolTable)
 LogicalResult Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
 
-  // Gather all NLA's, build information about the instance ops used:
-  for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
-    auto mnla = MutableNLA(nla, &circuitNamespace);
+  // Gather all NLA's, build information about the instance ops used.
+  // Reserve nlaStorage up-front so push_back below cannot reallocate it
+  // (pointers stored in nlaMap must remain stable throughout the pass).
+  auto hierPaths = circuit.getBodyBlock()->getOps<hw::HierPathOp>();
+  size_t numSources = std::distance(hierPaths.begin(), hierPaths.end());
+  nlaStorage.reserve(numSources);
+  for (auto nla : hierPaths) {
+    nlaStorage.emplace_back(nla, &circuitNamespace);
+    auto *p = &nlaStorage.back();
     auto symName = nla.getSymNameAttr();
-    nlaMap.insert({symName, mnla});
-    ownerSymsInOrder.push_back(symName);
-    rootMap[mnla.getNLA().root()].push_back(symName);
-    for (auto p : nla.getNamepath())
-      if (auto ref = dyn_cast<InnerRefAttr>(p))
+    // Default context's outputSym IS the source sym, so a single nlaMap
+    // entry suffices initially.  reTop may register additional aliases.
+    nlaMap[symName] = p;
+    sourceSymsInOrder.push_back(symName);
+    rootMap[p->getNLA().root()].push_back(symName);
+    for (auto path : nla.getNamepath())
+      if (auto ref = dyn_cast<InnerRefAttr>(path))
         instOpHierPaths[ref].push_back(symName);
   }
   // Mark 'module-only' the NLA's that only target modules.
@@ -1733,14 +1711,19 @@ LogicalResult Inliner::run() {
       scopeOp.erase();
   debugScopes.clear();
 
-  // Delete all unreferenced modules.  Mark any NLAs that originate from dead
-  // modules as also dead.
+  // Delete all unreferenced modules.  Mark any NLAs that originate from
+  // dead modules as also dead -- but only if the NLA hasn't been retop'd
+  // (retop'd NLAs have moved to a new live root and produce per-context
+  // outputs; their source root module being inlined away is expected).
   for (auto mod : llvm::make_early_inc_range(
            circuit.getBodyBlock()->getOps<FModuleLike>())) {
     if (liveModules.count(mod))
       continue;
-    for (auto nla : rootMap[mod.getModuleNameAttr()])
-      nlaMap[nla].markDead();
+    for (auto nla : rootMap[mod.getModuleNameAttr()]) {
+      auto *mnla = nlaMap[nla];
+      if (!mnla->isRetopped())
+        mnla->markDead();
+    }
     mod.erase();
   }
 
@@ -1757,25 +1740,19 @@ LogicalResult Inliner::run() {
 
   LLVM_DEBUG({
     llvm::dbgs() << "NLA modifications:\n";
-    for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
-      auto &mnla = nlaMap[nla.getNameAttr()];
-      mnla.dump();
-    }
+    for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>())
+      nlaMap[nla.getNameAttr()]->dump();
   });
 
-  // Writeback all NLAs to MLIR.  Per-context clones share the underlying
-  // hw::HierPathOp with their owner and read its path components during
-  // writeBack, so the owner cannot erase it inside applyUpdates.  Run owners
-  // in IR source order first (so their HierPathOps appear before clones' in
-  // the IR, matching pre-clone behavior), then clones in creation order,
-  // then finally erase the originals.  Both lists give deterministic IR
-  // layout that does not depend on `nlaMap`'s hash-bucket order.
-  for (auto sym : ownerSymsInOrder)
-    nlaMap.find(sym)->second.applyUpdates();
-  for (auto sym : cloneSymsInOrder)
-    nlaMap.find(sym)->second.applyUpdates();
-  for (auto sym : ownerSymsInOrder)
-    nlaMap.find(sym)->second.eraseOriginal();
+  // Writeback all NLAs to MLIR.  Each MutableNLA emits one new
+  // hw.hierpath per context; the source op is erased afterward.  We
+  // iterate sources in IR source order; contexts within each source are
+  // emitted in their creation-order vector position.  This produces a
+  // deterministic IR layout independent of `nlaMap`'s hash-bucket order.
+  for (auto sym : sourceSymsInOrder)
+    nlaMap.find(sym)->second->applyUpdates();
+  for (auto sym : sourceSymsInOrder)
+    nlaMap.find(sym)->second->eraseSource();
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
@@ -1783,48 +1760,45 @@ LogicalResult Inliner::run() {
     SmallVector<Attribute> newAnnotations;
     auto processNLAs = [&](Annotation anno) -> bool {
       if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        // If the symbol isn't in the NLA map, just skip it.  This avoids
-        // problems where the nlaMap "[]" will try to construct a default
-        // MutableNLA map (which it should never do).
-        if (!nlaMap.count(sym.getAttr()))
+        auto it = nlaMap.find(sym.getAttr());
+        if (it == nlaMap.end())
           return false;
+        auto *mnla = it->second;
 
-        auto mnla = nlaMap[sym.getAttr()];
-
-        // Garbage collect dead NLA references.  This cleans up NLAs that go
-        // through modules which we never visited.
-        if (mnla.isDead())
+        // Garbage collect dead NLA references.  This cleans up NLAs that
+        // go through modules which we never visited.
+        if (mnla->isDead())
           return true;
 
         // If the NLA becomes local after mutation (or sometimes an NLA is
         // annotated even when the annotation is local in the first place),
         // remove the nonlocal field.
-        if (mnla.isLocal()) {
+        if (mnla->isLocal()) {
           anno.removeMember("circt.nonlocal");
           newAnnotations.push_back(anno.getAttr());
           return true;
         }
 
-        // Do nothing if there are no additional NLAs to add or if we're
-        // dealing with a root module.  Root modules have already been updated
-        // earlier in the pass.  We only need to update NLA paths which are
-        // not the root.
-        auto peerContextRoots = mnla.getAdditionalSymbols();
-        if (peerContextRoots.empty() || mnla.hasRoot(fmodule))
+        // Do nothing if there are no additional output syms to add or if
+        // we're dealing with a root module.  Root modules have already
+        // been updated earlier in the pass.  We only need to update NLA
+        // paths which are not the root.
+        auto outputSyms = mnla->getOutputSyms();
+        if (outputSyms.size() <= 1 || mnla->hasRoot(fmodule))
           return false;
 
-        // Add NLAs to the non-root portion of the NLA.  This only needs to
-        // add symbols for NLAs which are after the first one.  We reused the
-        // old symbol name for the first NLA.
+        // Add annotations referencing the additional output syms (those
+        // beyond the default context, whose sym matches the source NLA's
+        // sym and is already on the existing annotation).
         NamedAttrList newAnnotation;
-        for (auto rootAndSym : peerContextRoots.drop_front()) {
+        for (auto outSym : ArrayRef(outputSyms).drop_front()) {
           for (auto pair : anno.getDict()) {
             if (pair.getName().getValue() != "circt.nonlocal") {
               newAnnotation.push_back(pair);
               continue;
             }
             newAnnotation.push_back(
-                {pair.getName(), FlatSymbolRefAttr::get(rootAndSym.getName())});
+                {pair.getName(), FlatSymbolRefAttr::get(outSym)});
           }
           newAnnotations.push_back(DictionaryAttr::get(context, newAnnotation));
         }
