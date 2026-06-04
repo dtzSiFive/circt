@@ -159,9 +159,8 @@ public:
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
   hw::HierPathOp applyUpdates() {
-    // Delete an NLA which is dead.
+    // An NLA which is dead has no writeback; the driver erases it later.
     if (isDead()) {
-      nla.erase();
       return nullptr;
     }
 
@@ -235,8 +234,17 @@ public:
       last = writeBack(first.getModule(), first.getName());
     }
 
-    nla.erase();
+    // Defer erasing the underlying hw::HierPathOp: per-context clones still
+    // need to read its path components during their writeBack.  The driver
+    // will call eraseOriginal() after all applyUpdates have run.
     return last;
+  }
+
+  /// Erase the underlying hw::HierPathOp.  Only valid on owners; called by
+  /// the driver after all applyUpdates have finished writing back.
+  void eraseOriginal() {
+    assert(ownsNLA);
+    nla.erase();
   }
 
   void dump() {
@@ -673,14 +681,30 @@ private:
       return;
     }
     DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
+    // Capture the parent's active set before mutating it so we can use it to
+    // pick the per-context clone of an NLA rooted here.
+    auto parent = activeHierpaths;
     // Only the hierPaths that this instance participates in, and is active in
     // the current path must be kept active for the child modules.
     llvm::set_intersect(activeHierpaths, hPaths);
     // Also, the nlas, that have current instance as the top must be added to
-    // the active set.
-    for (auto hPath : instPaths)
-      if (nlaMap[hPath].hasRoot(moduleName))
-        activeHierpaths.insert(hPath);
+    // the active set.  When the original NLA has been retop'd into multiple
+    // per-context clones, prefer the clone whose sym is active in the parent
+    // path; otherwise fall back to the original.
+    for (auto hPath : instPaths) {
+      auto it = nlaMap.find(hPath);
+      if (it == nlaMap.end())
+        continue;
+      if (!it->second.hasRoot(moduleName))
+        continue;
+      StringAttr toAdd = hPath;
+      for (auto add : it->second.getAdditionalSymbols())
+        if (parent.contains(add.getName())) {
+          toAdd = add.getName();
+          break;
+        }
+      activeHierpaths.insert(toAdd);
+    }
   }
 
   CircuitOp circuit;
@@ -1659,14 +1683,18 @@ LogicalResult Inliner::run() {
 
   // Writeback all NLAs to MLIR.  Per-context clones share the underlying
   // hw::HierPathOp with their owner and read its path components during
-  // writeBack; the owner erases that op in its applyUpdates.  So clones
-  // must run first.
+  // writeBack, so the owner cannot erase it inside applyUpdates.  Run owners
+  // first (so their HierPathOps appear before clones' in the IR, matching
+  // pre-clone behavior), then clones, then finally erase the originals.
+  for (auto &nla : nlaMap)
+    if (nla.getSecond().ownsNLAOp())
+      nla.getSecond().applyUpdates();
   for (auto &nla : nlaMap)
     if (!nla.getSecond().ownsNLAOp())
       nla.getSecond().applyUpdates();
   for (auto &nla : nlaMap)
     if (nla.getSecond().ownsNLAOp())
-      nla.getSecond().applyUpdates();
+      nla.getSecond().eraseOriginal();
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
