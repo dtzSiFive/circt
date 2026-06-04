@@ -55,10 +55,34 @@ using InnerRefToNewNameMap = DenseMap<hw::InnerRefAttr, StringAttr>;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// A representation of an NLA that can be mutated.  This is intended to be used
-/// in situations where you want to make a series of modifications to an NLA
-/// while also being able to query information about it.  Finally, the NLA is
-/// written back to the IR to replace the original NLA.
+/// A representation of an NLA that can be mutated.  This is intended to be
+/// used in situations where you want to make a series of modifications to an
+/// NLA while also being able to query information about it.  Finally, the NLA
+/// is written back to the IR to replace the original NLA.
+///
+/// One `MutableNLA` represents exactly one OUTPUT `hw.hierpath` op that the
+/// pass will eventually emit.  When a private inline module that is the root
+/// of a non-local annotation is instantiated multiple times, each
+/// instantiation context needs its own output HierPathOp with its own
+/// per-context inner-symbol renames.  Those additional contexts are
+/// represented by `MutableNLA`s constructed via `cloneForContext`; they share
+/// the underlying source `hw::HierPathOp` (held in `nla`) for path-data
+/// lookup but track their own `renames` map.
+///
+/// Lifecycle for the source NLA op:
+///   1. The first `MutableNLA` for a given source NLA is constructed in
+///      `Inliner::run()` from the source IR's `hw.hierpath` op.  This
+///      `MutableNLA` "backs" the source op (`backsSourceOp == true`).
+///   2. Per-instantiation-context clones are added by `cloneForContext`.
+///      They have `backsSourceOp == false`; they do not own the source op.
+///   3. `applyUpdates` writes a new `hw.hierpath` op (or chooses not to,
+///      if the NLA is dead or unchanged), and sets `replacedOrDead` to
+///      record whether the source op needs to be erased.
+///   4. After every `MutableNLA` has had `applyUpdates` called, the driver
+///      calls `eraseOriginal` on each `MutableNLA` with `backsSourceOp`,
+///      which actually erases the source op (if `replacedOrDead`).  The
+///      two-step erasure is required because clones still need to read
+///      `nla.modPart`/`refPart` during their own writeback.
 class MutableNLA {
   // Storage of the NLA this represents.
   hw::HierPathOp nla;
@@ -75,7 +99,7 @@ class MutableNLA {
   BitVector inlinedSymbols;
 
   /// Indicates if the _original_ NLA is dead and should be deleted.  Updates
-  /// may still need to be written if the newTops vector below is non-empty.
+  /// may still need to be written if the peerContextRoots vector below is non-empty.
   bool dead = false;
 
   /// Indicates if the NLA is only used to target a module
@@ -85,14 +109,20 @@ class MutableNLA {
   /// are now dead.
   bool moduleOnly = false;
 
-  /// Stores new roots for the NLA.  If this is non-empty, then it indicates
-  /// that the NLA should be copied and re-topped using the roots stored here.
-  /// This is non-empty when the NLA's root is inlined and the original NLA
-  /// migrates to each instantiator of the original NLA.
-  SmallVector<InnerRefAttr> newTops;
+  /// On a `MutableNLA` that backs the source op (the "primary"): the list
+  /// of (root module, output sym) entries for the per-instantiation
+  /// contexts that share this source NLA.  Populated by `reTop`; the
+  /// first entry uses the source NLA's original sym (so a leaf annotation
+  /// referencing that sym remains valid after writeback), subsequent
+  /// entries get freshly allocated syms.  Used by `getAdditionalSymbols`
+  /// to find peer context syms in `Inliner` lookups.
+  ///
+  /// On a clone created by `cloneForContext`: a single entry describing
+  /// THIS clone's output (root module, output sym).
+  SmallVector<InnerRefAttr> peerContextRoots;
 
-  /// Cache of roots that this module participates in.  This is only valid when
-  /// newTops is non-empty.
+  /// Set of root modules where this NLA has been retop'd (or originally
+  /// rooted).  Used by `hasRoot` for the path-internal active-set logic.
   DenseSet<StringAttr> rootSet;
 
   /// Stores the size of the NLA path.
@@ -104,11 +134,12 @@ class MutableNLA {
   /// module.
   DenseMap<Attribute, StringAttr> renames;
 
-  /// True if this MutableNLA owns the underlying hw::HierPathOp (and is
-  /// therefore responsible for erasing it during applyUpdates).  Per-context
-  /// clones share the same hw::HierPathOp with the owning original until
-  /// applyUpdates rewrites them, but only the owner erases it.
-  bool ownsNLA = true;
+  /// True if this `MutableNLA` was constructed directly from the source
+  /// IR's `hw.hierpath` op (i.e., backs that source op).  Per-context
+  /// clones (constructed via `cloneForContext`) have this set to false;
+  /// they share the source op with the primary for path-data lookup but
+  /// do not erase it.  See class doc comment for the lifecycle.
+  bool backsSourceOp = true;
 
   /// Set by applyUpdates when the underlying hw::HierPathOp has been
   /// replaced (a new HierPathOp was written) or is dead (no replacement).
@@ -172,7 +203,7 @@ public:
 
     // The NLA was never updated, just return the NLA and do not writeback
     // anything.
-    if (inlinedSymbols.all() && newTops.empty() && renames.empty())
+    if (inlinedSymbols.all() && peerContextRoots.empty() && renames.empty())
       return nla;
 
     // The NLA has updates.  Generate a new NLA with the same symbol and delete
@@ -222,21 +253,24 @@ public:
     };
 
     hw::HierPathOp last;
-    assert(!dead || !newTops.empty());
-    if (!ownsNLA) {
-      // Per-context clone: write back its own newTop entry/entries, do not
-      // erase the shared underlying hw::HierPathOp (the owner will).
-      for (auto root : newTops)
+    assert(!dead || !peerContextRoots.empty());
+    if (!backsSourceOp) {
+      // Per-context clone: write back its own peer-context root (single
+      // entry).  Do not erase the source `hw.hierpath` op -- the primary
+      // (the `MutableNLA` with `backsSourceOp == true`) will erase it
+      // after all `applyUpdates` complete.
+      for (auto root : peerContextRoots)
         last = writeBack(root.getModule(), root.getName());
       return last;
     }
     if (!dead)
       last = writeBack(nla.root(), nla.getNameAttr());
     else {
-      // Owner that has been retop'd: write back only the FIRST newTop.
-      // Subsequent newTops correspond to per-context clones in nlaMap that
-      // will write themselves back with their own renames.
-      auto first = newTops.front();
+      // Primary that has been retop'd: write back only the FIRST
+      // peer-context entry (which reuses the source sym).  Subsequent
+      // peer-context entries are written by the per-context clones
+      // sitting under those syms in `nlaMap`.
+      auto first = peerContextRoots.front();
       last = writeBack(first.getModule(), first.getName());
     }
 
@@ -251,7 +285,7 @@ public:
   /// determined it was dead).  Only valid on owners; called by the driver
   /// after all applyUpdates have finished writing back.
   void eraseOriginal() {
-    assert(ownsNLA);
+    assert(backsSourceOp);
     if (replacedOrDead)
       nla.erase();
   }
@@ -335,9 +369,9 @@ public:
     SmallVector<InnerRefAttr> tops;
     if (!x.dead)
       tops.push_back(InnerRefAttr::get(x.nla.root(), x.nla.getNameAttr()));
-    tops.append(x.newTops.begin(), x.newTops.end());
+    tops.append(x.peerContextRoots.begin(), x.peerContextRoots.end());
 
-    bool multiary = !x.newTops.empty();
+    bool multiary = !x.peerContextRoots.empty();
     if (multiary)
       os << "[";
     llvm::interleaveComma(tops, os, [&](InnerRefAttr a) {
@@ -353,7 +387,7 @@ public:
   /// could be dead:
   ///   1. This NLA has no uses and was not re-topped.
   ///   2. This NLA was flattened and its leaf reference is a Module.
-  bool isDead() { return dead && newTops.empty(); }
+  bool isDead() { return dead && peerContextRoots.empty(); }
 
   /// Returns true if this NLA targets only a module.
   bool isModuleOnly() { return moduleOnly; }
@@ -407,17 +441,17 @@ public:
 
   StringAttr reTop(FModuleOp module) {
     StringAttr sym = nla.getSymNameAttr();
-    if (!newTops.empty())
+    if (!peerContextRoots.empty())
       sym = StringAttr::get(nla.getContext(),
                             circuitNamespace->newName(sym.getValue()));
-    newTops.push_back(InnerRefAttr::get(module.getNameAttr(), sym));
+    peerContextRoots.push_back(InnerRefAttr::get(module.getNameAttr(), sym));
     rootSet.insert(module.getNameAttr());
     symIdx.insert({module.getNameAttr(), 0});
     markDead();
     return sym;
   }
 
-  ArrayRef<InnerRefAttr> getAdditionalSymbols() { return ArrayRef(newTops); }
+  ArrayRef<InnerRefAttr> getAdditionalSymbols() { return ArrayRef(peerContextRoots); }
 
   void setInnerSym(Attribute module, StringAttr innerSym) {
     assert(symIdx.count(module) && "Mutable NLA did not contain symbol");
@@ -425,21 +459,23 @@ public:
     renames.insert({module, innerSym});
   }
 
-  /// True if this MutableNLA owns the underlying hw::HierPathOp.
-  bool ownsNLAOp() const { return ownsNLA; }
+  /// True if this MutableNLA was constructed directly from the source IR's
+  /// hw::HierPathOp (vs. via cloneForContext) and is therefore responsible
+  /// for erasing the source op when applyUpdates is finished.
+  bool backsSource() const { return backsSourceOp; }
 
   /// Build a per-context clone of this MutableNLA representing the single
   /// retop entry `newTop`.  The clone shares the underlying hw::HierPathOp
-  /// (so writeBack can read its path components), but tracks its own
+  /// (so writeBack can read its path components) but tracks its own
   /// `renames` map so distinct inlining contexts do not collide.  The
-  /// owning original remains in nlaMap and is responsible for erasing the
-  /// underlying hw::HierPathOp during applyUpdates.
+  /// primary remains in nlaMap and is responsible for erasing the
+  /// source `hw.hierpath` op during eraseOriginal.
   MutableNLA cloneForContext(InnerRefAttr newTop) const {
     MutableNLA clone = *this;
-    clone.ownsNLA = false;
+    clone.backsSourceOp = false;
     clone.dead = true;
-    clone.newTops.clear();
-    clone.newTops.push_back(newTop);
+    clone.peerContextRoots.clear();
+    clone.peerContextRoots.push_back(newTop);
     clone.rootSet.clear();
     clone.rootSet.insert(newTop.getModule());
     clone.symIdx.insert({newTop.getModule(), 0});
@@ -1773,15 +1809,15 @@ LogicalResult Inliner::run() {
         // dealing with a root module.  Root modules have already been updated
         // earlier in the pass.  We only need to update NLA paths which are
         // not the root.
-        auto newTops = mnla.getAdditionalSymbols();
-        if (newTops.empty() || mnla.hasRoot(fmodule))
+        auto peerContextRoots = mnla.getAdditionalSymbols();
+        if (peerContextRoots.empty() || mnla.hasRoot(fmodule))
           return false;
 
         // Add NLAs to the non-root portion of the NLA.  This only needs to
         // add symbols for NLAs which are after the first one.  We reused the
         // old symbol name for the first NLA.
         NamedAttrList newAnnotation;
-        for (auto rootAndSym : newTops.drop_front()) {
+        for (auto rootAndSym : peerContextRoots.drop_front()) {
           for (auto pair : anno.getDict()) {
             if (pair.getName().getValue() != "circt.nonlocal") {
               newAnnotation.push_back(pair);
