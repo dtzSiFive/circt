@@ -782,13 +782,6 @@ private:
   /// through it (built from the original IR; need hasRoot check to activate).
   DenseMap<InnerRefAttr, SmallVector<StringAttr>> instTransitPaths;
 
-  /// Maps InnerRefAttr of an InstanceOp to the per-context output syms produced
-  /// by reTop when an inline module is reanchored to a new parent.  Syms are
-  /// appended in chronological order; activation uses only the last sym per
-  /// MutableNLA (earlier syms belong to prior inlining passes of the same
-  /// shared wrapper body).
-  DenseMap<InnerRefAttr, SmallVector<StringAttr>> instContextPaths;
-
   /// The debug scopes created for inlined instances. Scopes that are unused
   /// after inlining will be deleted again.
   SmallVector<debug::ScopeOp> debugScopes;
@@ -1362,6 +1355,7 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     // to both update the mutable NLA to indicate that this has a new top and
     // add an annotation on the instance saying that this now participates in
     // this new NLA.
+    InliningLevel childIL(il.mic, childModule);
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[childModule.getNameAttr()].empty()) {
       for (auto origSymAttr : rootMap[childModule.getNameAttr()]) {
@@ -1382,8 +1376,7 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
               context, il.mic.modNamespace.newName(instance.getName()));
           instance.setInnerSymAttr(hw::InnerSymAttr::get(instSym));
         }
-        instContextPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
-            newSym);
+        childIL.activeContextSyms.push_back(newSym);
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
         // any symbols appropriately for that instance.
@@ -1392,11 +1385,10 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     }
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
-    setActiveHierPaths(moduleName, instInnerSym);
+    setActiveHierPaths(moduleName, instInnerSym, childIL.activeContextSyms);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
 
-    InliningLevel childIL(il.mic, childModule);
     createDebugScope(childIL, instance, il.debugScope);
 
     // Create the wire mapping for results + ports.
@@ -1474,6 +1466,7 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     // The InstanceOp `instance` might not have a symbol, if it does not
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
     // a HierPathOp is added to this Op.
+    InliningLevel childIL(mic, target);
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[target.getNameAttr()].empty() && !toBeFlattened) {
       for (auto origSymAttr : rootMap[target.getNameAttr()]) {
@@ -1483,12 +1476,12 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
         StringAttr newSym = mnla->reTop(module);
         if (newSym != origSym)
           nlaMap[newSym] = mnla;
-        StringAttr instSym = getOrAddInnerSym(
-            instance, [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
-              return mic.modNamespace;
-            });
-        instContextPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
-            newSym);
+        // Ensure the instance has an inner sym so the new NLA can reference it.
+        getOrAddInnerSym(instance,
+                         [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
+                           return mic.modNamespace;
+                         });
+        childIL.activeContextSyms.push_back(newSym);
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
         // any symbols appropriately for that instance.
@@ -1497,7 +1490,7 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     }
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
-    setActiveHierPaths(moduleName, instInnerSym);
+    setActiveHierPaths(moduleName, instInnerSym, childIL.activeContextSyms);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
     // Create the wire mapping for results + ports. We RAUW the results instead
@@ -1506,7 +1499,6 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     mic.b.setInsertionPoint(instance);
     auto nestedPrefix = (instance.getName() + "_").str();
 
-    InliningLevel childIL(mic, target);
     createDebugScope(childIL, instance);
 
     mapPortsToWires(nestedPrefix, childIL, mapper, {});
