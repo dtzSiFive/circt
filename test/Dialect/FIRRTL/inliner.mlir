@@ -2102,3 +2102,92 @@ firrtl.circuit "SharedWrapperTwoParents" {
     firrtl.instance pnc @ParentNoConflict()
   }
 }
+
+// -----
+
+// Port NLA on an inline module inlined into two separate non-inline parents;
+// one parent has the port sym already occupied.  Exercises mapPortsToWires in
+// the multi-context path: setInnerSym must be called on the correct per-context
+// NLA entry when the port sym is renamed, and both port wires must carry the
+// local annotation after the NLA is inlined fully away.
+//
+// @B is inline; its port `p` has sym @p_sym and annotation {circt.nonlocal = @nla}.
+// @W is inline (NLA root); @W::@b_inst is the second NLA hop.
+// @Conflict already has @p_sym taken by an extmodule instance; port gets renamed.
+// @NoConflict has no conflict; port wire keeps @p_sym.
+// Both W and B are fully inlined → NLA becomes local → annotation loses nonlocal.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopPortMultiParent"
+firrtl.circuit "InlineRetopPortMultiParent" {
+  hw.hierpath private @nla [@W::@b_inst, @B::@p_sym]
+  firrtl.module private @B(
+      in %p : !firrtl.uint<1> sym @p_sym [{circt.nonlocal = @nla, class = "test"}])
+      attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  }
+  firrtl.extmodule private @Other()
+  firrtl.module private @W() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance b sym @b_inst @B(in p : !firrtl.uint<1>)
+  }
+  // @p_sym is occupied by the @Other instance; port wire must be renamed to
+  // @p_sym_0.  NLA becomes local so both wires carry {class = "test"} only.
+  // CHECK:      firrtl.module private @Conflict
+  // CHECK-DAG:    firrtl.instance other sym @p_sym @Other()
+  // CHECK-DAG:    firrtl.wire sym @p_sym_0 {annotations = [{class = "test"}]}
+  firrtl.module private @Conflict() {
+    firrtl.instance other sym @p_sym @Other()
+    firrtl.instance w @W()
+  }
+  // No conflict; port wire keeps @p_sym.
+  // CHECK:      firrtl.module private @NoConflict
+  // CHECK:        firrtl.wire sym @p_sym {annotations = [{class = "test"}]}
+  firrtl.module private @NoConflict() {
+    firrtl.instance w @W()
+  }
+  firrtl.module @InlineRetopPortMultiParent() {
+    firrtl.instance c @Conflict()
+    firrtl.instance nc @NoConflict()
+  }
+}
+
+// -----
+
+// Two-level inline wrapper (@Quux wraps @Qux, both inline) inlined into two
+// non-inline parents; one parent has a sym conflict.  This is the reduced form
+// of the original real-world crash (fail.new.2.mlir).
+//
+// LIFO worklist: @Quuuux is declared last so processed first → context 0 (@nla,
+// @sym kept).  @Quuux is processed second → context 1 (@nla_0, @sym_0).
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopWrapperConflict"
+firrtl.circuit "InlineRetopWrapperConflict" {
+  // CHECK-DAG: hw.hierpath private @nla   [@Quuuux::@sym,   @Bar]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@Quuux::@sym_0, @Bar]
+  hw.hierpath private @nla [@Qux::@sym, @Bar]
+  // CHECK: firrtl.extmodule private @Bar() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}, {circt.nonlocal = @nla_0, class = "test"}]}
+  firrtl.extmodule private @Bar() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Baz()
+  firrtl.module private @Qux() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance bar sym @sym @Bar()
+  }
+  firrtl.module private @Quux() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance qux @Qux()
+  }
+  // @sym is taken by @Baz; inlined @Bar instance must be renamed to @sym_0.
+  // CHECK:      firrtl.module private @Quuux
+  // CHECK-DAG:    firrtl.instance baz sym @sym @Baz()
+  // CHECK-DAG:    firrtl.instance quux_qux_bar sym @sym_0 @Bar()
+  firrtl.module private @Quuux() {
+    firrtl.instance baz sym @sym @Baz()
+    firrtl.instance quux @Quux()
+  }
+  // No conflict; inlined @Bar instance keeps @sym.
+  // CHECK:      firrtl.module private @Quuuux
+  // CHECK:        firrtl.instance quux_qux_bar sym @sym @Bar()
+  firrtl.module private @Quuuux() {
+    firrtl.instance quux @Quux()
+  }
+  firrtl.module @InlineRetopWrapperConflict() {
+    firrtl.instance a @Quuux()
+    firrtl.instance b @Quuuux()
+  }
+}

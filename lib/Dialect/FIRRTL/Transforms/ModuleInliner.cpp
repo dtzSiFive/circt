@@ -718,22 +718,17 @@ private:
         }
       activeHierpaths.insert(toAdd);
     }
-    // Context paths (retop'd NLAs): for each MutableNLA, activate only the
-    // last-added context sym.  Context syms are appended in chronological order
-    // as successive reTop calls accumulate on the same instance op (e.g., when
-    // a shared wrapper body is inlined multiple times).  The last sym is the
-    // current context; earlier syms belong to prior passes and must not be
-    // activated here — the parent-intersection above handles them if still live.
-    DenseMap<MutableNLA *, StringAttr> lastCtxSym;
+    // Context paths (retop'd NLAs): activate each sym, preferring an output sym
+    // already in the parent active set so the correct per-context identity is
+    // propagated.  InliningLevel::activeContextSyms is freshly built per visit
+    // (one reTop call per NLA root per instance), so contextPaths always has
+    // exactly one sym per MutableNLA — no deduplication needed.
     for (auto hPath : contextPaths) {
       auto it = nlaMap.find(hPath);
       if (it == nlaMap.end())
         continue;
-      lastCtxSym[it->second] = hPath; // later entries overwrite earlier ones
-    }
-    for (auto &[mnla, hPath] : lastCtxSym) {
       StringAttr toAdd = hPath;
-      for (auto outSym : mnla->getOutputSyms())
+      for (auto outSym : it->second->getOutputSyms())
         if (parent.contains(outSym)) {
           toAdd = outSym;
           break;
@@ -1377,9 +1372,8 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
           instance.setInnerSymAttr(hw::InnerSymAttr::get(instSym));
         }
         childIL.activeContextSyms.push_back(newSym);
-        // TODO: Update any symbol renames which need to be used by the next
-        // call of inlineInto.  This will then check each instance and rename
-        // any symbols appropriately for that instance.
+        // Map origNLAName → newSym so renameInstance can update instTransitPaths
+        // entries in the child body from the source sym to the retop'd sym.
         symbolRenames.insert({origNLAName, newSym});
       }
     }
@@ -1482,9 +1476,8 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
                            return mic.modNamespace;
                          });
         childIL.activeContextSyms.push_back(newSym);
-        // TODO: Update any symbol renames which need to be used by the next
-        // call of inlineInto.  This will then check each instance and rename
-        // any symbols appropriately for that instance.
+        // Map origNLAName → newSym so renameInstance can update instTransitPaths
+        // entries in the child body from the source sym to the retop'd sym.
         symbolRenames.insert({origNLAName, newSym});
       }
     }
