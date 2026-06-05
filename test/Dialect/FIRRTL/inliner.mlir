@@ -1667,10 +1667,18 @@ firrtl.circuit "InlineRetopMultipleDirect" {
 // inline the root module") because reTop on the first walk added an inner
 // sym to the shared instance op which the second walk picked up.
 //
+// The wrapper has no inner sym on its @X instance, so after the first walk
+// both context syms land in the same instOpHierPaths slot.  The second walk
+// must pick the correct per-context sym via parent-set disambiguation, not
+// just "activate all context syms in the slot" — otherwise both NLAs would
+// get the same inner sym and one writeback would silently be wrong.  Named
+// captures below verify the cross-reference: @nla's sym must match w1's
+// instance sym, and @nla_0's sym must match w2's instance sym.
+//
 // CHECK-LABEL: firrtl.circuit "InlineRetopMultipleViaWrapper"
 firrtl.circuit "InlineRetopMultipleViaWrapper" {
-  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopMultipleViaWrapper::@{{[_a-zA-Z0-9]+}}, @A]
-  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopMultipleViaWrapper::@{{[_a-zA-Z0-9]+}}, @A]
+  // CHECK-NEXT: hw.hierpath private @nla  [@InlineRetopMultipleViaWrapper::@[[W1SYM:[_a-zA-Z0-9]+]], @A]
+  // CHECK-NEXT: hw.hierpath private @nla_0 [@InlineRetopMultipleViaWrapper::@[[W2SYM:[_a-zA-Z0-9]+]], @A]
   hw.hierpath private @nla [@X::@sym, @A]
   firrtl.extmodule private @A() attributes {
     annotations = [{circt.nonlocal = @nla, class = "test"}]
@@ -1681,9 +1689,9 @@ firrtl.circuit "InlineRetopMultipleViaWrapper" {
   firrtl.module private @Wrapper() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     firrtl.instance x @X()
   }
-  // CHECK:     firrtl.module @InlineRetopMultipleViaWrapper
-  // CHECK-DAG:   firrtl.instance w1_x_a sym @{{[_a-zA-Z0-9]+}} @A()
-  // CHECK-DAG:   firrtl.instance w2_x_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK:      firrtl.module @InlineRetopMultipleViaWrapper
+  // CHECK-NEXT:   firrtl.instance w1_x_a sym @[[W1SYM]] @A()
+  // CHECK-NEXT:   firrtl.instance w2_x_a sym @[[W2SYM]] @A()
   firrtl.module @InlineRetopMultipleViaWrapper() {
     firrtl.instance w1 @Wrapper()
     firrtl.instance w2 @Wrapper()
@@ -1877,5 +1885,141 @@ firrtl.circuit "InlineRetopTriple" {
     firrtl.instance x1 @X()
     firrtl.instance x2 @X()
     firrtl.instance x3 @X()
+  }
+}
+
+// -----
+
+// Inlining an NLA-root module into a parent that already owns a different
+// instance with the same inner sym forces a rename.  The NLA must be
+// rewritten to reference the new (renamed) sym, not the original one.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopSymConflict"
+firrtl.circuit "InlineRetopSymConflict" {
+  // CHECK: hw.hierpath private @nla [@InlineRetopSymConflict::@[[LEAFSYM:[_a-zA-Z0-9]+]], @Leaf]
+  hw.hierpath private @nla [@Inner::@sym, @Leaf]
+  // CHECK: firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Other()
+  firrtl.module private @Inner() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance leaf sym @sym @Leaf()
+  }
+  // @sym is already taken by `conflict`; the inlined leaf instance must get a
+  // fresh inner sym, and the NLA must be updated to match.
+  // CHECK:      firrtl.module @InlineRetopSymConflict
+  // CHECK-DAG:    firrtl.instance conflict sym @sym @Other()
+  // CHECK-DAG:    firrtl.instance i_leaf sym @[[LEAFSYM]] @Leaf()
+  firrtl.module @InlineRetopSymConflict() {
+    firrtl.instance conflict sym @sym @Other()
+    firrtl.instance i @Inner()
+  }
+}
+
+// -----
+
+// Two-level inline chain where the intermediate wrapper has NO inner sym on
+// its instance of the NLA-root module (@Inner).  When the NLA is retop'd to
+// the top-level parent and that parent already has @sym taken, the inlined
+// leaf instance must be renamed and the NLA updated accordingly.
+//
+// This is the core pattern from the retop-with-sym-conflict bug: previously
+// setActiveHierPaths failed to activate the retop'd NLA when processing
+// @Outer (hasRoot(@Outer) was false after reTop), causing the wrong context to
+// be selected for setInnerSym, so the NLA kept the original un-renamed sym.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopNestedNoInnerSym"
+firrtl.circuit "InlineRetopNestedNoInnerSym" {
+  // CHECK: hw.hierpath private @nla [@InlineRetopNestedNoInnerSym::@[[LEAFSYM:[_a-zA-Z0-9]+]], @Leaf]
+  hw.hierpath private @nla [@Inner::@sym, @Leaf]
+  // CHECK: firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Other()
+  firrtl.module private @Inner() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance leaf sym @sym @Leaf()
+  }
+  // @Outer wraps @Inner but puts NO inner sym on its @Inner instance.
+  firrtl.module private @Outer() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance inner @Inner()
+  }
+  // @sym is already taken; the doubly-inlined leaf must be renamed, NLA updated.
+  // CHECK:      firrtl.module @InlineRetopNestedNoInnerSym
+  // CHECK-DAG:    firrtl.instance conflict sym @sym @Other()
+  // CHECK-DAG:    firrtl.instance outer_inner_leaf sym @[[LEAFSYM]] @Leaf()
+  firrtl.module @InlineRetopNestedNoInnerSym() {
+    firrtl.instance conflict sym @sym @Other()
+    firrtl.instance outer @Outer()
+  }
+}
+
+// -----
+
+// Two-level inline chain, intermediate wrapper has no inner sym, and two
+// distinct non-inline parents: one with a sym conflict (@Root1) and one
+// without (@Root2).  Each parent must get its own retop'd NLA pointing to
+// its own renamed (or un-renamed) leaf instance, and the extmodule annotation
+// must reference both NLAs.
+//
+// This is the reduced form of the real-world crash where a shared inline chain
+// produced incorrect NLA paths for one of the instantiation contexts.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopNestedTwoParents"
+firrtl.circuit "InlineRetopNestedTwoParents" {
+  // Two NLAs: one for each parent context.
+  // CHECK-DAG: hw.hierpath private @nla  [@Root{{[12]}}::@[[SYM1:[_a-zA-Z0-9]+]], @Leaf]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@Root{{[12]}}::@[[SYM2:[_a-zA-Z0-9]+]], @Leaf]
+  hw.hierpath private @nla [@Inner::@sym, @Leaf]
+  // Leaf annotation must be duplicated to reference both retop'd NLAs.
+  // CHECK: firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}, {circt.nonlocal = @nla_0, class = "test"}]}
+  firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Other()
+  firrtl.module private @Inner() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance leaf sym @sym @Leaf()
+  }
+  firrtl.module private @Outer() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance inner @Inner()
+  }
+  // @Root1 has a sym conflict; its leaf instance gets a fresh sym.
+  // CHECK:      firrtl.module private @Root1
+  // CHECK-DAG:    firrtl.instance conflict sym @sym @Other()
+  // CHECK-DAG:    firrtl.instance outer_inner_leaf sym @{{[_a-zA-Z0-9]+}} @Leaf()
+  firrtl.module private @Root1() {
+    firrtl.instance conflict sym @sym @Other()
+    firrtl.instance outer @Outer()
+  }
+  // @Root2 has no conflict; its leaf instance gets a (possibly fresh) sym.
+  // CHECK:      firrtl.module private @Root2
+  // CHECK-DAG:    firrtl.instance inner_leaf sym @{{[_a-zA-Z0-9]+}} @Leaf()
+  firrtl.module private @Root2() {
+    firrtl.instance inner @Inner()
+  }
+  firrtl.module @InlineRetopNestedTwoParents() {
+    firrtl.instance r1 @Root1()
+    firrtl.instance r2 @Root2()
+  }
+}
+
+// -----
+
+// Baseline: two-level inline chain, intermediate wrapper has no inner sym, no
+// sym conflict at the (single) parent.  The NLA must be retop'd to the parent
+// and the original inner sym @sym preserved unchanged.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopNestedNoConflict"
+firrtl.circuit "InlineRetopNestedNoConflict" {
+  // CHECK: hw.hierpath private @nla [@InlineRetopNestedNoConflict::@sym, @Leaf]
+  hw.hierpath private @nla [@Inner::@sym, @Leaf]
+  // CHECK: firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.module private @Inner() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance leaf sym @sym @Leaf()
+  }
+  firrtl.module private @Outer() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance inner @Inner()
+  }
+  // No conflict: leaf keeps @sym, NLA updated with @sym.
+  // CHECK:      firrtl.module @InlineRetopNestedNoConflict
+  // CHECK:        firrtl.instance outer_inner_leaf sym @sym @Leaf()
+  firrtl.module @InlineRetopNestedNoConflict() {
+    firrtl.instance outer @Outer()
   }
 }
