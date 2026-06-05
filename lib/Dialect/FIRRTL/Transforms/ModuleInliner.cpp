@@ -651,16 +651,24 @@ private:
   /// parent, and on the current instance. Also HierPaths that are rooted at
   /// this module are also added to the active set.
   void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym) {
-    auto &instPaths =
-        instOpHierPaths[InnerRefAttr::get(moduleName, instInnerSym)];
+    auto innerRef = InnerRefAttr::get(moduleName, instInnerSym);
+    auto &transitPaths = instTransitPaths[innerRef];
+    auto &contextPaths = instContextPaths[innerRef];
     if (currentPath.empty()) {
       activeHierpaths.clear();
-      activeHierpaths.insert(instPaths.begin(), instPaths.end());
+      activeHierpaths.insert(transitPaths.begin(), transitPaths.end());
+      // At the top level there is no accumulated multi-context sharing, so
+      // inserting all context syms is safe and equivalent to "last wins".
+      activeHierpaths.insert(contextPaths.begin(), contextPaths.end());
       return;
     }
-    DenseSet<StringAttr> hPaths(instPaths.begin(), instPaths.end());
+    // Build combined set for intersection pass.
+    SmallVector<StringAttr> allPaths;
+    allPaths.append(transitPaths.begin(), transitPaths.end());
+    allPaths.append(contextPaths.begin(), contextPaths.end());
+    DenseSet<StringAttr> hPaths(allPaths.begin(), allPaths.end());
     // Intersect with the parent active set, preserving per-context output syms:
-    // a retop'd sym not literally in instPaths still belongs if its MutableNLA
+    // a retop'd sym not literally in allPaths still belongs if its MutableNLA
     // is represented there under a different output sym.
     auto parent = activeHierpaths;
     activeHierpaths.clear();
@@ -684,24 +692,38 @@ private:
           break;
       }
     }
-    // Activate NLAs in instPaths that begin their live path at this module.
-    // Two cases: (1) NLAs rooted at moduleName (hasRoot == true), and (2)
-    // retop'd NLAs whose root was moved to an ancestor — in that case hPath is
-    // a per-context output sym (not the original source sym) and hasRoot is
-    // false for the intermediate module, but the instance still starts the live
-    // portion of the NLA path.  For retop'd NLAs prefer the output sym already
-    // active in the parent; fall back to hPath itself.
-    for (auto hPath : instPaths) {
+    // Transit paths: activate only if this module is the NLA root — i.e., the
+    // NLA begins its live path at this instance op.
+    for (auto hPath : transitPaths) {
       auto it = nlaMap.find(hPath);
       if (it == nlaMap.end())
         continue;
-      // Skip NLAs that merely pass through this module: hasRoot is false AND
-      // hPath is the original source sym (not a per-context retop'd sym).
-      if (!it->second->hasRoot(moduleName) &&
-          hPath == it->second->getNLA().getSymNameAttr())
+      if (!it->second->hasRoot(moduleName))
         continue;
       StringAttr toAdd = hPath;
       for (auto outSym : it->second->getOutputSyms())
+        if (parent.contains(outSym)) {
+          toAdd = outSym;
+          break;
+        }
+      activeHierpaths.insert(toAdd);
+    }
+    // Context paths (retop'd NLAs): for each MutableNLA, activate only the
+    // last-added context sym.  Context syms are appended in chronological order
+    // as successive reTop calls accumulate on the same instance op (e.g., when
+    // a shared wrapper body is inlined multiple times).  The last sym is the
+    // current context; earlier syms belong to prior passes and must not be
+    // activated here — the parent-intersection above handles them if still live.
+    DenseMap<MutableNLA *, StringAttr> lastCtxSym;
+    for (auto hPath : contextPaths) {
+      auto it = nlaMap.find(hPath);
+      if (it == nlaMap.end())
+        continue;
+      lastCtxSym[it->second] = hPath; // later entries overwrite earlier ones
+    }
+    for (auto &[mnla, hPath] : lastCtxSym) {
+      StringAttr toAdd = hPath;
+      for (auto outSym : mnla->getOutputSyms())
         if (parent.contains(outSym)) {
           toAdd = outSym;
           break;
@@ -746,10 +768,16 @@ private:
 
   DenseSet<StringAttr> activeHierpaths;
 
-  /// Record the HierPathOps that each InstanceOp participates in. This is a map
-  /// from the InnerRefAttr to the list of HierPathOp names. The InnerRefAttr
-  /// corresponds to the InstanceOp.
-  DenseMap<InnerRefAttr, SmallVector<StringAttr>> instOpHierPaths;
+  /// Maps InnerRefAttr of an InstanceOp to the source NLA syms that pass
+  /// through it (built from the original IR; need hasRoot check to activate).
+  DenseMap<InnerRefAttr, SmallVector<StringAttr>> instTransitPaths;
+
+  /// Maps InnerRefAttr of an InstanceOp to the per-context output syms produced
+  /// by reTop when an inline module is reanchored to a new parent.  Syms are
+  /// appended in chronological order; activation uses only the last sym per
+  /// MutableNLA (earlier syms belong to prior inlining passes of the same
+  /// shared wrapper body).
+  DenseMap<InnerRefAttr, SmallVector<StringAttr>> instContextPaths;
 
   /// The debug scopes created for inlined instances. Scopes that are unused
   /// after inlining will be deleted again.
@@ -858,7 +886,7 @@ bool Inliner::renameInstance(
     // For all the HierPathOps that the instance being inlined participates
     // in.
     auto oldInnerRef = InnerRefAttr::get(oldParent, oldInstSym);
-    for (auto old : instOpHierPaths[oldInnerRef]) {
+    for (auto old : instTransitPaths[oldInnerRef]) {
       // If this HierPathOp is valid at the inlining context, where the
       // instance is being inlined at. That is, if it exists in the
       // activeHierpaths.
@@ -881,7 +909,7 @@ bool Inliner::renameInstance(
   // Do the renaming, creating new symbol as needed.
   auto symbolChanged = rename(prefix, newInst, il);
 
-  // If the symbol changed, update instOpHierPaths accordingly.
+  // If the symbol changed, update instTransitPaths accordingly.
   auto newSymAttr = getInnerSymName(newInst);
   if (symbolChanged) {
     assert(newSymAttr);
@@ -889,9 +917,9 @@ bool Inliner::renameInstance(
     // InnerRefAttr.
     auto newInnerRef = InnerRefAttr::get(
         newInst->getParentOfType<FModuleOp>().getNameAttr(), newSymAttr);
-    instOpHierPaths[newInnerRef] = validHierPaths;
+    instTransitPaths[newInnerRef] = validHierPaths;
     // Update the innerSym for all the affected HierPathOps.
-    for (auto outSym : instOpHierPaths[newInnerRef]) {
+    for (auto outSym : instTransitPaths[newInnerRef]) {
       auto it = nlaMap.find(outSym);
       if (it == nlaMap.end())
         continue;
@@ -902,7 +930,7 @@ bool Inliner::renameInstance(
   if (newSymAttr) {
     auto innerRef = InnerRefAttr::get(
         newInst->getParentOfType<FModuleOp>().getNameAttr(), newSymAttr);
-    SmallVector<StringAttr> &nlaList = instOpHierPaths[innerRef];
+    SmallVector<StringAttr> &nlaList = instTransitPaths[innerRef];
     // Now rename the Updated HierPathOps that this InstanceOp participates in.
     for (const auto &en : llvm::enumerate(nlaList)) {
       auto oldNLA = en.value();
@@ -1209,7 +1237,7 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
-      for (auto targetNLA : instOpHierPaths[innerRef])
+      for (auto targetNLA : instTransitPaths[innerRef])
         nlaMap[targetNLA]->flattenModule(target);
     }
 
@@ -1300,13 +1328,13 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
-      for (auto sym : instOpHierPaths[innerRef]) {
+      for (auto sym : instTransitPaths[innerRef]) {
         auto *mnla = nlaMap[sym];
         // Skip if this NLA is rooted at childModule: the root has been
         // retop'd already (or will be by the rootMap block below) and it is
         // an error to inlineModule on the root.  This guards against state
         // left over from a previous walk of the same module body (e.g., a
-        // reTop on a prior instance added an inner sym + instOpHierPaths
+        // reTop on a prior instance added an inner sym + instTransitPaths
         // entry that we now re-encounter).
         if (mnla->getNLA().root() == childModule.getNameAttr())
           continue;
@@ -1344,7 +1372,7 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
               context, il.mic.modNamespace.newName(instance.getName()));
           instance.setInnerSymAttr(hw::InnerSymAttr::get(instSym));
         }
-        instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
+        instContextPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
             newSym);
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
@@ -1419,7 +1447,7 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
-      for (auto sym : instOpHierPaths[innerRef]) {
+      for (auto sym : instTransitPaths[innerRef]) {
         auto *mnla = nlaMap[sym];
         // Skip if this NLA is rooted at target: it has been (or will be)
         // retop'd by the rootMap block below; calling inlineModule on the
@@ -1449,7 +1477,7 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
             instance, [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
               return mic.modNamespace;
             });
-        instOpHierPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
+        instContextPaths[InnerRefAttr::get(moduleName, instSym)].push_back(
             newSym);
         // TODO: Update any symbol renames which need to be used by the next
         // call of inlineInto.  This will then check each instance and rename
@@ -1602,7 +1630,7 @@ LogicalResult Inliner::run() {
     rootMap[p->getNLA().root()].push_back(symName);
     for (auto path : nla.getNamepath())
       if (auto ref = dyn_cast<InnerRefAttr>(path))
-        instOpHierPaths[ref].push_back(symName);
+        instTransitPaths[ref].push_back(symName);
   }
   // Mark 'module-only' the NLA's that only target modules.
   // These may be deleted when their module is inlined/flattened.

@@ -2023,3 +2023,82 @@ firrtl.circuit "InlineRetopNestedNoConflict" {
     firrtl.instance outer @Outer()
   }
 }
+
+// -----
+
+// Transit path and context path share the same InnerRefAttr.
+//
+// @nla1 threads through @Top::@y_sym (transit path; NLA root is already @Top).
+// @nla2 is rooted at @Y (inline); reTop adds a context entry at @Top::@y_sym.
+// Both NLAs collapse to [@Top::@leaf_sym, @Leaf] after @Y is inlined.
+//
+// CHECK-LABEL: firrtl.circuit "TransitAndContextSameRef"
+firrtl.circuit "TransitAndContextSameRef" {
+  // CHECK-DAG: hw.hierpath private @nla1 [@TransitAndContextSameRef::@leaf_sym, @Leaf]
+  // CHECK-DAG: hw.hierpath private @nla2 [@TransitAndContextSameRef::@leaf_sym, @Leaf]
+  hw.hierpath private @nla1 [@TransitAndContextSameRef::@y_sym, @Y::@leaf_sym, @Leaf]
+  hw.hierpath private @nla2 [@Y::@leaf_sym, @Leaf]
+  // CHECK: firrtl.extmodule private @Leaf() attributes {annotations = [{circt.nonlocal = @nla1, class = "test1"}, {circt.nonlocal = @nla2, class = "test2"}]}
+  firrtl.extmodule private @Leaf() attributes {
+    annotations = [{circt.nonlocal = @nla1, class = "test1"},
+                   {circt.nonlocal = @nla2, class = "test2"}]
+  }
+  firrtl.module private @Y() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance leaf sym @leaf_sym @Leaf()
+  }
+  // CHECK:      firrtl.module @TransitAndContextSameRef
+  // CHECK:        firrtl.instance y_leaf sym @leaf_sym @Leaf()
+  firrtl.module @TransitAndContextSameRef() {
+    firrtl.instance y sym @y_sym @Y()
+  }
+}
+
+// -----
+
+// Two separate non-inline parent modules (@ParentConflict and @ParentNoConflict)
+// both route to the same inline @Qux through the same shared @Wrapper module.
+// The @Qux instance in @Wrapper's body accumulates context syms from both
+// inlining passes (one per parent module), exercising the "last context sym
+// wins" disambiguation across separate inlineInstances calls.
+//
+// @ParentConflict has sym @sym taken (by @Other); the Bar instance must be
+// renamed to @sym_0 and the NLA updated accordingly.
+// @ParentNoConflict has no conflict; Bar keeps @sym.
+//
+// Worklist is LIFO; circuit order puts @ParentConflict before @ParentNoConflict
+// so @ParentNoConflict is processed first → gets context 0 (@nla / @sym).
+// @ParentConflict is processed second → context 1 (@nla_0 / @sym_0).
+//
+// CHECK-LABEL: firrtl.circuit "SharedWrapperTwoParents"
+firrtl.circuit "SharedWrapperTwoParents" {
+  // CHECK-DAG: hw.hierpath private @nla  [@ParentNoConflict::@sym, @Bar]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@ParentConflict::@sym_0, @Bar]
+  hw.hierpath private @nla [@Qux::@sym, @Bar]
+  // CHECK: firrtl.extmodule private @Bar() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}, {circt.nonlocal = @nla_0, class = "test"}]}
+  firrtl.extmodule private @Bar() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+  firrtl.extmodule private @Other()
+  firrtl.module private @Qux() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance bar sym @sym @Bar()
+  }
+  firrtl.module private @Wrapper() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance qux @Qux()
+  }
+  // @sym is taken; bar gets renamed to @sym_0, NLA updated.
+  // CHECK:      firrtl.module private @ParentConflict
+  // CHECK-DAG:    firrtl.instance other sym @sym @Other()
+  // CHECK-DAG:    firrtl.instance wrapper_qux_bar sym @sym_0 @Bar()
+  firrtl.module private @ParentConflict() {
+    firrtl.instance other sym @sym @Other()
+    firrtl.instance wrapper @Wrapper()
+  }
+  // No conflict; bar keeps @sym.
+  // CHECK:      firrtl.module private @ParentNoConflict
+  // CHECK:        firrtl.instance wrapper_qux_bar sym @sym @Bar()
+  firrtl.module private @ParentNoConflict() {
+    firrtl.instance wrapper @Wrapper()
+  }
+  firrtl.module @SharedWrapperTwoParents() {
+    firrtl.instance pc @ParentConflict()
+    firrtl.instance pnc @ParentNoConflict()
+  }
+}
