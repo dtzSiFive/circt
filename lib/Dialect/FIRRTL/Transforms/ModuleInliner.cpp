@@ -1721,8 +1721,8 @@ LogicalResult Inliner::run() {
 
         // The annotation already carries the first output sym; emit one
         // additional copy per extra context.
-        NamedAttrList newAnnotation;
         for (auto outSym : ArrayRef(outputSyms).drop_front()) {
+          NamedAttrList newAnnotation;
           for (auto pair : anno.getDict()) {
             if (pair.getName().getValue() != "circt.nonlocal") {
               newAnnotation.push_back(pair);

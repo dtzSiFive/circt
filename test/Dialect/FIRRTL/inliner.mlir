@@ -1795,6 +1795,30 @@ firrtl.circuit "InlineRetopMultipleDeep" {
 
 // -----
 
+// Same as InlineLocalAfterRetop but the annotation is on a port of @B rather
+// than a wire, exercising the mapPortsToWires path.
+//
+// CHECK-LABEL: firrtl.circuit "InlineLocalAfterRetopPort"
+firrtl.circuit "InlineLocalAfterRetopPort" {
+  hw.hierpath private @nla [@W::@b_inst, @B::@p_sym]
+  firrtl.module private @B(in %p : !firrtl.uint<1> sym @p_sym [{circt.nonlocal = @nla, class = "test"}])
+      attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  }
+  firrtl.module private @W() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance b sym @b_inst @B(in p : !firrtl.uint<1>)
+  }
+  // Both port-wires must carry the local annotation.
+  // CHECK:     firrtl.module @InlineLocalAfterRetopPort
+  // CHECK-DAG:   firrtl.wire {{.*}} {annotations = [{class = "test"}]}
+  // CHECK-DAG:   firrtl.wire {{.*}} {annotations = [{class = "test"}]}
+  firrtl.module @InlineLocalAfterRetopPort() {
+    firrtl.instance w1 @W()
+    firrtl.instance w2 @W()
+  }
+}
+
+// -----
+
 // Test that a multiply-instantiated inline module whose body contains another
 // inline module with an NLA-annotated op produces correct local annotations on
 // every inlined copy, not just the first.
@@ -1822,5 +1846,36 @@ firrtl.circuit "InlineLocalAfterRetop" {
   firrtl.module @InlineLocalAfterRetop() {
     firrtl.instance w1 @W()
     firrtl.instance w2 @W()
+  }
+}
+
+// -----
+
+// Three-way instantiation: the annotation-copy loop emits 2 extra copies
+// (one per extra context).  Each copy must be a well-formed annotation
+// dictionary, not a concatenation of the previous copies' attrs.
+//
+// CHECK-LABEL: firrtl.circuit "InlineRetopTriple"
+firrtl.circuit "InlineRetopTriple" {
+  // CHECK-DAG: hw.hierpath private @nla [@InlineRetopTriple::@{{[_a-zA-Z0-9]+}}, @A]
+  // CHECK-DAG: hw.hierpath private @nla_0 [@InlineRetopTriple::@{{[_a-zA-Z0-9]+}}, @A]
+  // CHECK-DAG: hw.hierpath private @nla_1 [@InlineRetopTriple::@{{[_a-zA-Z0-9]+}}, @A]
+  hw.hierpath private @nla [@X::@sym, @A]
+  // Each copy of @A's annotation must have exactly one circt.nonlocal attr.
+  // CHECK: firrtl.extmodule private @A() attributes {annotations = [{circt.nonlocal = @nla, class = "test"}, {circt.nonlocal = @nla_0, class = "test"}, {circt.nonlocal = @nla_1, class = "test"}]}
+  firrtl.extmodule private @A() attributes {
+    annotations = [{circt.nonlocal = @nla, class = "test"}]
+  }
+  firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance a sym @sym @A()
+  }
+  // CHECK:     firrtl.module @InlineRetopTriple
+  // CHECK-DAG:   firrtl.instance x1_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK-DAG:   firrtl.instance x2_a sym @{{[_a-zA-Z0-9]+}} @A()
+  // CHECK-DAG:   firrtl.instance x3_a sym @{{[_a-zA-Z0-9]+}} @A()
+  firrtl.module @InlineRetopTriple() {
+    firrtl.instance x1 @X()
+    firrtl.instance x2 @X()
+    firrtl.instance x3 @X()
   }
 }
