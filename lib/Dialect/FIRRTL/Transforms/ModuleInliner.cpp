@@ -684,13 +684,15 @@ private:
           break;
       }
     }
-    // Add NLAs rooted at this instance.  For retop'd NLAs, prefer the output
-    // sym already active in the parent path; fall back to the source sym.
+    // Activate any NLAs in instPaths not already inherited from the parent.
+    // This includes NLAs rooted at moduleName and retop'd NLAs whose root was
+    // moved to an ancestor (hasRoot(moduleName) would be false for those, but
+    // the instance still begins the live portion of the path).  For retop'd
+    // NLAs, prefer the per-context output sym already active in the parent;
+    // fall back to the path sym itself.
     for (auto hPath : instPaths) {
       auto it = nlaMap.find(hPath);
       if (it == nlaMap.end())
-        continue;
-      if (!it->second->hasRoot(moduleName))
         continue;
       StringAttr toAdd = hPath;
       for (auto outSym : it->second->getOutputSyms())
