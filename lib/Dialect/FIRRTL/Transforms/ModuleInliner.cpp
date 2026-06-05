@@ -549,6 +549,12 @@ private:
     /// The explicit debug scope of the inlined instance.
     Value debugScope;
 
+    /// Per-context output syms from reTop for this instance's NLA reanchoring.
+    /// Populated during the reTop block in inlineInto/inlineInstances and
+    /// passed directly to setActiveHierPaths, replacing the instContextPaths
+    /// side-channel map.
+    SmallVector<StringAttr> activeContextSyms;
+
     ~InliningLevel() {
       replaceInnerRefUsers(newOps, relocatedInnerSyms,
                            mic.module.getNameAttr());
@@ -650,10 +656,14 @@ private:
   /// current hierarchy. This is the set of HierPaths that were active in the
   /// parent, and on the current instance. Also HierPaths that are rooted at
   /// this module are also added to the active set.
-  void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym) {
+  /// `contextSyms` carries the per-context output syms produced by reTop for
+  /// this instance (from InliningLevel::activeContextSyms); callers without a
+  /// reTop context pass the default empty span.
+  void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym,
+                          ArrayRef<StringAttr> contextSyms = {}) {
     auto innerRef = InnerRefAttr::get(moduleName, instInnerSym);
     auto &transitPaths = instTransitPaths[innerRef];
-    auto &contextPaths = instContextPaths[innerRef];
+    auto contextPaths = contextSyms;
     if (currentPath.empty()) {
       activeHierpaths.clear();
       activeHierpaths.insert(transitPaths.begin(), transitPaths.end());
