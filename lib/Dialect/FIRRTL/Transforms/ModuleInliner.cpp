@@ -654,6 +654,7 @@ private:
     auto &instPaths =
         instOpHierPaths[InnerRefAttr::get(moduleName, instInnerSym)];
     if (currentPath.empty()) {
+      activeHierpaths.clear();
       activeHierpaths.insert(instPaths.begin(), instPaths.end());
       return;
     }
