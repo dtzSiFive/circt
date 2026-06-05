@@ -385,14 +385,24 @@ public:
     return newSym;
   }
 
-  /// Output syms for all instantiation contexts, in creation order.
-  SmallVector<StringAttr> getOutputSyms() const {
-    SmallVector<StringAttr> syms;
-    syms.reserve(contexts.size());
+  /// Returns true if `sym` is the output sym of any context.
+  bool hasOutputSym(StringAttr sym) const {
     for (auto &ctx : contexts)
-      syms.push_back(ctx.outputSym);
-    return syms;
+      if (ctx.outputSym == sym)
+        return true;
+    return false;
   }
+
+  /// Returns the first output sym found in `set`, or null if none match.
+  StringAttr findOutputSymIn(const DenseSet<StringAttr> &set) const {
+    for (auto &ctx : contexts)
+      if (set.count(ctx.outputSym))
+        return ctx.outputSym;
+    return {};
+  }
+
+  /// Returns a read-only view of the per-context entries.
+  ArrayRef<NLAContext> getContexts() const { return contexts; }
 
   /// Record a renamed inner-symbol for `module` on the context identified by
   /// `outputSym`.
@@ -693,13 +703,10 @@ private:
         auto it = nlaMap.find(h);
         if (it == nlaMap.end())
           continue;
-        for (auto outSym : it->second->getOutputSyms())
-          if (outSym == sym) {
-            activeHierpaths.insert(sym);
-            break;
-          }
-        if (activeHierpaths.contains(sym))
+        if (it->second->hasOutputSym(sym)) {
+          activeHierpaths.insert(sym);
           break;
+        }
       }
     }
     // Transit paths: activate only if this module is the NLA root — i.e., the
@@ -711,11 +718,8 @@ private:
       if (!it->second->hasRoot(moduleName))
         continue;
       StringAttr toAdd = hPath;
-      for (auto outSym : it->second->getOutputSyms())
-        if (parent.contains(outSym)) {
-          toAdd = outSym;
-          break;
-        }
+      if (auto found = it->second->findOutputSymIn(parent))
+        toAdd = found;
       activeHierpaths.insert(toAdd);
     }
     // Context paths (retop'd NLAs): activate each sym, preferring an output sym
@@ -728,11 +732,8 @@ private:
       if (it == nlaMap.end())
         continue;
       StringAttr toAdd = hPath;
-      for (auto outSym : it->second->getOutputSyms())
-        if (parent.contains(outSym)) {
-          toAdd = outSym;
-          break;
-        }
+      if (auto found = it->second->findOutputSymIn(parent))
+        toAdd = found;
       activeHierpaths.insert(toAdd);
     }
   }
@@ -794,10 +795,7 @@ StringAttr Inliner::findActiveOutputSym(StringAttr annotationSym) {
   auto it = nlaMap.find(annotationSym);
   if (it == nlaMap.end())
     return {};
-  for (auto outSym : it->second->getOutputSyms())
-    if (activeHierpaths.count(outSym))
-      return outSym;
-  return {};
+  return it->second->findOutputSymIn(activeHierpaths);
 }
 
 /// If this operation or any child operation has a name, add the prefix to that
@@ -890,15 +888,11 @@ bool Inliner::renameInstance(
       // activeHierpaths.
       if (activeHierpaths.find(old) != activeHierpaths.end())
         validHierPaths.push_back(old);
-      else
+      else if (auto outSym = nlaMap[old]->findOutputSymIn(activeHierpaths))
         // The HierPathOp could have been renamed, check for the other retop
         // output syms.  Push the retop'd output sym so subsequent
         // setInnerSym lands on the right per-context state.
-        for (auto outSym : nlaMap[old]->getOutputSyms())
-          if (activeHierpaths.find(outSym) != activeHierpaths.end()) {
-            validHierPaths.push_back(outSym);
-            break;
-          }
+        validHierPaths.push_back(outSym);
     }
   }
 
@@ -1747,13 +1741,13 @@ LogicalResult Inliner::run() {
 
         // Each instantiation context needs its own annotation copy.
         // Root modules are handled during instance renaming; skip them here.
-        auto outputSyms = mnla->getOutputSyms();
-        if (outputSyms.size() <= 1 || mnla->hasRoot(fmodule))
+        auto ctxs = mnla->getContexts();
+        if (ctxs.size() <= 1 || mnla->hasRoot(fmodule))
           return false;
 
         // The annotation already carries the first output sym; emit one
         // additional copy per extra context.
-        for (auto outSym : ArrayRef(outputSyms).drop_front()) {
+        for (auto &ctx : ctxs.drop_front()) {
           NamedAttrList newAnnotation;
           for (auto pair : anno.getDict()) {
             if (pair.getName().getValue() != "circt.nonlocal") {
@@ -1761,7 +1755,7 @@ LogicalResult Inliner::run() {
               continue;
             }
             newAnnotation.push_back(
-                {pair.getName(), FlatSymbolRefAttr::get(outSym)});
+                {pair.getName(), FlatSymbolRefAttr::get(ctx.outputSym)});
           }
           newAnnotations.push_back(DictionaryAttr::get(context, newAnnotation));
         }
