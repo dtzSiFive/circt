@@ -109,16 +109,6 @@ private:
       std::variant<Value, FModuleOp, FInstanceLike, hw::HierPathOp>;
 
   void markAlive(ElementType element) {
-    llvm::errs() << "markAlive: ";
-
-    if (auto *value = std::get_if<Value>(&element))
-      llvm::errs() << "value: " << value->getAsOpaquePointer() << "\n";
-    else if (auto *instance = std::get_if<FInstanceLike>(&element))
-      llvm::errs() << "instance : " << instance->getAsOpaquePointer() << "\n";
-    else if (auto *hierpath = std::get_if<hw::HierPathOp>(&element))
-      llvm::errs() << "hierpath: " << hierpath->getAsOpaquePointer() << "\n";
-    else if (auto *module = std::get_if<FModuleOp>(&element))
-      llvm::errs() << "module: " << module->getAsOpaquePointer() << "\n";
     if (!liveElements.insert(element).second)
       return;
     worklist.push_back(element);
@@ -525,9 +515,6 @@ void IMDeadCodeElimPass::runOnOperation() {
 void IMDeadCodeElimPass::visitValue(Value value) {
   assert(isKnownAlive(value) && "only alive values reach here");
 
-  llvm::errs() << "visitValue(value = " << value.getAsOpaquePointer() << ")\n";
-  //value.dump();
-
   // Propagate liveness through users.
   for (Operation *user : value.getUsers())
     visitUser(user);
@@ -691,7 +678,6 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         // If a module port is dead but its instance result is alive, the port
         // is used as a temporary wire so make sure that a replaced wire is
         // putted into `liveSet`.
-        llvm::errs() << "Removing: " << result.getAsOpaquePointer() << ", adding: " << wire.getAsOpaquePointer() << "\n";
         liveElements.erase(result);
         liveElements.insert(wire);
       };
@@ -753,7 +739,6 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       auto wire = WireOp::create(builder, argument.getType()).getResult();
 
       // Since `liveSet` contains the port, we have to erase it from the set.
-      llvm::errs() << "Removing: " << argument.getAsOpaquePointer() << ", adding: " << wire.getAsOpaquePointer() << "\n";
       liveElements.erase(argument);
       liveElements.insert(wire);
       argument.replaceAllUsesWith(wire);
@@ -767,10 +752,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         mlir::UnrealizedConversionCastOp::create(
             builder, ArrayRef<Type>{argument.getType()}, ArrayRef<Value>{})
             ->getResult(0);
-    wire.dump();
 
     argument.replaceAllUsesWith(wire);
-    llvm::errs() << "wire: " << wire.getAsOpaquePointer() << "\n";
     assert(isAssumedDead(wire) && "dummy wire must be dead");
     deadPortIndexes.set(index);
   }
@@ -788,10 +771,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   module.erasePorts(deadPortIndexes);
 
   // Add arguments of the new module to liveSet.
-  for (auto arg : module.getArguments()) {
-    llvm::errs() << "Adding argument: " << arg << " = " << arg.getAsOpaquePointer() << "\n";
+  for (auto arg : module.getArguments())
     liveElements.insert(arg);
-  }
 
   // Rewrite all uses.
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
@@ -817,14 +798,11 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         instance.cloneWithErasedPortsAndReplaceUses(deadPortIndexes);
 
     // Mark new results as alive.
-    for (auto newResult : newInstance->getResults()) {
-      llvm::errs() << "Adding result = " << newResult.getAsOpaquePointer() << "\n";
+    for (auto newResult : newInstance->getResults())
       liveElements.insert(newResult);
-    }
 
     instanceGraph->replaceInstance(instance, newInstance);
     if (liveElements.contains(instance)) {
-      llvm::errs() << "Removing: " << instance.getAsOpaquePointer() << ", adding: " << newInstance.getAsOpaquePointer() << "\n";
       liveElements.erase(instance);
       liveElements.insert(newInstance);
     }
