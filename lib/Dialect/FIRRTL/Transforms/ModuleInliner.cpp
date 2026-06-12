@@ -93,6 +93,18 @@ struct NLAContext {
 ///   1. Constructed from a source `hw.hierpath` op in `Inliner::run()`.
 ///   2. `inlineModule`/`flattenModule`/`reTop`/`setInnerSym` accumulate
 ///      mutations during inlining.
+///
+/// Global state mutation principles:
+///   * `flattenModule`/`inlineModule` should only be called when the NLA
+///     transits through the instance being transformed AND the NLA is rooted
+///     ABOVE the transformation. If the NLA is rooted at or below the target
+///     module, use `localSymbols` instead (context-specific localization).
+///   * `inlinedSymbols` tracks which segments have been removed from the path
+///     structure for hierpath rewriting. When used correctly, `isLocal()`
+///     reliably indicates when an NLA has been fully inlined/flattened.
+///   * Annotations on modules that were in the original path but have been
+///     flattened/inlined out (bit cleared) are "orphaned" and should be
+///     removed rather than incorrectly localized.
 ///   3. `applyUpdates` emits one new `hw.hierpath` per context and erases
 ///      the source op, or leaves it unchanged if nothing changed.
 class MutableNLA {
@@ -1241,8 +1253,14 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
       // Preorder update of any non-local annotations this instance participates
       // in.  This needs to happen _before_ visiting modules so that internal
       // non-local annotations can be deleted if they are now local.
-      for (auto targetNLA : instTransitPaths[innerRef])
-        nlaMap[targetNLA]->flattenModule(target);
+      for (auto targetNLA : instTransitPaths[innerRef]) {
+        auto *mnla = nlaMap[targetNLA];
+        // Only call flattenModule if the NLA is rooted above (not in the
+        // subtree being flattened). If rooted at/below target, it's handled
+        // via localSymbols.
+        if (!rootMap[target.getNameAttr()].contains(targetNLA))
+          mnla->flattenModule(target);
+      }
     }
 
     // Add any NLAs which start at this instance to the localSymbols set.
