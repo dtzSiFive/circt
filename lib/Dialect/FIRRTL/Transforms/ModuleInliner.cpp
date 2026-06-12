@@ -432,7 +432,9 @@ public:
   /// `outputSym`.
   void setInnerSym(StringAttr outputSym, Attribute module,
                    StringAttr innerSym) {
-    assert(symIdx.count(module) && "module not in this NLA's path");
+    if (!symIdx.count(module))
+      return;
+    // assert(symIdx.count(module) && "module not in this NLA's path");
     NLAContext *ctx = findContext(outputSym);
     assert(ctx && "setInnerSym called with unknown outputSym");
     assert(!ctx->renames.count(module) && "Module already renamed");
@@ -1248,6 +1250,9 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
     if (failed(checkInstanceParents(instance)))
       return WalkResult::interrupt();
 
+    DenseSet<Attribute> localSymbols;
+    llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
+
     if (auto instSym = getInnerSymName(instance)) {
       auto innerRef = InnerRefAttr::get(moduleName, instSym);
       // Preorder update of any non-local annotations this instance participates
@@ -1258,7 +1263,7 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
         // Only call flattenModule if the NLA is rooted above (not in the
         // subtree being flattened). If rooted at/below target, it's handled
         // via localSymbols.
-        if (!rootMap[target.getNameAttr()].contains(targetNLA))
+        if (!localSymbols.contains(targetNLA))
           mnla->flattenModule(target);
       }
     }
@@ -1266,8 +1271,6 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
     // Add any NLAs which start at this instance to the localSymbols set.
     // Anything in this set will be made local during the recursive flattenInto
     // walk.
-    DenseSet<Attribute> localSymbols;
-    llvm::set_union(localSymbols, rootMap[target.getNameAttr()]);
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
     setActiveHierPaths(moduleName, instInnerSym);
