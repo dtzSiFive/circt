@@ -347,6 +347,18 @@ public:
     return (nla.root() == modName) || rootSet.contains(modName);
   }
 
+  /// Check if a module was in the original NLA path and whether its bit has
+  /// been cleared (module inlined/flattened out of the path).
+  /// Returns true if the module is in the path and its bit is cleared.
+  bool isModuleInlinedInPath(Attribute modName) {
+    auto it = symIdx.find(modName);
+    if (it == symIdx.end())
+      return false; // Module not in original path
+    auto idx = it->second;
+    return !inlinedSymbols.test(idx);
+  }
+
+
   /// Mark a module as inlined.  This will remove it from the NLA.
   void inlineModule(FModuleOp module) {
     auto sym = module.getNameAttr();
@@ -1753,18 +1765,45 @@ LogicalResult Inliner::run() {
         if (mnla->isDead())
           return true;
 
-        // NLA became local after inlining; strip the nonlocal marker.
-        if (mnla->isLocal()) {
-          anno.removeMember("circt.nonlocal");
-          newAnnotations.push_back(anno.getAttr());
-          return true;
-        }
+       auto ctxs = mnla->getContexts();
+			 auto modName = fmodule.getModuleNameAttr();
 
-        // Each instantiation context needs its own annotation copy.
+        // If this is a non-root module that was inlined/flattened out of the
+        // path, the annotation is orphaned - the hierpath no longer includes
+        // this module. Drop the annotation entirely rather than making it
+        // incorrectly local.
+        if (!mnla->hasRoot(fmodule) && mnla->isModuleInlinedInPath(modName))
+          return true;
+
+       // Single-context NLA: handle localization and skip duplication.
+       if (ctxs.size() <= 1) {
+         // NLA became local after inlining/flattening; strip the nonlocal marker.
+         if (mnla->isLocal() && mnla->hasRoot(fmodule)) {
+           anno.removeMember("circt.nonlocal");
+           newAnnotations.push_back(anno.getAttr());
+           return true;
+         }
+         // Not local; keep as-is.
+         return false;
+         }
+
+        // Multi-context NLA beyond here.
         // Root modules are handled during instance renaming; skip them here.
-        auto ctxs = mnla->getContexts();
-        if (ctxs.size() <= 1 || mnla->hasRoot(fmodule))
-          return false;
+        if (mnla->hasRoot(fmodule))
+           return true;
+
+        // NLA became local after inlining; strip the nonlocal marker.
+//        if (mnla->isLocal() && mnla->hasRoot(fmodule)) {
+//          anno.removeMember("circt.nonlocal");
+//          newAnnotations.push_back(anno.getAttr());
+//          return true;
+//        }
+//
+//        // Each instantiation context needs its own annotation copy.
+//        // Root modules are handled during instance renaming; skip them here.
+//        auto ctxs = mnla->getContexts();
+//        if (ctxs.size() <= 1 || mnla->hasRoot(fmodule))
+//          return false;
 
         // The annotation already carries the first output sym; emit one
         // additional copy per extra context.
