@@ -1755,8 +1755,10 @@ LogicalResult Inliner::run() {
 
         // NLA became local after inlining; strip the nonlocal marker.
         if (mnla->isLocal()) {
+          if ( mnla->hasRoot(fmodule)) {
           anno.removeMember("circt.nonlocal");
           newAnnotations.push_back(anno.getAttr());
+          }
           return true;
         }
 
