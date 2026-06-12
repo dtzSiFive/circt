@@ -1581,11 +1581,12 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
 //
 // CHECK-LABEL: firrtl.circuit "FlattenAtRoot"
 firrtl.circuit "FlattenAtRoot" {
+  // Dead hierpath.
   // CHECK: hw.hierpath private @nla [@Foo::@b]
   hw.hierpath private @nla [@Foo::@bar, @Bar::@b]
   // CHECK: firrtl.module @Bar
   firrtl.module @Bar() {
-    // CHECK: %b = firrtl.wire sym @b {annotations = [{class = "nla"}]}
+    // CHECK: %b = firrtl.wire sym @b
     %b = firrtl.wire sym @b {annotations = [{circt.nonlocal = @nla, class = "nla"}]} : !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Foo
