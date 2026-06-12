@@ -422,7 +422,7 @@ public:
                    StringAttr innerSym) {
     if (!symIdx.count(module))
       return;
-    // assert(symIdx.count(module) && "module not in this NLA's path");
+    assert(symIdx.count(module) && "module not in this NLA's path");
     NLAContext *ctx = findContext(outputSym);
     assert(ctx && "setInnerSym called with unknown outputSym");
     assert(!ctx->renames.count(module) && "Module already renamed");
