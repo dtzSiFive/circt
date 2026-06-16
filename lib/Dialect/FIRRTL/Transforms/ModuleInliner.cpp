@@ -689,7 +689,7 @@ private:
     auto &transitPaths = instTransitPaths[innerRef];
     auto contextPaths = contextSyms;
     if (currentPath.empty()) {
-      activeHierpaths.clear();
+      assert(activeHierpaths.empty() && "didn't reset activeHierpaths");
       activeHierpaths.insert(transitPaths.begin(), transitPaths.end());
       // At the top level there is no accumulated multi-context sharing, so
       // inserting all context syms is safe and equivalent to "last wins".
