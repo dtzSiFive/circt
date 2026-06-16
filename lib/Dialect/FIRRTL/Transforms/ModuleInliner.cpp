@@ -251,7 +251,7 @@ public:
     llvm::interleaveComma(inlinedSymbols.getData(), llvm::errs(), [](auto a) {
       llvm::errs() << llvm::formatv("{0:x-}", a);
     });
-    llvm::errs() << "]\n"
+    llvm::errs() << "] : " << inlinedSymbols.size() << "\n"
                  << "    contexts:\n";
     for (auto &ctx : contexts) {
       llvm::errs() << "      - outputSym: " << ctx.outputSym << "\n"
@@ -259,7 +259,7 @@ public:
                    << "        renames:\n";
       for (auto &rn : ctx.renames)
         llvm::errs() << "          - " << rn.first << " -> " << rn.second
-                     << "\n";
+                     << (inlinedSymbols.test(symIdx[rn.first]) ? "" : "(inlined away)") << "\n";
     }
   }
 
@@ -427,6 +427,12 @@ public:
     assert(ctx && "setInnerSym called with unknown outputSym");
     assert(!ctx->renames.count(module) && "Module already renamed");
     ctx->renames.insert({module, innerSym});
+    if (ctx->renames.size() > 1) {
+      llvm::errs() << "Context has multiple renames! (" << ctx->renames.size() << "), in "
+      << nla->getParentOfType<CircuitOp>().getNameAttr() << "\n";
+      for (auto [k,v] : ctx->renames)
+        llvm::errs() << "\t" << k << " -> " << v << "\n";
+    }
   }
 
   /// Find a context by output sym.  Returns null if not present.
@@ -857,6 +863,7 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
       auto activeSym = findActiveOutputSym(sym.getAttr());
       if (!activeSym)
         continue;
+      llvm::errs() << "renaming " << *op << ", setting inner sym on " << sym.getAttr() << " (active: " << activeSym << "): " << oldSymAttr << " -> " << newSymStrAttr  << "\n";
       mnla->setInnerSym(activeSym, il.mic.module.getModuleNameAttr(),
                         newSymStrAttr);
     }
@@ -929,6 +936,7 @@ bool Inliner::renameInstance(
       auto it = nlaMap.find(outSym);
       if (it == nlaMap.end())
         continue;
+      llvm::errs() << "renameInstance....\n";
       it->second->setInnerSym(outSym, newInnerRef.getModule(), newSymAttr);
     }
   }
@@ -983,9 +991,11 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
         auto activeSym = findActiveOutputSym(sym.getAttr());
         if (!activeSym)
           continue;
-        if (oldRootSymName != newRootSymName)
+        if (oldRootSymName != newRootSymName) {
+          llvm::errs() << "mapPortsToWires: " << oldRootSymName << " -> " << newRootSymName << "\n";
           mnla->setInnerSym(activeSym,
                             il.mic.module.getModuleNameAttr(), newRootSymName);
+        }
         if (mnla->isLocal() || localSymbols.count(activeSym))
           anno.removeMember("circt.nonlocal");
         else if (activeSym != sym.getAttr())
