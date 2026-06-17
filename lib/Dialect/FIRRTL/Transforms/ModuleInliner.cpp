@@ -583,12 +583,6 @@ private:
     /// Parent inlining level (nullptr if top-level).
     InliningLevel *parent;
 
-    /// Per-context output syms from reTop for this instance's NLA reanchoring.
-    /// Populated during the reTop block in inlineInto/inlineInstances and
-    /// passed directly to setActiveHierPaths, replacing the instContextPaths
-    /// side-channel map.
-    SmallVector<StringAttr> activeContextSyms;
-
     /// Maps source NLA symbol to active output symbol for this inlining context.
     /// Built from parent level plus instance-specific NLAs and reTop operations.
     DenseMap<StringAttr, StringAttr> activeNLAs;
@@ -693,14 +687,13 @@ private:
   /// Populate the activeNLAs map in the InliningLevel based on the instance being
   /// inlined. Builds the source-sym to output-sym mapping from:
   /// 1. Transit paths (NLAs that pass through this instance)
-  /// 2. Context syms (from reTop operations)
-  /// 3. Parent level's activeNLAs (inherited and intersected)
+  /// 2. Parent level's activeNLAs (inherited and intersected)
+  /// Note: Context syms from reTop should be added directly to il.activeNLAs
+  /// before calling this function.
   void setActiveHierPaths(InliningLevel &il, StringAttr moduleName,
-                          StringAttr instInnerSym,
-                          ArrayRef<StringAttr> contextSyms = {}) {
+                          StringAttr instInnerSym) {
     auto innerRef = InnerRefAttr::get(moduleName, instInnerSym);
     auto &transitPaths = instTransitPaths[innerRef];
-    auto contextPaths = contextSyms;
 
     // Top level (no parent): populate from scratch
     if (!il.parent) {
@@ -708,21 +701,11 @@ private:
       for (auto sourceSym : transitPaths) {
         il.activeNLAs[sourceSym] = sourceSym;
       }
-
-      // Add context paths - these are retop'd, need to find source sym
-      for (auto outputSym : contextPaths) {
-        // Find the MutableNLA to get its source symbol
-        auto it = nlaMap.find(outputSym);
-        if (it != nlaMap.end()) {
-          auto sourceSym = it->second->getNLA().getSymNameAttr();
-          il.activeNLAs[sourceSym] = outputSym;
-        }
-      }
+      // Context syms should already be in il.activeNLAs from reTop
       return;
     }
     // Nested case: inherit from parent and intersect with this instance's paths
     DenseSet<StringAttr> transitPathsSet(transitPaths.begin(), transitPaths.end());
-    DenseSet<StringAttr> contextPathsSet(contextPaths.begin(), contextPaths.end());
 
     // Inherit from parent: keep only NLAs that transit through this instance
     for (auto [sourceSym, outputSym] : il.parent->activeNLAs) {
@@ -761,22 +744,7 @@ private:
 
       il.activeNLAs[sourceSym] = outputSym;
     }
-
-    // Context paths (retop'd NLAs)
-    for (auto outputSym : contextPaths) {
-      auto it = nlaMap.find(outputSym);
-      if (it == nlaMap.end())
-        continue;
-
-      auto sourceSym = it->second->getNLA().getSymNameAttr();
-
-      // Prefer output sym from parent if available
-      StringAttr toAdd = outputSym;
-      if (il.parent->activeNLAs.count(sourceSym))
-        toAdd = il.parent->activeNLAs[sourceSym];
-
-      il.activeNLAs[sourceSym] = toAdd;
-    }
+    // Context syms should already be in il.activeNLAs from reTop
   }
 
   CircuitOp circuit;
@@ -1401,14 +1369,15 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
               context, il.mic.modNamespace.newName(instance.getName()));
           instance.setInnerSymAttr(hw::InnerSymAttr::get(instSym));
         }
-        childIL.activeContextSyms.push_back(newSym);
+        // Add retop'd NLA directly to childIL.activeNLAs
+        childIL.activeNLAs[origSym] = newSym;
         // Map origNLAName → newSym so renameInstance can update instTransitPaths
         // entries in the child body from the source sym to the retop'd sym.
         symbolRenames.insert({origNLAName, newSym});
       }
     }
     auto instInnerSym = getInnerSymName(instance);
-    setActiveHierPaths(childIL, moduleName, instInnerSym, childIL.activeContextSyms);
+    setActiveHierPaths(childIL, moduleName, instInnerSym);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
 
@@ -1503,14 +1472,15 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
                          [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
                            return mic.modNamespace;
                          });
-        childIL.activeContextSyms.push_back(newSym);
+        // Add retop'd NLA directly to childIL.activeNLAs
+        childIL.activeNLAs[origSym] = newSym;
         // Map origNLAName → newSym so renameInstance can update instTransitPaths
         // entries in the child body from the source sym to the retop'd sym.
         symbolRenames.insert({origNLAName, newSym});
       }
     }
     auto instInnerSym = getInnerSymName(instance);
-    setActiveHierPaths(childIL, moduleName, instInnerSym, childIL.activeContextSyms);
+    setActiveHierPaths(childIL, moduleName, instInnerSym);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
     // Create the wire mapping for results + ports. We RAUW the results instead
