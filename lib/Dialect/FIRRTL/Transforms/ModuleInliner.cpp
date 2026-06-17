@@ -1384,6 +1384,8 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     // to both update the mutable NLA to indicate that this has a new top and
     // add an annotation on the instance saying that this now participates in
     // this new NLA.
+    llvm::errs() << "About to create childIL: childModule.getNameAttr()="
+      << childModule.getNameAttr() << "\n";
     InliningLevel childIL(il.mic, childModule, &il);
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[childModule.getNameAttr()].empty()) {
