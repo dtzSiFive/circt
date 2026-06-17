@@ -709,11 +709,24 @@ private:
     auto innerRef = InnerRefAttr::get(moduleName, instInnerSym);
     auto &transitPaths = instTransitPaths[innerRef];
 
+    llvm::errs() << "setActiveHierPaths: moduleName=" << moduleName
+                 << ", instInnerSym=" << instInnerSym
+                 << ", childModule=" << il.childModule.getNameAttr()
+                 << ", transitPaths.size=" << transitPaths.size()
+                 << ", il.activeNLAs.size=" << il.activeNLAs.size()
+                 << ", parent=" << (il.parent ? "non-null" : "null") << "\n";
+    for (auto sym : transitPaths)
+      llvm::errs() << "  transitPath: " << sym << "\n";
+    for (auto [k, v] : il.activeNLAs)
+      llvm::errs() << "  activeNLAs[" << k << "] = " << v << "\n";
+
     // Top level (no parent): populate from scratch
     if (!il.parent) {
       // Add transit paths as source → source (not yet retop'd)
+      llvm::errs() << "Add transit paths to " << moduleName << "'s activeNLA's (no parent).... transitPaths size: " << transitPaths.size() << "; il.activeNLAs.size: " << il.activeNLAs.size() << "\n";
       for (auto sourceSym : transitPaths) {
         // Invariant: transit paths and reTop'd NLAs should be disjoint
+        llvm::errs() << "\tAdding x -> x, x=" << sourceSym << "\n";
         assert(!il.activeNLAs.count(sourceSym) &&
                "Transit path NLA conflicts with reTop'd NLA - should be disjoint");
         il.activeNLAs[sourceSym] = sourceSym;
@@ -1485,7 +1498,10 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     InliningLevel childIL(mic, target);
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[target.getNameAttr()].empty() && !toBeFlattened) {
+      llvm::errs() << "reTop block for target=" << target.getNameAttr()
+                   << ", rootMap size=" << rootMap[target.getNameAttr()].size() << "\n";
       for (auto origSymAttr : rootMap[target.getNameAttr()]) {
+        llvm::errs() << "  rootMap entry: " << origSymAttr << "\n";
         auto origSym = cast<StringAttr>(origSymAttr);
         auto *mnla = nlaMap[origSym];
         auto origNLAName = mnla->getNLA().getNameAttr();
@@ -1507,6 +1523,10 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
       }
     }
     auto instInnerSym = getInnerSymName(instance);
+    llvm::errs() << "Before setActiveHierPaths for target=" << target.getNameAttr()
+                 << ", childIL.activeNLAs.size=" << childIL.activeNLAs.size() << "\n";
+    for (auto [k, v] : childIL.activeNLAs)
+      llvm::errs() << "  childIL.activeNLAs[" << k << "] = " << v << "\n";
     setActiveHierPaths(childIL, moduleName, instInnerSym);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
