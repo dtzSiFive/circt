@@ -563,8 +563,9 @@ private:
   /// All inner symbols renamed are recorded in relocatedInnerSyms,
   /// and new operations in newOps.  On destruction newOps are fixed up.
   struct InliningLevel {
-    InliningLevel(ModuleInliningContext &mic, FModuleOp childModule)
-        : mic(mic), childModule(childModule) {}
+    InliningLevel(ModuleInliningContext &mic, FModuleOp childModule,
+                  InliningLevel *parent = nullptr)
+        : mic(mic), childModule(childModule), parent(parent) {}
 
     /// Top-level inlining context.
     ModuleInliningContext &mic;
@@ -578,6 +579,9 @@ private:
     FModuleOp childModule;
     /// The explicit debug scope of the inlined instance.
     Value debugScope;
+
+    /// Parent inlining level (nullptr if top-level).
+    InliningLevel *parent;
 
     /// Per-context output syms from reTop for this instance's NLA reanchoring.
     /// Populated during the reTop block in inlineInto/inlineInstances and
@@ -691,7 +695,6 @@ private:
   /// 1. Transit paths (NLAs that pass through this instance)
   /// 2. Context syms (from reTop operations)
   /// 3. Parent level's activeNLAs (inherited and intersected)
-  /// Also populates legacy activeHierpaths set for compatibility during transition.
   void setActiveHierPaths(InliningLevel &il, StringAttr moduleName,
                           StringAttr instInnerSym,
                           ArrayRef<StringAttr> contextSyms = {}) {
@@ -699,14 +702,11 @@ private:
     auto &transitPaths = instTransitPaths[innerRef];
     auto contextPaths = contextSyms;
 
-    // Top level: populate from scratch
-    if (currentPath.empty()) {
-      assert(activeHierpaths.empty() && "didn't reset activeHierpaths");
-
+    // Top level (no parent): populate from scratch
+    if (!il.parent) {
       // Add transit paths as source → source (not yet retop'd)
       for (auto sourceSym : transitPaths) {
         il.activeNLAs[sourceSym] = sourceSym;
-        activeHierpaths.insert(sourceSym);
       }
 
       // Add context paths - these are retop'd, need to find source sym
@@ -717,73 +717,65 @@ private:
           auto sourceSym = it->second->getNLA().getSymNameAttr();
           il.activeNLAs[sourceSym] = outputSym;
         }
-        activeHierpaths.insert(outputSym);
       }
       return;
     }
-    // Build combined set for intersection pass.
-    SmallVector<StringAttr> allPaths;
-    allPaths.append(transitPaths.begin(), transitPaths.end());
-    allPaths.append(contextPaths.begin(), contextPaths.end());
-    DenseSet<StringAttr> hPaths(allPaths.begin(), allPaths.end());
-    // Intersect with the parent active set, preserving per-context output syms:
-    // a retop'd sym not literally in allPaths still belongs if its MutableNLA
-    // is represented there under a different output sym.
-    auto parent = activeHierpaths;
-    activeHierpaths.clear();
-    for (auto sym : parent) {
-      if (hPaths.contains(sym)) {
-        activeHierpaths.insert(sym);
+    // Nested case: inherit from parent and intersect with this instance's paths
+    DenseSet<StringAttr> transitPathsSet(transitPaths.begin(), transitPaths.end());
+    DenseSet<StringAttr> contextPathsSet(contextPaths.begin(), contextPaths.end());
+
+    // Inherit from parent: keep only NLAs that transit through this instance
+    for (auto [sourceSym, outputSym] : il.parent->activeNLAs) {
+      // Check if this NLA transits through this instance (source sym in transitPaths)
+      if (transitPathsSet.contains(sourceSym)) {
+        il.activeNLAs[sourceSym] = outputSym;
         continue;
       }
-      // sym is a per-context output sym; check whether any hPath shares its
-      // MutableNLA.
-      for (auto h : hPaths) {
-        auto it = nlaMap.find(h);
-        if (it == nlaMap.end())
-          continue;
-        if (it->second->hasOutputSym(sym)) {
-          activeHierpaths.insert(sym);
-          break;
+
+      // Or check if the output sym shares a MutableNLA with something in transitPaths
+      auto it = nlaMap.find(outputSym);
+      if (it != nlaMap.end()) {
+        for (auto transitSym : transitPaths) {
+          auto transitIt = nlaMap.find(transitSym);
+          if (transitIt != nlaMap.end() &&
+              transitIt->second->hasOutputSym(outputSym)) {
+            il.activeNLAs[sourceSym] = outputSym;
+            break;
+          }
         }
       }
     }
-    // Transit paths: activate only if this module is the NLA root — i.e., the
-    // NLA begins its live path at this instance op.
-    for (auto hPath : transitPaths) {
-      auto it = nlaMap.find(hPath);
+
+    // Transit paths rooted at this module
+    for (auto sourceSym : transitPaths) {
+      auto it = nlaMap.find(sourceSym);
       if (it == nlaMap.end())
         continue;
       if (!it->second->hasRoot(moduleName))
         continue;
-      StringAttr toAdd = hPath;
-      if (auto found = it->second->findOutputSymIn(parent))
-        toAdd = found;
-      activeHierpaths.insert(toAdd);
-    }
-    // Context paths (retop'd NLAs): activate each sym, preferring an output sym
-    // already in the parent active set so the correct per-context identity is
-    // propagated.  InliningLevel::activeContextSyms is freshly built per visit
-    // (one reTop call per NLA root per instance), so contextPaths always has
-    // exactly one sym per MutableNLA — no deduplication needed.
-    for (auto hPath : contextPaths) {
-      auto it = nlaMap.find(hPath);
-      if (it == nlaMap.end())
-        continue;
-      StringAttr toAdd = hPath;
-      if (auto found = it->second->findOutputSymIn(parent))
-        toAdd = found;
-      activeHierpaths.insert(toAdd);
+
+      // Check if parent has an output sym for this NLA
+      StringAttr outputSym = sourceSym;
+      if (il.parent->activeNLAs.count(sourceSym))
+        outputSym = il.parent->activeNLAs[sourceSym];
+
+      il.activeNLAs[sourceSym] = outputSym;
     }
 
-    // Build il.activeNLAs map from activeHierpaths for O(1) lookups.
-    // For each active output symbol, find its source symbol.
-    for (auto outputSym : activeHierpaths) {
+    // Context paths (retop'd NLAs)
+    for (auto outputSym : contextPaths) {
       auto it = nlaMap.find(outputSym);
       if (it == nlaMap.end())
         continue;
+
       auto sourceSym = it->second->getNLA().getSymNameAttr();
-      il.activeNLAs[sourceSym] = outputSym;
+
+      // Prefer output sym from parent if available
+      StringAttr toAdd = outputSym;
+      if (il.parent->activeNLAs.count(sourceSym))
+        toAdd = il.parent->activeNLAs[sourceSym];
+
+      il.activeNLAs[sourceSym] = toAdd;
     }
   }
 
@@ -820,8 +812,6 @@ private:
   /// This is used to distinguish if a non-local annotation applies to the
   /// current instance or not.
   SmallVector<std::pair<Attribute, Attribute>> currentPath;
-
-  DenseSet<StringAttr> activeHierpaths;
 
   /// Maps InnerRefAttr of an InstanceOp to the source NLA syms that pass
   /// through it (built from the original IR; need hasRoot check to activate).
@@ -913,9 +903,7 @@ bool Inliner::renameInstance(
       llvm::dbgs() << "Discarding parent debug scope for " << oldInst << "\n";
   });
 
-  // Add this instance to the activeHierpaths. This ensures that NLAs that this
-  // instance participates in will be updated correctly.
-  auto parentActivePaths = activeHierpaths;
+  // Populate activeNLAs for this instance to ensure NLAs are updated correctly.
   assert(oldInst->getParentOfType<FModuleOp>() == il.childModule);
   if (auto instSym = getInnerSymName(oldInst))
     setActiveHierPaths(il, oldInst->getParentOfType<FModuleOp>().getNameAttr(),
@@ -933,16 +921,9 @@ bool Inliner::renameInstance(
     // in.
     auto oldInnerRef = InnerRefAttr::get(oldParent, oldInstSym);
     for (auto old : instTransitPaths[oldInnerRef]) {
-      // If this HierPathOp is valid at the inlining context, where the
-      // instance is being inlined at. That is, if it exists in the
-      // activeHierpaths.
-      if (activeHierpaths.find(old) != activeHierpaths.end())
-        validHierPaths.push_back(old);
-      else if (auto outSym = nlaMap[old]->findOutputSymIn(activeHierpaths))
-        // The HierPathOp could have been renamed, check for the other retop
-        // output syms.  Push the retop'd output sym so subsequent
-        // setInnerSym lands on the right per-context state.
-        validHierPaths.push_back(outSym);
+      // If this HierPathOp is valid at the inlining context (active in il.activeNLAs).
+      if (il.activeNLAs.count(old))
+        validHierPaths.push_back(il.activeNLAs[old]);
     }
   }
 
@@ -981,7 +962,6 @@ bool Inliner::renameInstance(
         nlaList[en.index()] = cast<StringAttr>(newSym);
     }
   }
-  activeHierpaths = std::move(parentActivePaths);
   return symbolChanged;
 }
 
@@ -1234,9 +1214,8 @@ LogicalResult Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     // walk.
     llvm::set_union(localSymbols, rootMap[childModule.getNameAttr()]);
     auto instInnerSym = getInnerSymName(instance);
-    auto parentActivePaths = activeHierpaths;
 
-    InliningLevel childIL(il.mic, childModule);
+    InliningLevel childIL(il.mic, childModule, &il);
     setActiveHierPaths(childIL, moduleName, instInnerSym);
     currentPath.emplace_back(moduleName, instInnerSym);
     createDebugScope(childIL, instance, il.debugScope);
@@ -1250,7 +1229,6 @@ LogicalResult Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     if (failed(flattenInto(nestedPrefix, childIL, mapper, localSymbols)))
       return failure();
     currentPath.pop_back();
-    activeHierpaths = parentActivePaths;
     return success();
   };
   return inliningWalk(il.mic.b, target.getBodyBlock(), mapper, visit);
@@ -1299,7 +1277,6 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
     // Anything in this set will be made local during the recursive flattenInto
     // walk.
     auto instInnerSym = getInnerSymName(instance);
-    auto parentActivePaths = activeHierpaths;
 
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
@@ -1320,7 +1297,6 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
     if (failed(flattenInto(nestedPrefix, il, mapper, localSymbols)))
       return WalkResult::interrupt();
     currentPath.pop_back();
-    activeHierpaths = parentActivePaths;
 
     // Erase the replaced instance.
     instance.erase();
@@ -1404,7 +1380,7 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     // to both update the mutable NLA to indicate that this has a new top and
     // add an annotation on the instance saying that this now participates in
     // this new NLA.
-    InliningLevel childIL(il.mic, childModule);
+    InliningLevel childIL(il.mic, childModule, &il);
     DenseMap<Attribute, Attribute> symbolRenames;
     if (!rootMap[childModule.getNameAttr()].empty()) {
       for (auto origSymAttr : rootMap[childModule.getNameAttr()]) {
@@ -1432,7 +1408,6 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
       }
     }
     auto instInnerSym = getInnerSymName(instance);
-    auto parentActivePaths = activeHierpaths;
     setActiveHierPaths(childIL, moduleName, instInnerSym, childIL.activeContextSyms);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
@@ -1453,7 +1428,6 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
         return failure();
     }
     currentPath.pop_back();
-    activeHierpaths = parentActivePaths;
     return success();
   };
 
@@ -1536,7 +1510,6 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
       }
     }
     auto instInnerSym = getInnerSymName(instance);
-    auto parentActivePaths = activeHierpaths;
     setActiveHierPaths(childIL, moduleName, instInnerSym, childIL.activeContextSyms);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
@@ -1563,7 +1536,6 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
         return WalkResult::interrupt();
     }
     currentPath.pop_back();
-    activeHierpaths = parentActivePaths;
 
     // Erase the replaced instance.
     instance.erase();
