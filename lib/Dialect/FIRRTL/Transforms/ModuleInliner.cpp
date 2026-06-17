@@ -1219,7 +1219,12 @@ LogicalResult Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     llvm::set_union(localSymbols, rootMap[childModule.getNameAttr()]);
     auto instInnerSym = getInnerSymName(instance);
 
+    llvm::errs() << "flattenInto creating childIL: childModule=" << childModule.getNameAttr()
+                 << ", il.childModule=" << il.childModule.getNameAttr()
+                 << ", &il=" << &il << "\n";
     InliningLevel childIL(il.mic, childModule, &il);
+    llvm::errs() << "childIL.parent=" << childIL.parent
+                 << ", childIL.childModule=" << childIL.childModule.getNameAttr() << "\n";
     setActiveHierPaths(childIL, moduleName, instInnerSym);
     currentPath.emplace_back(moduleName, instInnerSym);
     createDebugScope(childIL, instance, il.debugScope);
