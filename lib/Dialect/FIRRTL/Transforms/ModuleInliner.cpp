@@ -686,24 +686,39 @@ private:
     }
   }
 
-  /// Populate the activeHierpaths with the HierPaths that are active given the
-  /// current hierarchy. This is the set of HierPaths that were active in the
-  /// parent, and on the current instance. Also HierPaths that are rooted at
-  /// this module are also added to the active set.
-  /// `contextSyms` carries the per-context output syms produced by reTop for
-  /// this instance (from InliningLevel::activeContextSyms); callers without a
-  /// reTop context pass the default empty span.
-  void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym,
+  /// Populate the activeNLAs map in the InliningLevel based on the instance being
+  /// inlined. Builds the source-sym to output-sym mapping from:
+  /// 1. Transit paths (NLAs that pass through this instance)
+  /// 2. Context syms (from reTop operations)
+  /// 3. Parent level's activeNLAs (inherited and intersected)
+  /// Also populates legacy activeHierpaths set for compatibility during transition.
+  void setActiveHierPaths(InliningLevel &il, StringAttr moduleName,
+                          StringAttr instInnerSym,
                           ArrayRef<StringAttr> contextSyms = {}) {
     auto innerRef = InnerRefAttr::get(moduleName, instInnerSym);
     auto &transitPaths = instTransitPaths[innerRef];
     auto contextPaths = contextSyms;
+
+    // Top level: populate from scratch
     if (currentPath.empty()) {
       assert(activeHierpaths.empty() && "didn't reset activeHierpaths");
-      activeHierpaths.insert(transitPaths.begin(), transitPaths.end());
-      // At the top level there is no accumulated multi-context sharing, so
-      // inserting all context syms is safe and equivalent to "last wins".
-      activeHierpaths.insert(contextPaths.begin(), contextPaths.end());
+
+      // Add transit paths as source → source (not yet retop'd)
+      for (auto sourceSym : transitPaths) {
+        il.activeNLAs[sourceSym] = sourceSym;
+        activeHierpaths.insert(sourceSym);
+      }
+
+      // Add context paths - these are retop'd, need to find source sym
+      for (auto outputSym : contextPaths) {
+        // Find the MutableNLA to get its source symbol
+        auto it = nlaMap.find(outputSym);
+        if (it != nlaMap.end()) {
+          auto sourceSym = it->second->getNLA().getSymNameAttr();
+          il.activeNLAs[sourceSym] = outputSym;
+        }
+        activeHierpaths.insert(outputSym);
+      }
       return;
     }
     // Build combined set for intersection pass.
@@ -759,6 +774,16 @@ private:
       if (auto found = it->second->findOutputSymIn(parent))
         toAdd = found;
       activeHierpaths.insert(toAdd);
+    }
+
+    // Build il.activeNLAs map from activeHierpaths for O(1) lookups.
+    // For each active output symbol, find its source symbol.
+    for (auto outputSym : activeHierpaths) {
+      auto it = nlaMap.find(outputSym);
+      if (it == nlaMap.end())
+        continue;
+      auto sourceSym = it->second->getNLA().getSymNameAttr();
+      il.activeNLAs[sourceSym] = outputSym;
     }
   }
 
@@ -893,7 +918,7 @@ bool Inliner::renameInstance(
   auto parentActivePaths = activeHierpaths;
   assert(oldInst->getParentOfType<FModuleOp>() == il.childModule);
   if (auto instSym = getInnerSymName(oldInst))
-    setActiveHierPaths(oldInst->getParentOfType<FModuleOp>().getNameAttr(),
+    setActiveHierPaths(il, oldInst->getParentOfType<FModuleOp>().getNameAttr(),
                        instSym);
   // List of HierPathOps that are valid based on the InstanceOp being inlined
   // and the InstanceOp which is being replaced after inlining. That is the set
@@ -1210,10 +1235,10 @@ LogicalResult Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     llvm::set_union(localSymbols, rootMap[childModule.getNameAttr()]);
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
-    setActiveHierPaths(moduleName, instInnerSym);
-    currentPath.emplace_back(moduleName, instInnerSym);
 
     InliningLevel childIL(il.mic, childModule);
+    setActiveHierPaths(childIL, moduleName, instInnerSym);
+    currentPath.emplace_back(moduleName, instInnerSym);
     createDebugScope(childIL, instance, il.debugScope);
 
     // Create the wire mapping for results + ports.
@@ -1275,8 +1300,6 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
     // walk.
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
-    setActiveHierPaths(moduleName, instInnerSym);
-    currentPath.emplace_back(moduleName, instInnerSym);
 
     // Create the wire mapping for results + ports. We RAUW the results instead
     // of mapping them.
@@ -1284,6 +1307,8 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
     mic.b.setInsertionPoint(instance);
 
     InliningLevel il(mic, target);
+    setActiveHierPaths(il, moduleName, instInnerSym);
+    currentPath.emplace_back(moduleName, instInnerSym);
     createDebugScope(il, instance);
 
     auto nestedPrefix = (instance.getName() + "_").str();
@@ -1408,7 +1433,7 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     }
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
-    setActiveHierPaths(moduleName, instInnerSym, childIL.activeContextSyms);
+    setActiveHierPaths(childIL, moduleName, instInnerSym, childIL.activeContextSyms);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
 
@@ -1512,7 +1537,7 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     }
     auto instInnerSym = getInnerSymName(instance);
     auto parentActivePaths = activeHierpaths;
-    setActiveHierPaths(moduleName, instInnerSym, childIL.activeContextSyms);
+    setActiveHierPaths(childIL, moduleName, instInnerSym, childIL.activeContextSyms);
     // This must be done after the reTop, since it might introduce an innerSym.
     currentPath.emplace_back(moduleName, instInnerSym);
     // Create the wire mapping for results + ports. We RAUW the results instead
