@@ -585,6 +585,10 @@ private:
     /// side-channel map.
     SmallVector<StringAttr> activeContextSyms;
 
+    /// Maps source NLA symbol to active output symbol for this inlining context.
+    /// Built from parent level plus instance-specific NLAs and reTop operations.
+    DenseMap<StringAttr, StringAttr> activeNLAs;
+
     ~InliningLevel() {
       replaceInnerRefUsers(newOps, relocatedInnerSyms,
                            mic.module.getNameAttr());
@@ -592,11 +596,11 @@ private:
   };
 
   /// Return the active output sym for the MutableNLA identified by
-  /// `annotationSym` — the output sym that is present in `activeHierpaths`.
+  /// `annotationSym` from the inlining level's activeNLAs map.
   /// Returns a null StringAttr if no context is active on the current path.
   /// Handles retop'd NLAs where the annotation sym (source sym / context 0)
   /// differs from the active context's sym.
-  StringAttr findActiveOutputSym(StringAttr annotationSym);
+  StringAttr findActiveOutputSym(const InliningLevel &il, StringAttr annotationSym);
 
   /// Rename an operation and unique any symbols it has.
   /// Returns true iff symbol was changed.
@@ -809,13 +813,13 @@ private:
 ///
 /// Annotations reference the source NLA sym (which equals context 0's output
 /// sym).  For retop'd NLAs the active context may be a different context whose
-/// output sym was freshly allocated.  This function searches all output syms
-/// so it works regardless of whether the NLA has been retop'd.
-StringAttr Inliner::findActiveOutputSym(StringAttr annotationSym) {
-  auto it = nlaMap.find(annotationSym);
-  if (it == nlaMap.end())
+/// output sym was freshly allocated.  This function does a direct lookup in
+/// the inlining level's activeNLAs map for O(1) performance.
+StringAttr Inliner::findActiveOutputSym(const InliningLevel &il, StringAttr annotationSym) {
+  auto it = il.activeNLAs.find(annotationSym);
+  if (it == il.activeNLAs.end())
     return {};
-  return it->second->findOutputSymIn(activeHierpaths);
+  return it->second;
 }
 
 /// If this operation or any child operation has a name, add the prefix to that
@@ -860,7 +864,7 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
       if (!sym)
         continue;
       auto *mnla = nlaMap[sym.getAttr()];
-      auto activeSym = findActiveOutputSym(sym.getAttr());
+      auto activeSym = findActiveOutputSym(il, sym.getAttr());
       if (!activeSym)
         continue;
       llvm::errs() << "renaming " << *op << ", setting inner sym on " << sym.getAttr() << " (active: " << activeSym << "): " << oldSymAttr << " -> " << newSymStrAttr  << "\n";
@@ -988,7 +992,7 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
       // If the annotation is not non-local, copy it to the clone.
       if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         auto *mnla = nlaMap[sym.getAttr()];
-        auto activeSym = findActiveOutputSym(sym.getAttr());
+        auto activeSym = findActiveOutputSym(il, sym.getAttr());
         if (!activeSym)
           continue;
         if (oldRootSymName != newRootSymName) {
@@ -1032,7 +1036,7 @@ void Inliner::cloneAndRename(
     // instances of this op. Add it to the cloned op.
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
       auto *mnla = nlaMap[sym.getAttr()];
-      auto activeSym = findActiveOutputSym(sym.getAttr());
+      auto activeSym = findActiveOutputSym(il, sym.getAttr());
       if (!activeSym)
         continue;
       if (mnla->isLocal() || localSymbols.count(activeSym))
