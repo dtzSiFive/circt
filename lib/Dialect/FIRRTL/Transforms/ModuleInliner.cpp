@@ -585,6 +585,13 @@ private:
 
     /// Maps source NLA symbol to active output symbol for this inlining context.
     /// Built from parent level plus instance-specific NLAs and reTop operations.
+    ///
+    /// Invariant: Each key is written exactly once (asserted at write sites).
+    /// The map is populated in two phases:
+    ///   1. reTop block adds entries for NLAs rooted at the child module
+    ///   2. setActiveHierPaths adds/inherits entries for transit NLAs
+    /// These two sources are disjoint (a child-rooted NLA cannot also be a
+    /// parent-transit NLA for the same instance).
     DenseMap<StringAttr, StringAttr> activeNLAs;
 
     ~InliningLevel() {
@@ -688,8 +695,15 @@ private:
   /// inlined. Builds the source-sym to output-sym mapping from:
   /// 1. Transit paths (NLAs that pass through this instance)
   /// 2. Parent level's activeNLAs (inherited and intersected)
-  /// Note: Context syms from reTop should be added directly to il.activeNLAs
-  /// before calling this function.
+  ///
+  /// Pre-conditions:
+  ///  - il.activeNLAs may already contain entries from reTop (child-rooted NLAs)
+  ///  - These reTop entries are disjoint from transit paths (asserted)
+  ///  - For nested levels, il.parent must be non-null and valid
+  ///
+  /// Post-conditions:
+  ///  - il.activeNLAs contains complete source→output mapping for this level
+  ///  - All writes are asserted to be non-overwriting
   void setActiveHierPaths(InliningLevel &il, StringAttr moduleName,
                           StringAttr instInnerSym) {
     auto innerRef = InnerRefAttr::get(moduleName, instInnerSym);
@@ -699,6 +713,9 @@ private:
     if (!il.parent) {
       // Add transit paths as source → source (not yet retop'd)
       for (auto sourceSym : transitPaths) {
+        // Invariant: transit paths and reTop'd NLAs should be disjoint
+        assert(!il.activeNLAs.count(sourceSym) &&
+               "Transit path NLA conflicts with reTop'd NLA - should be disjoint");
         il.activeNLAs[sourceSym] = sourceSym;
       }
       // Context syms should already be in il.activeNLAs from reTop
@@ -711,6 +728,8 @@ private:
     for (auto [sourceSym, outputSym] : il.parent->activeNLAs) {
       // Check if this NLA transits through this instance (source sym in transitPaths)
       if (transitPathsSet.contains(sourceSym)) {
+        assert(!il.activeNLAs.count(sourceSym) &&
+               "Inherited NLA already in activeNLAs (from reTop?)");
         il.activeNLAs[sourceSym] = outputSym;
         continue;
       }
@@ -722,6 +741,8 @@ private:
           auto transitIt = nlaMap.find(transitSym);
           if (transitIt != nlaMap.end() &&
               transitIt->second->hasOutputSym(outputSym)) {
+            assert(!il.activeNLAs.count(sourceSym) &&
+                   "Inherited NLA (indirect match) already in activeNLAs");
             il.activeNLAs[sourceSym] = outputSym;
             break;
           }
@@ -742,6 +763,8 @@ private:
       if (il.parent->activeNLAs.count(sourceSym))
         outputSym = il.parent->activeNLAs[sourceSym];
 
+      assert(!il.activeNLAs.count(sourceSym) &&
+             "Rooted transit path NLA already in activeNLAs");
       il.activeNLAs[sourceSym] = outputSym;
     }
     // Context syms should already be in il.activeNLAs from reTop
@@ -1370,6 +1393,8 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
           instance.setInnerSymAttr(hw::InnerSymAttr::get(instSym));
         }
         // Add retop'd NLA directly to childIL.activeNLAs
+        assert(!childIL.activeNLAs.count(origSym) &&
+               "reTop tried to add NLA that already exists in childIL.activeNLAs");
         childIL.activeNLAs[origSym] = newSym;
         // Map origNLAName → newSym so renameInstance can update instTransitPaths
         // entries in the child body from the source sym to the retop'd sym.
@@ -1473,6 +1498,8 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
                            return mic.modNamespace;
                          });
         // Add retop'd NLA directly to childIL.activeNLAs
+        assert(!childIL.activeNLAs.count(origSym) &&
+               "reTop tried to add NLA that already exists in childIL.activeNLAs");
         childIL.activeNLAs[origSym] = newSym;
         // Map origNLAName → newSym so renameInstance can update instTransitPaths
         // entries in the child body from the source sym to the retop'd sym.
