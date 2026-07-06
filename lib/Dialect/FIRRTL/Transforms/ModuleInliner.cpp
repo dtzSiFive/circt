@@ -55,6 +55,208 @@ using InnerRefToNewNameMap = DenseMap<hw::InnerRefAttr, StringAttr>;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+struct ModInfo {
+  bool hasInline : 1;
+  bool hasFlatten : 1;
+  bool underFlatten : 1; // ANY parent flattens this, not ALL.
+
+  /// Will this module exist in the final result?
+  bool isLive : 1;
+
+  /// Is this module reachable (will its body exist in the final someewhere)?
+  bool isReachable : 1;
+
+  // Can't have default member initialization of bitfield members until C++20.
+  ModInfo()
+      : hasInline(false), hasFlatten(false), underFlatten(false), isLive(false),
+        isReachable(false) {}
+
+  void markLive() { isLive = isReachable = true; }
+};
+
+using ModInfoMap = DenseMap<Operation *, ModInfo>;
+
+class ClassificationPrepass {
+  CircuitOp circuit;
+  InstanceGraph &instanceGraph;
+  SymbolTable &symbolTable;
+
+  ModInfoMap modInfoMap;
+
+public:
+  ClassificationPrepass(CircuitOp circuit, InstanceGraph &instanceGraph,
+                        SymbolTable &symbolTable)
+      : circuit(circuit), instanceGraph(instanceGraph),
+        symbolTable(symbolTable) {}
+
+  // TODO: Rejigger these -- are these used here? Should they be used, vs
+  // threading the map?
+  bool shouldInline(Operation *op) const { return getInfo(op).hasInline; }
+
+  bool shouldFlatten(Operation *op) const { return getInfo(op).hasFlatten; }
+
+  ModInfo getInfo(Operation *op) const { return modInfoMap.lookup(op); }
+
+  const ModInfoMap &getModInfoMap() { return modInfoMap; }
+
+  LogicalResult run();
+};
+
+struct SurvivingHop {
+  StringAttr modName;
+  StringAttr instName; // mutable
+};
+
+struct VirtualNLA {
+  StringAttr origSym;
+  StringAttr forkName; // null if localized
+  SmallVector<SurvivingHop, 2> survivingPath;
+
+  bool isLocal() { return !forkName; }
+};
+
+using CoordinateKey =
+    std::pair<StringAttr /* Module */, StringAttr /*Instance*/>;
+
+class NLAPrepass {
+public:
+  NLAPrepass(CircuitOp circuit, CircuitNamespace &circuitNamespace,
+             InstanceGraph &instanceGraph, const ModInfoMap &modInfoMap)
+      : circuit(circuit), circuitNamespace(circuitNamespace),
+        instanceGraph(instanceGraph), modInfoMap(modInfoMap) {}
+
+  LogicalResult run();
+
+private:
+  // FailureOr<...> ?
+  LogicalResult traceUpUntilSurviving(
+      StringAttr currentModName, SmallVectorImpl<CoordinateKey> &currentPath,
+      SmallVectorImpl<SmallVector<CoordinateKey>> &discoveredPaths);
+
+  void processSinglePathContext(StringAttr origSym,
+                                const SmallVectorImpl<CoordinateKey> &absPath,
+                                StringAttr activeContainer);
+
+  CircuitOp circuit;
+  CircuitNamespace &circuitNamespace;
+  InstanceGraph &instanceGraph;
+  const ModInfoMap &modInfoMap;
+
+  // Stable pool allocation for virtual NLA structures.
+  llvm::SpecificBumpPtrAllocator<VirtualNLA> alloc;
+
+  DenseMap<CoordinateKey, SmallVector<VirtualNLA *>> pathRoutingTable;
+};
+
+} // namespace
+
+LogicalResult ClassificationPrepass::run() {
+  for (auto &op : circuit.getOps()) {
+    // Initialize module information.
+    if (auto module = dyn_cast<FModuleLike>(op)) {
+      auto &info = modInfoMap[module];
+      // TODO: Optimize these scans? 1) single walk 2)reuse StringAttr's for
+      // faster comparisons.
+      info.hasInline = AnnotationSet::hasAnnotation(module, inlineAnnoClass);
+      info.hasFlatten = AnnotationSet::hasAnnotation(module, flattenAnnoClass);
+      if (!module.canDiscardOnUseEmpty())
+        info.markLive();
+      continue;
+    }
+
+    // Ignore symbol uses in NLAs.
+    if (isa<hw::HierPathOp>(op))
+      continue;
+
+    // Mark modules live whose symbols are referenced in other ops.
+    auto symbolUses = SymbolTable::getSymbolUses(&op);
+    if (!symbolUses)
+      continue;
+    for (const auto &use : *symbolUses) {
+      if (auto flat = dyn_cast<FlatSymbolRefAttr>(use.getSymbolRef()))
+        if (auto moduleLike = symbolTable.lookup<FModuleLike>(flat.getAttr()))
+          modInfoMap[moduleLike].markLive();
+    }
+  }
+
+  instanceGraph.walkInversePostOrder([&](igraph::InstanceGraphNode &node) {
+    auto *mod = node.getModule().getOperation();
+    auto &modInfo = modInfoMap[mod];
+
+    if (!modInfo.isReachable)
+      return;
+
+    auto moduleFlattened = modInfo.underFlatten || modInfo.hasFlatten;
+    for (auto *edge : node) {
+      auto *childMod = edge->getTarget()->getModule().getOperation();
+      auto &childInfo = modInfoMap[childMod];
+
+      childInfo.isReachable = true;
+
+      auto edgeDisappear = childInfo.hasInline || moduleFlattened;
+      if (!edgeDisappear)
+        childInfo.isLive = true;
+
+      if (moduleFlattened)
+        childInfo.underFlatten = true;
+    }
+  });
+
+  return success();
+}
+
+LogicalResult NLAPrepass::run() {
+  for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
+    auto origSym = nla.getSymNameAttr();
+    auto origRoot = nla.root();
+
+    SmallVector<SmallVector<CoordinateKey>> upperPaths;
+    SmallVector<CoordinateKey, 8> currentPath;
+    if (failed(traceUpUntilSurviving(origRoot, currentPath, upperPaths)))
+      return failure();
+
+    SmallVector<CoordinateKey> nlaHops;
+    for (auto element : nla.getNamepath()) {
+      if (auto ref = dyn_cast<InnerRefAttr>(element))
+        nlaHops.push_back({ref.getModule(), ref.getName()});
+      else if (auto flat = dyn_cast<FlatSymbolRefAttr>(element))
+        nlaHops.push_back({flat.getAttr(), StringAttr()});
+    }
+
+    for (const auto &upperPath : upperPaths) {
+      SmallVector<CoordinateKey> absolutePath;
+      llvm::append_range(absolutePath, upperPath);
+      llvm::append_range(absolutePath, nlaHops);
+
+      StringAttr topLevelRoot = absolutePath.front().first;
+      processSinglePathContext(origSym, absolutePath, topLevelRoot);
+    }
+
+    // Sort for processing efficiency.
+    for (auto &[_, pointers] : pathRoutingTable) {
+      llvm::sort(pointers, [](const VirtualNLA *a, const VirtualNLA *b) {
+        return reinterpret_cast<uintptr_t>(a) < reinterpret_cast<uintptr_t>(b);
+      });
+    }
+  }
+
+  return success();
+}
+
+LogicalResult NLAPrepass::traceUpUntilSurviving(
+    StringAttr currentModName, SmallVectorImpl<CoordinateKey> &currentPath,
+    SmallVectorImpl<SmallVector<CoordinateKey>> &discoveredPaths) {
+  return failure();
+}
+
+void NLAPrepass::processSinglePathContext(
+    StringAttr origSym, const SmallVectorImpl<CoordinateKey> &absPath,
+    StringAttr activeContainer) {
+  return;
+}
+
+namespace {
 /// A representation of an NLA that can be mutated.  This is intended to be used
 /// in situations where you want to make a series of modifications to an NLA
 /// while also being able to query information about it.  Finally, the NLA is
