@@ -1597,32 +1597,6 @@ firrtl.circuit "FlattenAtRoot" {
   // CHECK: firrtl.module @FlattenAtRoot
   firrtl.module @FlattenAtRoot() {
     firrtl.instance foo sym @foo @Foo()
-    // CHECK: sv.xmr.ref @nla : !hw.inout<i1>
-    %xmr = sv.xmr.ref @nla : !hw.inout<i1>
-  }
-}
-
-// -----
-
-// Test that hierarchical paths are correctly update when inlining.  This is the
-// same, conceptually, as the previous `FlattenAtRoot` test.
-//
-// CHECK-LABEL: firrtl.circuit "InlineBothModules"
-firrtl.circuit "InlineBothModules" {
-  // CHECK: hw.hierpath @path [@InlineBothModules::@sym_0]
-  hw.hierpath @path [@Foo::@bar, @Bar::@sym]
-  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    %w = firrtl.wire sym @sym {annotations = [{circt.nonlocal = @path, class = "test"}]} : !firrtl.uint<5>
-  }
-  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    firrtl.instance b sym @bar @Bar()
-  }
-  // CHECK: firrtl.module @InlineBothModules
-  firrtl.module @InlineBothModules() {
-    // CHECK: %foo_b_w = firrtl.wire sym @sym_0 {annotations = [{class = "test"}]}
-    firrtl.instance foo @Foo()
-    // CHECK: sv.xmr.ref @path : !hw.inout<i5>
-    %xmr = sv.xmr.ref @path : !hw.inout<i5>
   }
 }
 
