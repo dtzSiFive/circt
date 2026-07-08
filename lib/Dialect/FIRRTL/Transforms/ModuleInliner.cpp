@@ -27,12 +27,12 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Utils.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/TrailingObjects.h"
-#include "mlir/IR/Threading.h"
 
 #define DEBUG_TYPE "firrtl-inliner"
 
@@ -98,6 +98,7 @@ public:
   void dump();
 };
 
+// TODO: s/Inst/Sym/; at least if we want to support and preserve 'old-style'.
 struct SurvivingHop {
   StringAttr origMod;
   StringAttr origInst;
@@ -112,8 +113,6 @@ class VirtualNLA final : llvm::TrailingObjects<VirtualNLA, SurvivingHop> {
 
   VirtualNLA(unsigned id, StringAttr origSym, ArrayRef<SurvivingHop> path)
       : numHops(path.size()), id(id), origSym(origSym), realizedSym() {
-    assert(path.size() != 1 &&
-           "single-element NLA's are local and should have zero-length path");
     llvm::uninitialized_copy(path, getTrailingObjects());
   };
 
@@ -125,14 +124,12 @@ public:
 
   static VirtualNLA *create(llvm::BumpPtrAllocator &alloc, unsigned id,
                             StringAttr origSym, ArrayRef<SurvivingHop> path) {
-    if (path.size() == 1)
-      path = {};
     size_t size = totalSizeToAlloc<SurvivingHop>(path.size());
     auto *mem = alloc.Allocate(size, alignof(VirtualNLA));
     return new (mem) VirtualNLA(id, origSym, path);
   }
 
-  bool isLocal() const { return numHops == 0; }
+  bool isLocal() const { return numHops <= 1; }
 
   ArrayRef<SurvivingHop> getPath() const {
     return {getTrailingObjects(), numHops};
@@ -217,6 +214,7 @@ private:
 public:
   // Coordinate -> (Virtual) NLA's routing through.
   DenseMap<CoordinateKey, VirtualNLAHandles> pathRoutingTable;
+  // TODO: Drop this as unused!! It's helpful for debug printing however :).
   // Module name -> VNLA's rooted.
   DenseMap<StringAttr, VirtualNLAHandles> rootNLAs;
   // NLA sym -> VNLA's
@@ -361,9 +359,9 @@ LogicalResult NLAPrepass::run() {
       } else {
         for (auto *vnla : realities) {
           if (!vnla->isLocal()) {
-            vnla->realizedSym = StringAttr::get(
-                circuit.getContext(),
-                circuitNamespace.newName(origSym.getValue()));
+            vnla->realizedSym =
+                StringAttr::get(circuit.getContext(),
+                                circuitNamespace.newName(origSym.getValue()));
           }
         }
       }
@@ -456,7 +454,8 @@ void NLAPrepass::processSinglePathContext(
     bool nextHasFlatten = false;
     StringAttr nextModName;
 
-    if (it != end) {
+    bool isTerminal = it == end;
+    if (!isTerminal) {
       nextModName = it->first;
       auto *modOp = symbolTable.lookup(nextModName);
       assert(modOp);
@@ -465,14 +464,14 @@ void NLAPrepass::processSinglePathContext(
       nextHasFlatten = info.hasFlatten;
     }
 
-    bool isEvaporating = isTransitiveFlatten || nextHasInline;
+    bool isEvaporating = !isTerminal && (isTransitiveFlatten || nextHasInline);
     isTransitiveFlatten |= nextHasFlatten;
     if (!isEvaporating) {
       StringAttr sym;
-      if (hop.second) {
+      if (hop.second) { //  && !isTerminal /* drop old-style */) {
         if (auto name = dyn_cast<StringAttr>(hop.second))
           sym = name;
-        else {
+        else if (!isTerminal /* Don't create old-style if not already */) {
           sym = getOrAddInnerSym(
               cast<Operation *>(hop.second),
               [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
@@ -481,7 +480,7 @@ void NLAPrepass::processSinglePathContext(
         }
       }
       StringAttr finalInst;
-      if (currentDest == hop.first)
+      if (currentDest == hop.first || isTerminal /* preserve old-style */)
         finalInst = sym;
       survivingHops.push_back({/*origMod=*/hop.first, /*origInst*/ sym,
                                /*finalMod=*/currentDest,
@@ -747,12 +746,19 @@ private:
   void cloneAndRename(StringRef prefix, InliningLevel &il, IRMapping &mapper,
                       Operation &op);
 
+  /// TODO: Comment
+  SmallVector<Attribute> computeNewAnnotations(AnnotationSet annos,
+                                               const InliningLevel &il);
 
   /// TODO: Comment
-  SmallVector<Attribute> computeNewAnnotations(AnnotationSet annos, const InliningLevel &il);
+  // Update VirtualNLA leaf symbols if the port symbol was renamed.
+  // (needed for old-style NLAs, remove this as soon as we can drop support!)
+  void updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
+                                   hw::InnerSymAttr oldSymAttr,
+                                   hw::InnerSymAttr newSymAttr);
 
-  // TODO: Comment
-  void setActiveNLAsForChild(const SmallVectorImpl<VirtualNLA *> &activeNLAs,
+  /// TODO: Comment
+  void setActiveNLAsForChild(std::optional<ArrayRef<VirtualNLA *>> activeNLAs,
                              StringAttr moduleName, InliningLevel &childIL,
                              Operation *instance);
 
@@ -804,19 +810,6 @@ private:
   /// Identify all module-only NLA's, marking their MutableNLA's accordingly.
   // void identifyNLAsTargetingOnlyModules();
 
-  /// Mark referenced modules of an unknown FInstanceLike operation as live.
-  /// For non-InstanceOp FInstanceLike operations (e.g., InstanceChoiceOp,
-  /// ObjectOp), we cannot inline them, so we need to mark their referenced
-  /// modules as live to prevent them from being deleted.
-  // TODO: This already done as part of ClassificationPrepass
-  // void markUnknownFInstanceLikeModulesLive(FInstanceLike instanceLike) {
-  //   for (auto module : instanceLike.getReferencedModuleNamesAttr()
-  //                          .getAsValueRange<StringAttr>()) {
-  //     auto *moduleOp = symbolTable.lookup(module);
-  //     liveModules.insert(moduleOp);
-  //   }
-  // }
-
   CircuitOp circuit;
   MLIRContext *context;
 
@@ -833,11 +826,6 @@ private:
   // Prepass results
   ClassificationPrepass &classificationPrepass;
   NLAPrepass &nlaPrepass;
-
-  /// The set of live modules.  Anything not recorded in this set will be
-  /// removed by dead code elimination.
-  // TODO: Get from classificationPrepass!
-  // DenseSet<Operation *> liveModules;
 
   /// The debug scopes created for inlined instances. Scopes that are unused
   /// after inlining will be deleted again.
@@ -879,13 +867,16 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
   if (!newSymAttr)
     return false;
 
+  // TODO: Gate this on whether this partcipates in NLA's to avoid
+  // unnecessary scanning.
+  updateVirtualNLALeafSymbols(il, oldSymAttr, newSymAttr);
   symOp.setInnerSymbolAttr(newSymAttr);
 
   return newSymAttr != oldSymAttr;
 }
 
-bool Inliner::renameInstance(
-    StringRef prefix, InliningLevel &il, InstanceOp oldInst, InstanceOp newInst) {
+bool Inliner::renameInstance(StringRef prefix, InliningLevel &il,
+                             InstanceOp oldInst, InstanceOp newInst) {
   // TODO: There is currently no good way to annotate an explicit parent scope
   // on instances. Just emit a note in debug runs until this is resolved.
   LLVM_DEBUG({
@@ -899,12 +890,16 @@ bool Inliner::renameInstance(
 
   if (oldInstSym /*&& symbolChanged*/) {
     assert(newSymAttr);
-    StringAttr origMod = oldInst->getParentOfType<FModuleOp>().getNameAttr();
-    assert(origMod == il.childModule.getNameAttr()); // Just checking
-    for (auto *nla : il.activeNLAs)
-      for (auto &hop : nla->getPathMutable())
-        if (hop.origMod == origMod && hop.origInst == oldInstSym)
+    StringAttr origMod = il.childModule.getModuleNameAttr();
+    StringAttr destMod = il.mic.module.getModuleNameAttr();
+    for (auto *nla : il.activeNLAs) {
+      for (auto &hop : nla->getPathMutable()) {
+        if (hop.origMod == origMod && hop.origInst == oldInstSym &&
+            hop.finalMod == destMod) {
           hop.finalInst = newSymAttr;
+        }
+      }
+    }
   }
   return symbolChanged;
 }
@@ -953,12 +948,39 @@ SmallVector<Attribute> Inliner::computeNewAnnotations(AnnotationSet annos,
   return newAnnotations;
 }
 
+void Inliner::updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
+                                          hw::InnerSymAttr oldSymAttr,
+                                          hw::InnerSymAttr newSymAttr) {
+  // TODO: We can skip scanning if we grab the NLA symbols this target
+  // participates in during our computeNewAnnotations work, and then directly
+  // jump to the VNLA's that might have leaf references for this using
+  // il.activeNLAsBySym!
+  if (oldSymAttr && oldSymAttr != newSymAttr) {
+    assert(newSymAttr);
+    StringAttr origMod = il.childModule.getModuleNameAttr();
+    StringAttr destMod = il.mic.module.getModuleNameAttr();
+    for (auto *nla : il.activeNLAs) {
+      if (nla->isLocal())
+        continue;
+      auto &last = nla->getPathMutable().back();
+      if (last.origMod == origMod && last.finalMod == destMod) {
+        for (auto prop : oldSymAttr.getProps()) {
+          if (last.origInst == prop.getName()) {
+            last.finalInst = newSymAttr.getSymIfExists(prop.getFieldID());
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
 void Inliner::setActiveNLAsForChild(
-    const SmallVectorImpl<VirtualNLA *> &activeNLAs, StringAttr moduleName,
+    std::optional<ArrayRef<VirtualNLA *>> activeNLAs, StringAttr moduleName,
     InliningLevel &childIL, Operation *instance) {
-  if (activeNLAs.empty())
+  if (activeNLAs && activeNLAs->empty())
     return;
-  SmallVector<VirtualNLA *> waitingNLAs;
+  SmallVector<VirtualNLA *> instNLAs;
 
   auto instInnerSym = getInnerSymName(instance);
   // Lookup using inner symbol as well as instance op itself.
@@ -966,18 +988,26 @@ void Inliner::setActiveNLAsForChild(
   // TODO: Less copying, ensure efficient-ish intersection/filtering
   if (auto it = nlaPrepass.pathRoutingTable.find({moduleName, instInnerSym});
       it != nlaPrepass.pathRoutingTable.end())
-    llvm::append_range(waitingNLAs, it->second);
+    llvm::append_range(instNLAs, it->second);
   if (auto it = nlaPrepass.pathRoutingTable.find({moduleName, instance});
       it != nlaPrepass.pathRoutingTable.end())
-    llvm::append_range(waitingNLAs, it->second);
+    llvm::append_range(instNLAs, it->second);
 
   // TODO: better
-  SmallVector<VirtualNLA*> childActiveNLAs;
   auto sortVNLAs = [](const VirtualNLA *a, const VirtualNLA *b) {
     return a->id < b->id;
   };
-  std::set_intersection(waitingNLAs.begin(), waitingNLAs.end(), activeNLAs.begin(), activeNLAs.end(), std::back_inserter(childActiveNLAs), sortVNLAs);
-  childIL.setActivePaths(childActiveNLAs);
+  llvm::sort(instNLAs, sortVNLAs);
+  instNLAs.erase(llvm::unique(instNLAs), instNLAs.end());
+  if (activeNLAs) {
+    SmallVector<VirtualNLA *> childActiveNLAs;
+    std::set_intersection(instNLAs.begin(), instNLAs.end(), activeNLAs->begin(),
+                          activeNLAs->end(),
+                          std::back_inserter(childActiveNLAs), sortVNLAs);
+    childIL.setActivePaths(childActiveNLAs);
+  } else {
+    childIL.setActivePaths(instNLAs);
+  }
 }
 
 /// This function is used before inlining a module, to handle the conversion
@@ -1000,14 +1030,10 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
         uniqueInNamespace(oldSymAttr, il.relocatedInnerSyms,
                           il.mic.modNamespace, target.getNameAttr());
 
-    StringAttr newRootSymName, oldRootSymName;
-    if (oldSymAttr)
-      oldRootSymName = oldSymAttr.getSymName();
-    if (newSymAttr)
-      newRootSymName = newSymAttr.getSymName();
-
     SmallVector<Attribute> newAnnotations =
         computeNewAnnotations(AnnotationSet::forPort(target, i), il);
+    if (!newAnnotations.empty()) // Not quite right but sufficient.
+      updateVirtualNLALeafSymbols(il, oldSymAttr, newSymAttr);
 
     Value wire =
         WireOp::create(
@@ -1025,8 +1051,8 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
 /// Clone an operation, mapping used values and results with the mapper, and
 /// apply the prefix to the name of the operation. This will clone to the
 /// insert point of the builder.  Insert the operation into the level.
-void Inliner::cloneAndRename(
-    StringRef prefix, InliningLevel &il, IRMapping &mapper, Operation &op) {
+void Inliner::cloneAndRename(StringRef prefix, InliningLevel &il,
+                             IRMapping &mapper, Operation &op) {
   // Strip any non-local annotations which are local.
   AnnotationSet oldAnnotations(&op);
   auto newAnnotations = computeNewAnnotations(oldAnnotations, il);
@@ -1205,7 +1231,8 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module, modNamespaces.getNamespace(module));
 
-  LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName << "...\n");
+  LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName
+                          << "...\n");
   auto visit = [&](FInstanceLike instanceLike) {
     auto instance = dyn_cast<InstanceOp>(*instanceLike);
     if (!instance) {
@@ -1229,8 +1256,8 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
     mic.b.setInsertionPoint(instance);
 
     InliningLevel il(mic, target);
-    setActiveNLAsForChild(nlaPrepass.rootNLAs.lookup(moduleName), moduleName,
-                          il, instance);
+    setActiveNLAsForChild(/* Activate all through this instance */ std::nullopt,
+                          moduleName, il, instance);
     createDebugScope(il, instance);
 
     auto nestedPrefix = (instance.getName() + "_").str();
@@ -1252,8 +1279,8 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-LogicalResult
-Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper) {
+LogicalResult Inliner::inlineInto(StringRef prefix, InliningLevel &il,
+                                  IRMapping &mapper) {
   auto target = il.childModule;
   auto moduleName = target.getNameAttr();
 
@@ -1313,7 +1340,8 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module, modNamespaces.getNamespace(module));
 
-  LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName << "...\n");
+  LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName
+                          << "...\n");
   auto visit = [&](FInstanceLike instanceLike) {
     auto instance = dyn_cast<InstanceOp>(*instanceLike);
     if (!instance) {
@@ -1345,8 +1373,8 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
     auto nestedPrefix = (instance.getName() + "_").str();
 
     InliningLevel childIL(mic, target);
-    setActiveNLAsForChild(nlaPrepass.rootNLAs.lookup(moduleName), moduleName,
-                          childIL, instance);
+    setActiveNLAsForChild(/* Activate all through this instance */ std::nullopt,
+                          moduleName, childIL, instance);
     createDebugScope(childIL, instance);
 
     mapPortsToWires(nestedPrefix, childIL, mapper);
@@ -1521,29 +1549,40 @@ LogicalResult Inliner::run() {
   }
 
   // Sweep and writeback!
-  auto rewriteAnnos = [&](AnnotationSet &annos,
+  auto rewriteAnnos = [&](AnnotationSet &annos, StringAttr modName,
                           SmallVectorImpl<Attribute> &newAnnos) {
     for (const auto &anno : annos) {
-      // TODO: Share code with computeNewAnnotations!
       auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
       if (!sym) {
         newAnnos.push_back(anno.getAttr());
         continue;
       }
 
-      // If not active, remove it!
+      // If not found, remove it!
+      // This can happen if it was invalid in the input (mentions NLA that
+      // didn't exist).
       auto it = nlaPrepass.origToVNLAs.find(sym.getAttr());
       if (it == nlaPrepass.origToVNLAs.end())
         continue;
 
       // Otherwise preserve it, cloning / modifying per active VNLAs.
       for (auto *matched : it->second) {
+        auto path = matched->getPath();
+        // If NLA was made local (path length zero), it now lives elsewhere.
+        // If it wasn't local and we're not the destination, it lives elsewhere.
+        // In both cases, drop this annotation.
+        if (path.empty() || matched->getPath().back().finalMod != modName)
+          continue;
+
+        // If NLA is local otherwise, it originally had a 1-hop path.
+        // Replace with local annotation.
         if (matched->isLocal()) {
           Annotation copy(anno);
           copy.removeMember("circt.nonlocal");
           newAnnos.push_back(copy.getAttr());
           continue;
         }
+
         // TODO: Unconditionally set in this loop? Local is "used".
         matched->wasUsed = true;
 
@@ -1562,9 +1601,10 @@ LogicalResult Inliner::run() {
     }
   };
 
-  auto fmodules = llvm::to_vector(circuit.getBodyBlock()->getOps<FModuleOp>());
   // Update all annotations in circuit in parallel.
-  mlir::parallelForEach(context, fmodules, [&](FModuleOp fmodule) {
+  auto fmodules =
+      llvm::to_vector(circuit.getBodyBlock()->getOps<FModuleLike>());
+  mlir::parallelForEach(context, fmodules, [&](FModuleLike fmodule) {
     SmallVector<Attribute> newAnnotations;
     fmodule.walk([&](Operation *op) {
       AnnotationSet annotations(op);
@@ -1575,7 +1615,7 @@ LogicalResult Inliner::run() {
 
       // Update annotations on the op.
       newAnnotations.clear();
-      rewriteAnnos(annotations, newAnnotations);
+      rewriteAnnos(annotations, fmodule.getModuleNameAttr(), newAnnotations);
       // annotations.removeAnnotations(processNLAs);
       // annotations.addAnnotations(newAnnotations);
       if (!newAnnotations.empty() || !annotations.empty())
@@ -1586,7 +1626,8 @@ LogicalResult Inliner::run() {
     SmallVector<Attribute> newPortAnnotations;
     for (auto port : fmodule.getPorts()) {
       newAnnotations.clear();
-      rewriteAnnos(port.annotations, newAnnotations);
+      rewriteAnnos(port.annotations, fmodule.getModuleNameAttr(),
+                   newAnnotations);
       newPortAnnotations.push_back(ArrayAttr::get(
           context, AnnotationSet(newAnnotations, context).getArray()));
     }
