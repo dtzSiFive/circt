@@ -1205,6 +1205,7 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module, modNamespaces.getNamespace(module));
 
+  LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName << "...\n");
   auto visit = [&](FInstanceLike instanceLike) {
     auto instance = dyn_cast<InstanceOp>(*instanceLike);
     if (!instance) {
@@ -1312,6 +1313,7 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module, modNamespaces.getNamespace(module));
 
+  LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName << "...\n");
   auto visit = [&](FInstanceLike instanceLike) {
     auto instance = dyn_cast<InstanceOp>(*instanceLike);
     if (!instance) {
