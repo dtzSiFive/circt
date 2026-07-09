@@ -303,9 +303,9 @@ firrtl.circuit "NLAInlining" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAInlining::@bar, @Bar]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAInlining::@bar, @Bar::@a]
   // CHECK-NEXT: hw.hierpath private @nla3 [@NLAInlining::@bar, @Bar::@port]
-  // CHECK-NEXT: hw.hierpath private @nla5 [@NLAInlining::@b]
-  // CHECK-NEXT: hw.hierpath private @nla6 [@NLAInlining::@port]
   // CHECK-NOT:  hw.hierpath private @nla4
+  // CHECK-NOT:  hw.hierpath private @nla5
+  // CHECK-NOT:  hw.hierpath private @nla6
   hw.hierpath private @nla1 [@NLAInlining::@foo, @Foo::@bar, @Bar]
   hw.hierpath private @nla2 [@NLAInlining::@foo, @Foo::@bar, @Bar::@a]
   hw.hierpath private @nla3 [@NLAInlining::@foo, @Foo::@bar, @Bar::@port]
@@ -340,18 +340,19 @@ firrtl.circuit "NLAInlining" {
 //
 // CHECK-LABEL: firrtl.circuit "NLAInliningNotMainRoot"
 firrtl.circuit "NLAInliningNotMainRoot" {
-  // CHECK-NEXT: hw.hierpath private @nla1 [@NLAInliningNotMainRoot::@baz, @Baz::@a]
-  // CHECK-NEXT: hw.hierpath private @nla1_0 [@Foo::@baz, @Baz::@a]
-  // CHECK-NEXT: hw.hierpath private @nla2 [@NLAInliningNotMainRoot::@baz, @Baz::@port]
-  // CHECK-NEXT: hw.hierpath private @nla2_0 [@Foo::@baz, @Baz::@port]
+  // CHECK-NEXT: hw.hierpath private @nla2_0 [@NLAInliningNotMainRoot::@baz, @Baz::@port]
+  // CHECK-NEXT: hw.hierpath private @nla2_1 [@Foo::@baz, @Baz::@port]
+  // CHECK-NEXT: hw.hierpath private @nla1_2 [@NLAInliningNotMainRoot::@baz, @Baz::@a]
+  // CHECK-NEXT: hw.hierpath private @nla1_3 [@Foo::@baz, @Baz::@a]
+  // CHECK-NOT: hw.hierpath
   hw.hierpath private @nla1 [@Bar::@baz, @Baz::@a]
   hw.hierpath private @nla2 [@Bar::@baz, @Baz::@port]
-  // CHECK: firrtl.module private @Baz
-  // CHECK-SAME: %port: {{.+}} [{circt.nonlocal = @nla2, class = "nla2"}, {circt.nonlocal = @nla2_0, class = "nla2"}]
+  // CHECK-NEXT: firrtl.module private @Baz
+  // CHECK-SAME: %port: {{.+}} [{circt.nonlocal = @nla2_0, class = "nla2"}, {circt.nonlocal = @nla2_1, class = "nla2"}]
   firrtl.module private @Baz(
     in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla2, class = "nla2"}]
   ) {
-    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1, class = "hello"}, {circt.nonlocal = @nla1_0, class = "hello"}]
+    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1_2, class = "hello"}, {circt.nonlocal = @nla1_3, class = "hello"}]
     %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "hello"}]} : !firrtl.uint<1>
   }
   firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
@@ -384,8 +385,8 @@ firrtl.circuit "NLAInliningNotMainRoot" {
 firrtl.circuit "NLAFlattening" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@a]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@port]
-  // CHECK-NEXT: hw.hierpath private @nla4 [@Foo::@b]
   // CHECK-NOT:  hw.hierpath private @nla3
+  // CHECK-NOT:  hw.hierpath private @nla4
   hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@a]
   hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@port]
   hw.hierpath private @nla3 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz]
@@ -423,20 +424,21 @@ firrtl.circuit "NLAFlattening" {
 //
 // CHECK-LABEL: firrtl.circuit "NLAFlatteningChildRoot"
 firrtl.circuit "NLAFlatteningChildRoot" {
-  // CHECK-NOT:  hw.hierpath private @nla1
-  // CHECK-NOT:  hw.hierpath private @nla2
-  // CHECK-NEXT: hw.hierpath private @nla3 [@Baz::@quz, @Quz::@b]
-  // CHECK-NEXT: hw.hierpath private @nla4 [@Baz::@quz, @Quz::@Quz_port]
+  // CHECK-NEXT: hw.hierpath private @nla4_0 [@Baz::@quz, @Quz::@Quz_port]
+  // CHECK-NEXT: hw.hierpath private @nla4_1 [@NLAFlatteningChildRoot::@sym, @Baz::@quz, @Quz::@Quz_port]
+  // CHECK-NEXT: hw.hierpath private @nla3_2 [@Baz::@quz, @Quz::@b]
+  // CHECK-NEXT: hw.hierpath private @nla3_3 [@NLAFlatteningChildRoot::@sym, @Baz::@quz, @Quz::@b]
+  // CHECK-NOT: hw.hierpath
+  // CHECK: firrtl.module private @Quz
   hw.hierpath private @nla1 [@Bar::@qux, @Qux::@a]
   hw.hierpath private @nla2 [@Bar::@qux, @Qux::@Qux_port]
   hw.hierpath private @nla3 [@Baz::@quz, @Quz::@b]
   hw.hierpath private @nla4 [@Baz::@quz, @Quz::@Quz_port]
-  // CHECK: firrtl.module private @Quz
-  // CHECK-SAME: in %port: {{.+}} [{circt.nonlocal = @nla4, class = "nla4"}]
+  // CHECK-SAME: in %port: {{.+}} [{circt.nonlocal = @nla4_0, class = "nla4"}, {circt.nonlocal = @nla4_1, class = "nla4"}]
   firrtl.module private @Quz(
     in %port: !firrtl.uint<1> sym @Quz_port [{circt.nonlocal = @nla4, class = "nla4"}]
   ) {
-    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla3, class = "nla3"}]
+    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla3_2, class = "nla3"}, {circt.nonlocal = @nla3_3, class = "nla3"}]
     %b = firrtl.wire sym @b {annotations = [{circt.nonlocal = @nla3, class = "nla3"}]} : !firrtl.uint<1>
   }
   firrtl.module private @Qux(
@@ -527,14 +529,14 @@ firrtl.circuit "CollidingSymbolsPort" {
 //
 // CHECK-LABEL: firrtl.circuit "CollidingSymbolsReTop"
 firrtl.circuit "CollidingSymbolsReTop" {
-  // CHECK-NOT:  #hw.innerNameRef<@CollidingSymbolsReTop::@baz>
-  // CHECK-NOT:  #hw.innerNameRef<@Foo::@baz>
-  // CHECK-NEXT: hw.hierpath private @nla1 [@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]], @Baz::@a]
-  // CHECK-NEXT: hw.hierpath private @nla1_0 [@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  // CHECK-NEXT: hw.hierpath private @nla1_0 [@Bar::@baz, @Baz::@a]
+  // CHECK-NEXT: hw.hierpath private @nla1_1 [@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  // CHECK-NEXT: hw.hierpath private @nla1_2 [@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  // CHECK-NOT: hw.hierpath
   hw.hierpath private @nla1 [@Bar::@baz, @Baz::@a]
   // CHECK: firrtl.module @Baz
   firrtl.module @Baz() {
-    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1, class = "hello"}, {circt.nonlocal = @nla1_0, class = "hello"}]
+    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1_0, class = "hello"}, {circt.nonlocal = @nla1_1, class = "hello"}, {circt.nonlocal = @nla1_2, class = "hello"}]
     %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "hello"}]} : !firrtl.uint<1>
   }
   firrtl.module @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
@@ -1432,7 +1434,7 @@ firrtl.circuit "FormalMarkerIsUse" {
 // -----
 
 firrtl.circuit "RemoveNonLocalFromLocal" {
-  // CHECK: hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
+  // CHECK-NOT: hw.hierpath private @dutNLA
   hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   firrtl.module @Bar() {}
   // CHECK-LABEL: firrtl.module @RemoveNonLocalFromLocal
@@ -1581,7 +1583,7 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
 //
 // CHECK-LABEL: firrtl.circuit "FlattenAtRoot"
 firrtl.circuit "FlattenAtRoot" {
-  // CHECK: hw.hierpath private @nla [@Foo::@b]
+  // CHECK-NOT: hw.hierpath private @nla
   hw.hierpath private @nla [@Foo::@bar, @Bar::@b]
   // CHECK: firrtl.module @Bar
   firrtl.module @Bar() {
@@ -1609,19 +1611,20 @@ firrtl.circuit "FlattenAtRoot" {
 // (Don't generate invalid DictionaryAttr's with many circt.local/class entries!)
 // CHECK-LABEL: "Issue3374Derived"
 firrtl.circuit "Issue3374Derived" {
-  // CHECK-NEXT: hw.hierpath @nla1 [@Issue3374Derived::@baz, @Baz]
-  // CHECK-NEXT: hw.hierpath @nla1_0 [@Quux::@baz, @Baz]
-  // CHECK-NEXT: hw.hierpath @nla1_1 [@Qux::@baz, @Baz]
-  // CHECK-NEXT: hw.hierpath @nla1_2 [@Foo::@baz, @Baz]
-  hw.hierpath @nla1 [@Bar::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1_0 [@Issue3374Derived::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1_1 [@Quux::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1_2 [@Qux::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1_3 [@Foo::@baz, @Baz]
+  // CHECK-NOT: hw.hierpath
+  hw.hierpath private @nla1 [@Bar::@baz, @Baz]
 
   firrtl.module @Baz() {
-  // CHECK-NEXT: @Baz() {
+  // CHECK: @Baz() {
   // CHECK-NEXT:   wire sym @a
-  // CHECK-SAME:     {annotations = [{circt.nonlocal = @nla1, class = "hello"},
-  // CHECK-SAME:                     {circt.nonlocal = @nla1_0, class = "hello"},
+  // CHECK-SAME:     {annotations = [{circt.nonlocal = @nla1_0, class = "hello"},
   // CHECK-SAME:                     {circt.nonlocal = @nla1_1, class = "hello"},
-  // CHECK-SAME:                     {circt.nonlocal = @nla1_2, class = "hello"}]}
+  // CHECK-SAME:                     {circt.nonlocal = @nla1_2, class = "hello"},
+  // CHECK-SAME:                     {circt.nonlocal = @nla1_3, class = "hello"}]}
     %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "hello"}]} : !firrtl.uint<1>
   }
   firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {

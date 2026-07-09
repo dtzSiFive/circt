@@ -1636,11 +1636,21 @@ LogicalResult Inliner::run() {
   });
 
   // NLA cleanup and writeback
-  auto b = OpBuilder::atBlockEnd(circuit.getBodyBlock());
+  // Find the last hierpath to insert new ones after it (or at the beginning)
+  OpBuilder b(context);
+  hw::HierPathOp lastHierPath = nullptr;
   DenseMap<StringAttr, hw::HierPathOp> existingPaths;
   // TODO: Surely we have this information already earlier and can us that!
-  for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>())
+  for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
     existingPaths[nla.getNameAttr()] = nla;
+    lastHierPath = nla;
+  }
+
+  // Set insertion point after the last hierpath, or at the beginning
+  if (lastHierPath)
+    b.setInsertionPointAfter(lastHierPath);
+  else
+    b.setInsertionPointToStart(circuit.getBodyBlock());
 
   for (auto &[_, vnlas] : nlaPrepass.origToVNLAs) {
     for (auto *vnla : vnlas) {
