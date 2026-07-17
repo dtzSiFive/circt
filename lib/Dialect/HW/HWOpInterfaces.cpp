@@ -132,7 +132,13 @@ LogicalResult hw::verifyInnerSymOp(InnerSymbolOpInterface op) {
   if (!result)
     return success();
 
-  return verifyInnerSymAttr(innerSym, result.getType(),
+  // An inner symbol on an inout-producing declaration (sv.reg, sv.wire)
+  // targets the declared storage; field IDs index the stored type.
+  auto type = result.getType();
+  if (auto inout = dyn_cast<hw::InOutType>(type))
+    type = inout.getElementType();
+
+  return verifyInnerSymAttr(innerSym, type,
                             [op]() { return op->emitOpError(); });
 }
 

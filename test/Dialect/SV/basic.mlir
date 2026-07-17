@@ -229,6 +229,12 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   %reg24       = sv.reg sym @regSym1 : !hw.inout<i23>
   %wire25      = sv.wire sym @wireSym1 : !hw.inout<i23>
 
+  // Field ids on inout declarations index the stored type.
+  // CHECK-NEXT: %reg26 = sv.reg sym [<@regFieldSym,2,public>] : !hw.inout<struct<foo: i23, bar: i4>>
+  // CHECK-NEXT: %wire27 = sv.wire sym [<@wireFieldSym,1,public>] : !hw.inout<struct<foo: i23, bar: i4>>
+  %reg26       = sv.reg sym [<@regFieldSym,2,public>] : !hw.inout<struct<foo: i23, bar: i4>>
+  %wire27      = sv.wire sym [<@wireFieldSym,1,public>] : !hw.inout<struct<foo: i23, bar: i4>>
+
   // Simulation Control Tasks
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT: sv.stop 1

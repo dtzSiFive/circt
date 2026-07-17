@@ -380,3 +380,10 @@ hw.module @ConcatStrNoOperands(out o: i1) {
   %0 = sv.system "test$plusargs"(%cat) : (!hw.string) -> i1
   hw.output %0 : i1
 }
+
+// -----
+
+hw.module @FieldSymOutOfRange() {
+  // expected-error @+1 {{field id 4 is greater than the maximum field id 2}}
+  %r = sv.reg sym [<@sym,4,public>] : !hw.inout<struct<foo: i23, bar: i4>>
+}
