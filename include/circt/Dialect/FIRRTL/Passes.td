@@ -182,6 +182,11 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     ```
   }];
   let dependentDialects = ["debug::DebugDialect"];
+  let options = [
+    Option<"errorOnUnresolvedValueUser", "error-on-unresolved-value-user",
+           "bool", "true",
+           "Error (default) rather than warn when a value user of a forked or erased hierpath cannot be resolved after inlining (issue 10798). Warn mode keeps an arbitrary-copy reference (forked) or a dangling one (erased).">
+  ];
   let statistics = [
     Statistic<"numInstancesInlined", "num-instances-inlined",
       "Number of instances inlined into their parent">,

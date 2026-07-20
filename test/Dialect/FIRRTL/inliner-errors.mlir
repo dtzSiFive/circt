@@ -254,3 +254,248 @@ firrtl.circuit "Issue10908MixedContexts" {
     firrtl.instance p @PlainParent()
   }
 }
+
+// -----
+
+// A value user of a forked hierpath the inliner cannot repoint. @Mid (root of
+// @p) is inlined twice, forking @p. @Other is retained (shared by both copies)
+// and its original xmr can serve only one of them -- the reference resolves to
+// one arbitrary copy of a multiply-realized root, which is not the reading it
+// consumed. Reject rather than silently miscompile (#10798).
+firrtl.circuit "ValueUserRetainedFork" {
+  hw.hierpath private @p [@Mid::@t, @T::@w]
+  firrtl.module @T() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @Other() {
+    // expected-error @below {{value user of hierpath @p cannot be resolved after inlining}}
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance o @Other()
+    firrtl.instance t sym @t @T()
+  }
+  firrtl.module @ValueUserRetainedFork() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// Same reject, but the shared module is retained because it is public (not
+// multiply-declared). A public module under a forked root is still shared
+// across the fork, so its value user is equally unresolvable.
+firrtl.circuit "ValueUserPublicRetainedFork" {
+  hw.hierpath private @p [@Mid::@t, @T::@w]
+  firrtl.module @T() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module @Other() {
+    // expected-error @below {{value user of hierpath @p cannot be resolved after inlining}}
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance o @Other()
+    firrtl.instance t sym @t @T()
+  }
+  firrtl.module @ValueUserPublicRetainedFork() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// Public value-user module with NO local instance. @A is public and inline, so
+// after inlining it is absorbed into its parents and retained (public modules
+// are never dead-erased) -- but it has zero local instances. "Public" means it
+// may be instantiated externally, out of our view, where its xmr of the forked
+// @p (root @Pub was inlined into @Top) would misresolve. A private @A here
+// would be genuinely dead and silently fine; a public one must be diagnosed,
+// not skipped (#10798).
+firrtl.circuit "ValueUserPublicUserModule" {
+  hw.hierpath private @p [@Pub::@b, @B::@w]
+  firrtl.module @B() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module @A() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    // expected-error @below {{value user of hierpath @p cannot be resolved after inlining}}
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module @Pub() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance a @A()
+    firrtl.instance b sym @b @B()
+  }
+  firrtl.module @ValueUserPublicUserModule() {
+    firrtl.instance p1 @Pub()
+  }
+}
+
+// -----
+
+// Two value users of one forked hierpath. @Root (public, inline) forks @p. The
+// first value user encountered is in @Root itself (resolves relative to the
+// root -- the well-formed for-all shape, correctly not rejected); the second is
+// the original op in shared retained @Shared, which cannot serve every copy and
+// must reject. The detection walk must fire per op: a walk that memoizes visited
+// attributes (a hierpath symbol is interned once) would fire only for the first
+// user of @p and silently miss the second -- exactly the reject we need. Found
+// by the value-user resolution fuzzer.
+firrtl.circuit "ValueUserMemoizedSymbol" {
+  hw.hierpath private @p [@Root::@s, @Shared::@w]
+  firrtl.module @Root() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance s sym @s @Shared()
+    // In the root: resolves relative to itself, not rejected.
+    %y = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Shared() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    // expected-error @below {{value user of hierpath @p cannot be resolved after inlining}}
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module @ValueUserMemoizedSymbol() {
+    firrtl.instance r @Root()
+    firrtl.instance sd @Shared()
+  }
+}
+
+// -----
+
+// Convergent fork. @p and @q have identical namepaths. @Root (public, inline)
+// forks both; @q's fork converges onto @p's realized path, borrowing @p_0
+// rather than minting its own symbol. Fork detection must be per-group namepath
+// distinctness: @q's contexts still realize two distinct paths, so @q is forked
+// and its shared value user is rejected, even though @q never minted a name.
+// (A historical signal keyed on "minted a fresh name" missed exactly this;
+// found by the value-user resolution fuzzer.)
+firrtl.circuit "ValueUserConvergentFork" {
+  hw.hierpath private @p [@Root::@s, @Shared::@w]
+  hw.hierpath private @q [@Root::@s, @Shared::@w]
+  firrtl.module @Root() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance s sym @s @Shared()
+    %y = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Shared() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    // expected-error @below {{value user of hierpath @q cannot be resolved after inlining}}
+    %x = sv.xmr.ref @q : !hw.inout<i1>
+  }
+  firrtl.module @ValueUserConvergentFork() {
+    firrtl.instance r @Root()
+    firrtl.instance sd @Shared()
+  }
+}
+
+// -----
+
+// Off-tree value user. @Root (inline) forks @p. @Off is reached through an
+// instance_choice, which the inliner never absorbs -- so @Off is retained and
+// shared across @Root's forks, and its value user cannot name a single copy.
+// The reject must reach value users under instance-choice targets, not only
+// those under plain instances.
+firrtl.circuit "ValueUserOffTreeChoice" {
+  firrtl.option @Opt { firrtl.option_case @A firrtl.option_case @B }
+  hw.hierpath private @p [@Root::@t, @T::@w]
+  firrtl.module @T() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module @Off() {
+    // expected-error @below {{value user of hierpath @p cannot be resolved after inlining}}
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module @Alt() {}
+  firrtl.module private @Root() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance t sym @t @T()
+    firrtl.instance_choice ic @Off alternatives @Opt { @A -> @Alt, @B -> @Alt } ()
+  }
+  firrtl.module @ValueUserOffTreeChoice() {
+    firrtl.instance m1 @Root()
+    firrtl.instance m2 @Root()
+  }
+}
+
+// -----
+
+// Circuit-level value user. A hand-written sv.verbatim at the circuit level (not
+// inside any module) names @p; @Mid inlines twice and forks @p, so the verbatim
+// cannot name a single copy. The diagnostic sweep must reach circuit-level ops,
+// not only module bodies -- otherwise this misresolves silently.
+firrtl.circuit "CircuitLevelValueUser" {
+  hw.hierpath private @p [@Mid::@w]
+  // expected-error @below {{value user of hierpath @p cannot be resolved after inlining}}
+  sv.verbatim "cref {{0}}" {symbols = [@p]}
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module @CircuitLevelValueUser() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// A value user of a dead-rooted hierpath. @Unreachable is never instantiated,
+// so @p has no surviving context: retention cannot pin a path with no context,
+// and the hierpath op is erased -- a surviving reference would dangle.
+// Diagnose it instead (the erase records its symbol for the sweep).
+firrtl.circuit "DeadRootedValueUser" {
+  hw.hierpath private @p [@Unreachable::@w]
+  firrtl.module private @Unreachable() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module @DeadRootedValueUser() {
+    // expected-error @below {{value user of hierpath @p cannot be resolved after inlining: the hierpath has no surviving target}}
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+}
+
+// -----
+
+// One op, two refs, different fates: @live is matched and repointed; @dead is
+// dead-rooted and erased. The sweep's repoint exemption must be per-symbol,
+// not per-op -- an op-level skip lets @dead dangle behind @live's repoint.
+firrtl.circuit "ValueUserDeadBesideRepointed" {
+  hw.hierpath private @live [@Mid::@w]
+  hw.hierpath private @dead [@Unreachable::@x]
+  firrtl.module private @Unreachable() {
+    %x = firrtl.wire sym @x : !firrtl.uint<1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    // expected-error @below {{value user of hierpath @dead cannot be resolved after inlining: the hierpath has no surviving target}}
+    sv.verbatim "ref {{0}} {{1}}" {symbols = [@live, @dead]}
+  }
+  firrtl.module @ValueUserDeadBesideRepointed() {
+    firrtl.instance m @Mid()
+  }
+}
+
+// -----
+
+// A value user of a dead-rooted hierpath in a retained-but-uninstantiated
+// module. @Alt survives only as a choice alternative whose holder is itself
+// dead-erased, so no instance of @Alt remains -- but the module does, and its
+// ref would dangle once @p is erased. Inertness (no emitted hierarchy) does
+// not excuse invalid IR: diagnose.
+// PREMISE: choice targets/alternatives are seeded live even from a dead
+// holder (InliningInfo's non-InstanceOp-instantiator rule); if that seeding
+// ever narrows, @Alt is erased with its holder and this expected-error stops
+// firing.
+firrtl.circuit "DeadRootedUserInRetainedAlt" {
+  firrtl.option @Opt { firrtl.option_case @A }
+  hw.hierpath private @p [@DeadRoot::@w]
+  firrtl.module private @DeadRoot() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @Default() {}
+  firrtl.module private @Alt() {
+    // expected-error @below {{value user of hierpath @p cannot be resolved after inlining: the hierpath has no surviving target}}
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @DeadHolder() {
+    firrtl.instance_choice ic @Default alternatives @Opt { @A -> @Alt } ()
+  }
+  firrtl.module @DeadRootedUserInRetainedAlt() {}
+}

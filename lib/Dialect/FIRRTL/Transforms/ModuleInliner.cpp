@@ -33,11 +33,16 @@
 //                   canonicalization to reuse equal hierpaths effectively.
 //   - wasUsed       an annotation referenced this context, used to gate
 //                   fork-context emission.
+//   - valueUsed     a value user needs this context emitted regardless:
+//                   its refs must have somewhere to repoint.
 //
 //   Context kinds:
 //   - fork          a non-primary context; emitted under a fresh symbol
 //                   or folded into a path-equal canonical context
 //   - convergent    a fork folded onto a canonical from a different origSym
+//   - forked        said of an origSym whose contexts realize more than one
+//                   distinct namepath; gates the value-user sweep
+//                   (a convergent fork counts)
 //   - canonical     the emitted representative of path-equal contexts
 //   - duplicate     a context folded onto its canonical context
 //   - local         a context whose path collapsed to its terminal alone
@@ -46,6 +51,14 @@
 //   Other:
 //   - activeNLAs    the active set of contexts at a given inlining level:
 //                   narrowed by the recursive walk's path down to the leaf
+//   - rootActiveNLAs
+//                   the root-anchored active set used by value users:
+//                   narrowed only at each context's root crossing, and
+//                   inherited unnarrowed below it
+//   - for-all user  a `circt.nonlocal` ref in an annotation payload:
+//                   it names every instance of the path
+//   - value user    a hierpath ref anywhere else (sv.xmr.ref, force,
+//                   release): it names exactly one copy
 //   - dangling      a reference or handle kept past the point its target
 //                   is erased or renamed
 //   - dead-rooted   a hierpath left with no surviving context at all
@@ -70,8 +83,9 @@
 //          nonlocal-annotation ownership.  Writes no annotation.
 //  * P4  Write back:
 //          Serially canonicalize contexts (minting symbols), rewrite all
-//          annotations in parallel (the single writer), then materialize/erase
-//          hierpaths serially.
+//          annotations in parallel (the single writer), materialize/erase
+//          hierpaths and repoint value users serially, then sweep for value
+//          users no rewrite could reach (diagnose).
 //
 // Prerequisites:
 //  * Inline/flatten markers are annotations on regular modules.
@@ -84,8 +98,17 @@
 // Diagnosed and rejected:
 //  * Inlining an instance sitting under anything but a module or layer block.
 //  * Inlining a body with an inner reference to another module's body.
+//  * A value user (sv.xmr.ref / force / release) of a forked hierpath the
+//    inliner cannot repoint -- an original op in a module the fork shares.
+//    Cloned value users are repointed to their own fork; the rest are
+//    rejected rather than left naming one arbitrary copy (#10798).
+//    The sweep covers circuit-level carriers too: circuit-body ops and the
+//    circuit op's own attributes.
+//  * A value user of an erased (dead-rooted, I15) hierpath:
+//    diagnosed rather than left dangling (#10798).
 //
-// Both fire during the clone walk (P3), folding into walks we already perform.
+// The first two fire during the clone walk (P3), folding into walks we
+// already perform; the value-user rejects fire during write back (P4).
 // The pass fails, but the IR may be left partially inlined.
 // Only a P1/P2 rejection guarantees the input is untouched.
 //
@@ -106,6 +129,9 @@
 // Planning tables (P2):
 //  * I4  (ordered-ids)
 //        Ids are creation-ordered, contiguous per source symbol and per root.
+//        Strengthening: a live root's own context is discovered before any
+//        re-rooted one, so it is its group's front -- primary selection
+//        rests on it.  [asserted: canonicalizeContexts]
 //  * I5  (routing-sorted)
 //        Routing-table entries are born id-sorted and duplicate-free.
 //        [asserted: NLAPlanner::run]
@@ -157,6 +183,20 @@
 //        claimant (`realizedSym == origSym`),
 //        emitted unconditionally.  [asserted: writebackHierPaths]
 //        Only a context-less (dead-rooted) origSym is ever erased.
+//        A `valueUsed` context always canonicalizes and realizes a symbol,
+//        even a local or non-primary one -- its refs must repoint somewhere.
+//        [asserted: repointValueUsers]
+//
+// Value users:
+//  * I16 (attr-location)
+//        Attribute location is the for-all/value boundary: a `circt.nonlocal`
+//        ref inside the annotation payload is a for-all annotation user;
+//        a hierpath ref in any other attribute is a single-valued value user.
+//  * I17 (root-anchored)
+//        `rootActiveNLAs` grows only at root crossings, drawn from the
+//        route-narrowed set, and is inherited unnarrowed below.
+//        The instance DAG gives at most one context per origSym at any level:
+//        a nested root crossing would need the root module to contain itself.
 //
 //===----------------------------------------------------------------------===//
 
@@ -520,6 +560,14 @@ public:
   /// Whether this context was referenced by any annotation (I9).  Duplicates
   /// use canonical context symbols.  New hierpaths are emitted iff set.
   bool wasUsed = false;
+  /// Whether a value user requires this context materialized single-valued.
+  /// A value user is a non-annotation hierpath ref (sv.xmr.ref, force, ...).
+  /// Unlike `wasUsed`, this forces emission even for a local or non-primary
+  /// context: a value user consumes one reading, so its path must exist as
+  /// a named hierpath.
+  /// Duplicates propagate to canonical, as `wasUsed` does.
+  /// Rides in `wasUsed`'s tail padding: no change to sizeof(VirtualNLA).
+  bool valueUsed = false;
 
   static VirtualNLA *create(llvm::BumpPtrAllocator &alloc, unsigned id,
                             StringAttr origSym, ArrayRef<SurvivingHop> path) {
@@ -711,6 +759,12 @@ public:
   /// Source symbol -> its HierPathOp, recorded while bucketing during run().
   /// Valid pass-wide: hierpath ops are untouched until the final writeback.
   DenseMap<StringAttr, hw::HierPathOp> hierPathOps;
+
+  /// Source symbol -> its hierpath's root module (`HierPathOp::root()`),
+  /// recorded alongside `hierPathOps`.  The clone walk anchors a value user to
+  /// its hierpath root and needs this per routed context; keep it O(1) rather
+  /// than re-deriving root() on the frozen ops during the descent.
+  DenseMap<StringAttr, StringAttr> origSymToRoot;
 };
 
 } // namespace
@@ -735,8 +789,10 @@ LogicalResult NLAPlanner::run() {
   // VNLA creation is contiguous per origSym (I4), grouped by root.
   llvm::MapVector<StringAttr, SmallVector<hw::HierPathOp>> byRoot;
   for (auto nla : circuit.getOps<hw::HierPathOp>()) {
-    byRoot[nla.root()].push_back(nla);
+    auto root = nla.root();
+    byRoot[root].push_back(nla);
     hierPathOps[nla.getSymNameAttr()] = nla;
+    origSymToRoot[nla.getSymNameAttr()] = root;
   }
 
   for (auto &[origRoot, nlas] : byRoot) {
@@ -1314,6 +1370,13 @@ public:
                                    ///< (dead-rooted).
   } stats;
 
+  /// When false, an unresolvable value user of a forked hierpath (#10798) is a
+  /// warning that leaves the reference naming one arbitrary copy,
+  /// rather than a hard error.
+  /// Set from the pass option; defaults to erroring so a silent miscompile
+  /// never escapes unless a caller opts in.
+  bool errorOnUnresolvedValueUser = true;
+
 private:
   //===- Inlining contexts ------------------------------------------------===//
 
@@ -1345,9 +1408,24 @@ private:
     /// VNLAs active at this level, id-sorted (I6; see setActiveNLAsForChild).
     SmallVector<VirtualNLA *> activeNLAs;
 
+    /// VNLAs whose root instance this descent has crossed, id-sorted.
+    /// Unlike `activeNLAs`, it is not route-narrowed at interior or off-path
+    /// hops: a value user is anchored at its hierpath's root and, by SV upward
+    /// name resolution, may sit anywhere in that root's subtree -- including a
+    /// sibling branch off the path.  So value users match against this set, not
+    /// `activeNLAs`.  It is seeded/grown only when the descent crosses an
+    /// instance of a hierpath's root module (a root hop), and inherited
+    /// unchanged into nested levels otherwise (setActiveNLAsForChild).
+    SmallVector<VirtualNLA *> rootActiveNLAs;
+
     /// Set the active contexts for this inlining level.
     void setActivePaths(ArrayRef<VirtualNLA *> nlas) {
       activeNLAs.assign(nlas);
+    }
+
+    /// Set the root-anchored contexts for this inlining level.
+    void setRootActivePaths(ArrayRef<VirtualNLA *> nlas) {
+      rootActiveNLAs.assign(nlas);
     }
 
     /// Retarget the inner references of this level's clones once complete.
@@ -1397,13 +1475,16 @@ private:
                                    hw::InnerSymAttr oldSymAttr,
                                    hw::InnerSymAttr newSymAttr);
 
-  /// Compute the contexts active inside a child inlining level: the
-  /// intersection (I5/I6) of the parent's active set with the contexts routed
-  /// through `instance`.
-  ///
+  /// Compute the contexts active inside a child inlining level.
+  /// `activeNLAs` (route, for annotations): the intersection (I5/I6) of the
+  /// parent's active set with the contexts routed through `instance`.
   /// `std::nullopt` = top-level entry, no parent filter.
-  /// Inputs are id-sorted; the result stays id-sorted.
+  /// `parentRootNLAs` (root-anchored, for value users): the parent's
+  /// `rootActiveNLAs`, grown by newly rooted contexts, inherited otherwise.
+  /// A context roots here iff `instance` targets its hierpath's root module.
+  /// All inputs are id-sorted; both results stay id-sorted.
   void setActiveNLAsForChild(std::optional<ArrayRef<VirtualNLA *>> activeNLAs,
+                             ArrayRef<VirtualNLA *> parentRootNLAs,
                              InliningLevel &childIL, Operation *instance);
 
   /// Rewrite the ports of a module as wires.
@@ -1483,6 +1564,19 @@ private:
   /// P4: materialize the surviving hierpaths and erase the rest.
   void writebackHierPaths();
 
+  /// P4: retarget each recorded value user to its context's realized
+  /// hierpath symbol (records made in `recordContexts`).
+  /// Non-annotation attributes only; the payload is the anno writer's domain.
+  void repointValueUsers();
+
+  /// P4: reject (loudly, never silently) a value user of a forked hierpath the
+  /// inliner could not repoint -- an original op in a retained module the fork
+  /// shares, a circuit-level user, or any op the clone walk did not record.
+  /// Such a reference resolves to one arbitrary copy of a multiply-realized
+  /// root, which is not the reading it consumed (#10798).  Fork-gated: skipped
+  /// entirely unless some hierpath forked.
+  LogicalResult diagnoseUnresolvedValueUsers();
+
   /// Build the resolved namepath (an ArrayAttr of inner-refs / flat symbols)
   /// from a VNLA's surviving hops.
   ///
@@ -1552,6 +1646,20 @@ private:
 #endif
   } claimed;
 
+  /// Source symbols that forked: their contexts realize more than one distinct
+  /// path (canonical).  Populated at the end of `canonicalizeContexts` by
+  /// counting distinct canonicals -- not fresh-name mints, since a fork can
+  /// converge onto another symbol's canonical (identical namepath) and borrow
+  /// its name without minting.  Fork-gates the value-user resolution check
+  /// (`diagnoseUnresolvedValueUsers`); a hierpath that did not fork cannot
+  /// leave a value user ambiguous.
+  DenseSet<StringAttr> forkedOrigSyms;
+
+  /// Source symbols whose hw.hierpath was erased as dead-rooted (I15):
+  /// no surviving context to pin.  A value user naming one would dangle,
+  /// so the diagnostic sweep matches these too.
+  DenseSet<StringAttr> erasedOrigSyms;
+
   /// For every op the walk cloned that carries `circt.nonlocal` annotations,
   /// the contexts that own them: active on the clone's descent (route) and
   /// owned by its destination module (I13).
@@ -1566,6 +1674,13 @@ private:
   /// The other side of I7: routing keys are originals that outlive the walk.
   /// These keys are clones that do.
   DenseMap<Operation *, SmallVector<VirtualNLA *, 2>> clonedAnnoContexts;
+
+  /// For every op the walk cloned that references a hierpath outside its
+  /// annotation payload (a value user), the contexts it names.
+  /// P3 records here; P4 `repointValueUsers` retargets each ref to its
+  /// context's realized symbol.
+  /// Same key-stability argument as `clonedAnnoContexts` (I7).
+  DenseMap<Operation *, SmallVector<VirtualNLA *, 2>> clonedValueUserRefs;
 
   /// The debug scopes created for inlined instances.
   /// Scopes that are unused after inlining will be deleted again.
@@ -1590,8 +1705,9 @@ LogicalResult Inliner::run() {
   canonicalizeContexts();
   rewriteAnnotations();
   writebackHierPaths();
+  repointValueUsers();
 
-  return success();
+  return diagnoseUnresolvedValueUsers();
 }
 
 //===- P3: clone and rename -----------------------------------------------===//
@@ -1671,14 +1787,18 @@ bool Inliner::renameInstance(StringRef prefix, InliningLevel &il,
 void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
   StringAttr destMod = il.mic.module.getModuleNameAttr();
 
-  // Intersect a hierpath symbol's context group with the id-sorted active set,
+  // Intersect a hierpath symbol's context group with an id-sorted active set,
   // keeping only those this destination module owns.
 
   // A sym's group spans a gap-free id interval (I4; ids globally unique).
   //
   // Its intersection with the id-sorted set (I6) forms one contiguous slice:
   // two searches at the bounds, no per-member probing, id-ordered result.
-  auto matchContexts = [&](FlatSymbolRefAttr sym, ArrayRef<VirtualNLA *> active,
+  //
+  // Annotations pass the route-based `activeNLAs`;
+  // value users pass the root-anchored `rootActiveNLAs`.
+  auto matchContexts = [&](FlatSymbolRefAttr sym, bool atRoot,
+                           ArrayRef<VirtualNLA *> active,
                            SmallVectorImpl<VirtualNLA *> &out) {
     auto it = nlaPlanner.origToVNLAs.find(sym.getAttr());
     if (it == nlaPlanner.origToVNLAs.end())
@@ -1691,7 +1811,14 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
       // I13: ownership.
       //
       // An annotation is written by the module holding the context's leaf: the
-      // annotated op lives there, and it clones into the destination.
+      // annotated op lives there, and it clones into the destination
+      // (`atRoot` false).
+      //
+      // A value user sits at the context's root reference frame (`atRoot`
+      // true), owned by the module holding the first hop.
+      //
+      // Both reduce to the clone's destination module: opposite ends of the
+      // same path.
       //
       // Activation can be broader than ownership: parent-copy contexts route
       // through the same original instance ops but belong to the parent's
@@ -1700,7 +1827,8 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
       // Nonempty per I8: the terminal hop always survives.
       auto path = (*lo)->getPath();
       assert(!path.empty() && "terminal hop is expected to always survive");
-      if (path.back().finalMod != destMod)
+      StringAttr owner = atRoot ? path.front().finalMod : path.back().finalMod;
+      if (owner != destMod)
         continue;
       // One op may name a hierpath more than once; record each owned context
       // once (the writeback re-associates by origSym).
@@ -1708,6 +1836,10 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
         out.push_back(*lo);
     }
   };
+
+  // Dispatch by attribute location, the for-all/value boundary (I16):
+  // annotation payload -> P4's annotation writer; anything else -> P4's
+  // value-user repoint.
 
   // Annotations: record the owning contexts for the writeback.
   //
@@ -1720,7 +1852,7 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
     if (!sym)
       return;
     hasNonlocal = true;
-    matchContexts(sym, il.activeNLAs, annoContexts);
+    matchContexts(sym, /*atRoot=*/false, il.activeNLAs, annoContexts);
   };
   if (auto annos = newOp->getAttrOfType<ArrayAttr>("annotations"))
     for (Attribute attr : annos)
@@ -1731,6 +1863,38 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
         visitAnno(Annotation(attr));
   if (hasNonlocal)
     clonedAnnoContexts[newOp] = std::move(annoContexts);
+
+  // Value users: scan every non-annotation attribute for hierpath refs.
+  // A matched context must materialize single-valued even when local or
+  // non-primary, so flag it `valueUsed` and record the op for repointing.
+  // Matched against the root-anchored set (I17), not the route-based one:
+  // by SV upward resolution a value user may sit anywhere in its root's
+  // subtree, including a sibling branch off the namepath.
+  //
+  // Empty at most levels, so gate the scan on a non-empty set; an unrecorded
+  // op still falls through to the diagnostic sweep, so this is a fast path,
+  // not a semantic gate.
+  // The dictionary fetch stays inside the gate too: getAttrDictionary
+  // interns inherent attrs, the expensive half here.
+  if (!il.rootActiveNLAs.empty()) {
+    SmallVector<VirtualNLA *, 2> valueContexts;
+    mlir::AttrTypeWalker walker;
+    walker.addWalk([&](FlatSymbolRefAttr sym) {
+      matchContexts(sym, /*atRoot=*/true, il.rootActiveNLAs, valueContexts);
+    });
+    DictionaryAttr dict = newOp->getAttrDictionary();
+    for (NamedAttribute na : dict) {
+      StringRef name = na.getName().getValue();
+      if (name == "annotations" || name == "portAnnotations")
+        continue;
+      walker.walk(na.getValue());
+    }
+    if (!valueContexts.empty()) {
+      for (auto *v : valueContexts)
+        v->valueUsed = true;
+      clonedValueUserRefs[newOp] = std::move(valueContexts);
+    }
+  }
 }
 
 void Inliner::updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
@@ -1764,7 +1928,8 @@ void Inliner::updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
 }
 
 void Inliner::setActiveNLAsForChild(
-    std::optional<ArrayRef<VirtualNLA *>> activeNLAs, InliningLevel &childIL,
+    std::optional<ArrayRef<VirtualNLA *>> activeNLAs,
+    ArrayRef<VirtualNLA *> parentRootNLAs, InliningLevel &childIL,
     Operation *instance) {
   // One lookup by the instance op; the routing entry is born id-sorted and
   // duplicate-free (I5, verified once at the end of planning).
@@ -1773,6 +1938,12 @@ void Inliner::setActiveNLAsForChild(
       it != nlaPlanner.pathRoutingTable.end())
     instNLAs = it->second;
 
+  // Route-narrowed active set (annotations, hop tracking).
+  //
+  // Two sets because ownership differs (I17): annotations are leaf-owned, so
+  // narrowing by route is exact; value users are root-anchored and need the
+  // unnarrowed set below.
+  //
   // An empty parent set stays empty; the child default is empty, so leave it.
   if (!activeNLAs) {
     childIL.setActivePaths(instNLAs);
@@ -1793,6 +1964,36 @@ void Inliner::setActiveNLAsForChild(
       if (llvm::binary_search(in, vnla, vnlaIdLess))
         childActiveNLAs.push_back(vnla);
     childIL.setActivePaths(childActiveNLAs);
+  }
+
+  // Root-anchored set (I17), for value users: the contexts this crossing
+  // roots, merged into the parent's set, inherited unnarrowed below.
+  // `instance` roots a context iff its target is that context's hierpath root.
+  //
+  // Newly-rooted contexts come from the route-narrowed `childIL.activeNLAs`,
+  // not raw `routing[instance]`: a multiply-inlined parent clones the single
+  // root-instance op, and only the narrowing (the path above the root)
+  // selects this copy's context.
+  SmallVector<VirtualNLA *> rooted;
+  if (auto instOp = dyn_cast<InstanceOp>(instance)) {
+    StringAttr target = instOp.getModuleNameAttr().getAttr();
+    for (auto *vnla : childIL.activeNLAs)
+      if (nlaPlanner.origSymToRoot.lookup(vnla->origSym) == target)
+        rooted.push_back(vnla);
+  }
+  // Every carried context stays visible below every crossing: a clone below
+  // is one elaboration copy, and each carried context is already that copy's
+  // fork.  Shared ops (retained-module bodies) are never recorded; the
+  // diagnostic sweep judges them instead.
+  if (rooted.empty()) {
+    childIL.setRootActivePaths(parentRootNLAs);
+  } else {
+    // Merge two id-sorted, disjoint runs (a context roots at exactly one hop).
+    SmallVector<VirtualNLA *> merged;
+    merged.reserve(parentRootNLAs.size() + rooted.size());
+    std::merge(parentRootNLAs.begin(), parentRootNLAs.end(), rooted.begin(),
+               rooted.end(), std::back_inserter(merged), vnlaIdLess);
+    childIL.setRootActivePaths(merged);
   }
 }
 
@@ -1996,7 +2197,7 @@ LogicalResult Inliner::processInto(StringRef prefix, InliningLevel &il,
     ++(flatten ? stats.instancesFlattened : stats.instancesInlined);
 
     InliningLevel childIL(il.mic, childModule);
-    setActiveNLAsForChild(il.activeNLAs, childIL, instance);
+    setActiveNLAsForChild(il.activeNLAs, il.rootActiveNLAs, childIL, instance);
     createDebugScope(childIL, instance, il.debugScope);
 
     // Create the wire mapping for results + ports.
@@ -2050,7 +2251,7 @@ LogicalResult Inliner::processInstances(FModuleOp module, bool flatten) {
 
     InliningLevel childIL(mic, target);
     setActiveNLAsForChild(/* Activate all through this instance */ std::nullopt,
-                          childIL, instance);
+                          /*parentRootNLAs=*/{}, childIL, instance);
     createDebugScope(childIL, instance);
 
     auto nestedPrefix = (instance.getName() + "_").str();
@@ -2147,10 +2348,13 @@ ArrayAttr Inliner::materializeNamepath(VirtualNLA *vnla) {
 }
 
 void Inliner::canonicalize(VirtualNLA *vnla) {
-  // A local context never canonicalizes.
+  // Only a value user canonicalizes a local context (I15).
   //
-  // The annotation localizes onto the op and the path is dropped.
-  assert(!vnla->isLocal() && "local VNLAs have no hierpath to canonicalize");
+  // Its one-hop path must exist for the ref to repoint somewhere.
+  //
+  // An annotation on a local context drops the path instead.
+  assert((!vnla->isLocal() || vnla->valueUsed) &&
+         "local VNLAs are canonicalized only for value users");
   assert(!vnla->realizedSym && "context canonicalized twice");
   VirtualNLA *canon =
       canonicalByPath.try_emplace(materializeNamepath(vnla), vnla)
@@ -2208,9 +2412,30 @@ void Inliner::canonicalizeContexts() {
     ArrayRef<VirtualNLA *> group(&nlaPlanner.allVNLAs[groupStart],
                                  i - groupStart);
 
+#ifndef NDEBUG
+    // Primary selection relies on root-first discovery (I4): a live root's own
+    // context is pushed before any re-rooted one, so it is `group.front()`.
+    //
+    // A value user absorbed into the retained root keeps origSym un-repointed
+    // and must resolve to that context; reorder the push and primary selection
+    // silently misresolves.
+    //
+    // The check discriminates: `finalMod` is `currentDest` before the hop
+    // advances it, so a re-rooted context's first hop carries its trimmed-root
+    // ancestor, never the original root.
+    //
+    // An unknown root is not live, so the check is vacuous rather than firing.
+    if (StringAttr root = nlaPlanner.origSymToRoot.lookup(origSym)) {
+      bool rootLive = inliningFacts.isKnownLive(symbolTable.lookup(root));
+      assert((!rootLive || group.front()->getPath().front().finalMod == root) &&
+             "a live root's context must be group.front() (discovered "
+             "root-first); primary selection depends on it");
+    }
+#endif
+
     // Pick the primary (I15): the first non-local context, else the front.
     // A non-local namepath best matches the source hierpath.
-    // An all-local group still pins its symbol through its one-hop path.
+    // An all-local group still anchors value users through its one-hop path.
     VirtualNLA *primary = nullptr;
     for (auto *v : group)
       if (!v->isLocal()) {
@@ -2234,12 +2459,35 @@ void Inliner::canonicalizeContexts() {
 
     // Canonicalize the remaining forks (non-primary): dedup by path and mint
     // fresh names (origSym is already claimed).
-    // A local fork is skipped:
-    // an annotation on a local context simply drops the path.
+    //
+    // A local fork is skipped unless a value user needs its one-hop path
+    // emitted (I15).
+    //
+    // An annotation on a local context simply drops the path.
     for (auto *v : group) {
-      if (v == primary || v->isLocal())
+      if (v == primary)
+        continue;
+      if (v->isLocal() && !v->valueUsed)
         continue;
       canonicalize(v);
+    }
+
+    // Record whether this origSym forked: its contexts realize more than one
+    // distinct namepath, so the same reference would resolve differently per
+    // context.
+    // Gates the value-user sweep.
+    // A single-context group cannot fork; build no namepath for it.
+    // Compare interned namepaths (== is identity), not canonical pointers:
+    // dropped locals never enter `canonicalOf` (spurious fork), and a
+    // convergent fork borrows another origSym's symbol yet still forks this
+    // one (missed fork).
+    if (group.size() > 1) {
+      ArrayAttr firstPath = materializeNamepath(group.front());
+      for (auto *v : group.drop_front())
+        if (materializeNamepath(v) != firstPath) {
+          forkedOrigSyms.insert(origSym);
+          break;
+        }
     }
   }
 }
@@ -2343,6 +2591,8 @@ void Inliner::writebackHierPaths() {
     ++stats.hierPathsMerged;
     if (dup->wasUsed)
       canon->wasUsed = true;
+    if (dup->valueUsed)
+      canon->valueUsed = true;
   }
 
 #ifndef NDEBUG
@@ -2393,11 +2643,12 @@ void Inliner::writebackHierPaths() {
     // Duplicates are materialized by their canonical VNLA.
     if (canonicalOrSelf(vnla) != vnla)
       continue;
-    // The primary is emitted unconditionally (I15).
-    // A fork emits only when an annotation referenced it, and a local
-    // non-primary has neither a minted symbol nor a path.
+    // The primary is emitted unconditionally (I15); a value user forces its
+    // context out even when local or non-primary.
+    // Otherwise a fork emits only when an annotation referenced it, and a
+    // local non-primary has neither a minted symbol nor a path.
     bool isPrimary = vnla->realizedSym == vnla->origSym;
-    if (!isPrimary && (vnla->isLocal() || !vnla->wasUsed))
+    if (!isPrimary && !vnla->valueUsed && (vnla->isLocal() || !vnla->wasUsed))
       continue;
 
     auto arrayAttr = materializeNamepath(vnla);
@@ -2428,9 +2679,198 @@ void Inliner::writebackHierPaths() {
     if (retainedPaths.contains(sym))
       continue;
     // Only a context-less (dead-rooted) origSym reaches here (I15).
+    // Record it so the sweep can diagnose a would-dangle value user.
+    erasedOrigSyms.insert(sym);
     deadPath.erase();
     ++stats.hierPathsErased;
   }
+}
+
+void Inliner::repointValueUsers() {
+  // Value users were recorded (recordContexts) naming their context's
+  // original symbol.
+  // Now that P4 has minted realized symbols, retarget each ref to the
+  // symbol its context materialized under.
+  // `canonicalOrSelf` folds a duplicate onto its canonical, which carries
+  // the realized symbol and was emitted (duplicates propagate `valueUsed`).
+  // Only non-annotation attributes are rewritten (I16); the payload is the
+  // annotation writer's.
+  for (auto &[op, contexts] : clonedValueUserRefs) {
+    // Keying by origSym is well-defined: at most one context per origSym
+    // reaches any clone (I17).
+    DenseMap<StringAttr, StringAttr> remap;
+    for (auto *ctx : contexts) {
+      StringAttr realized = canonicalOrSelf(ctx)->realizedSym;
+      assert(realized && "value-user context was never realized (I15)");
+      // The primary keeps origSym: that entry is an identity remap (a no-op).
+      remap[ctx->origSym] = realized;
+    }
+
+    mlir::AttrTypeReplacer replacer;
+    replacer.addReplacement(
+        [&](FlatSymbolRefAttr sym) -> std::pair<Attribute, WalkResult> {
+          auto it = remap.find(sym.getAttr());
+          if (it == remap.end() || it->second == sym.getAttr())
+            return {sym, WalkResult::skip()};
+          return {FlatSymbolRefAttr::get(it->second), WalkResult::skip()};
+        });
+
+    // Retarget each changed attribute in place; setAttr routes each to its
+    // home (inherent or discardable) itself.
+    // The dictionary snapshot is immutable, so iterating it while writing
+    // through setAttr is safe.
+    // Cost: an inherent attr on a properties op writes storage directly; a
+    // discardable attr re-interns that dictionary once per changed attr.
+    // Nearly always exactly one attr changes, on the few recorded ops --
+    // cheaper than rebuilding the full dictionary, annotations included.
+    DictionaryAttr dict = op->getAttrDictionary();
+    for (NamedAttribute na : dict) {
+      StringRef name = na.getName().getValue();
+      if (name == "annotations" || name == "portAnnotations")
+        continue;
+      Attribute replaced = replacer.replace(na.getValue());
+      if (replaced != na.getValue())
+        op->setAttr(na.getName(), replaced);
+    }
+  }
+}
+
+LogicalResult Inliner::diagnoseUnresolvedValueUsers() {
+  // Gated on trouble: only a forked hierpath can leave a value user ambiguous,
+  // and only an erased (dead-rooted) one can leave a value user dangling.
+  // With neither, this whole walk is skipped -- the common case pays nothing.
+  if (forkedOrigSyms.empty() && erasedOrigSyms.empty())
+    return success();
+
+  // One sweep of the final IR gathers two things: the modules still
+  // instantiated, and every value user naming a forked or erased symbol
+  // the clone walk did not already repoint.
+  // Instantiation feeds the inertness skip below: a locally-dead module
+  // emits no hierarchy, so its value users cannot misresolve.
+  DenseSet<StringAttr> instantiated;
+  struct Candidate {
+    Operation *op;
+    StringAttr module;
+    StringAttr sym;
+    /// Whether the module is discardable-when-unused, i.e. not public: a public
+    /// module may be instantiated externally, out of our view, so "no local
+    /// instance" does not make its value users dead.
+    bool canDiscard;
+  };
+  SmallVector<Candidate> candidates;
+
+  // Scan one op's non-annotation attributes (I16) for a reference to a
+  // forked or erased symbol.
+  auto scanValueUser = [&](Operation *op, StringAttr modName, bool canDiscard) {
+    // Refs the repoint already handled are correct -- including an identity
+    // repoint to the primary, which keeps the original symbol.  The exemption
+    // is per-symbol, not per-op: one op may also name a symbol the repoint
+    // never matched (a dead-rooted ref beside a repointed one).  No mint can
+    // collide with an erased origSym (it was in the namespace).  A borrowed
+    // symbol (convergent fork realized under another origSym) also exempts
+    // that origSym's own refs on this op -- soundly: the borrow means the
+    // namepaths are equal, so such a ref resolves exactly as the repointed
+    // one does.  Nor could that ref have wanted a different context: had one
+    // matched, it would carry its own remap entry and the ref would be
+    // rewritten by it.  The unexempted case arises only with no dominating
+    // root -- already outside the value-user contract, so there is no
+    // correct answer to miss.
+    DenseSet<StringAttr> handled;
+    if (auto it = clonedValueUserRefs.find(op); it != clonedValueUserRefs.end())
+      for (auto *ctx : it->second)
+        handled.insert(canonicalOrSelf(ctx)->realizedSym);
+    // A fresh walker per op: AttrTypeWalker memoizes visited attributes, so a
+    // single walker reused across ops fires the callback only for the first op
+    // naming an interned symbol -- silently missing every other value user of
+    // the same forked hierpath.
+    mlir::AttrTypeWalker walker;
+    walker.addWalk([&](FlatSymbolRefAttr ref) {
+      if (handled.contains(ref.getAttr()))
+        return;
+      if (forkedOrigSyms.contains(ref.getAttr()) ||
+          erasedOrigSyms.contains(ref.getAttr()))
+        candidates.push_back({op, modName, ref.getAttr(), canDiscard});
+    });
+    DictionaryAttr dict = op->getAttrDictionary();
+    for (NamedAttribute na : dict) {
+      StringRef name = na.getName().getValue();
+      if (name == "annotations" || name == "portAnnotations")
+        continue;
+      walker.walk(na.getValue());
+    }
+  };
+
+  // Sweep module bodies and circuit-level ops: a hand-written sv.verbatim /
+  // emit can name a hierpath at the circuit level, where the clone walk
+  // never visited it.  A circuit-level op has no containing module (null),
+  // which the reject loop treats as never-skippable.  The CircuitOp's own
+  // attributes are a carrier too; scan them first, since the walk below
+  // only visits its body ops.
+  scanValueUser(circuit, /*modName=*/StringAttr(), /*canDiscard=*/false);
+  for (Operation &top : circuit.getBodyBlock()->getOperations()) {
+    if (auto module = dyn_cast<FModuleLike>(top)) {
+      StringAttr modName = module.getModuleNameAttr();
+      bool canDiscard = module.canDiscardOnUseEmpty();
+      module.walk([&](Operation *op) {
+        if (auto inst = dyn_cast<igraph::InstanceOpInterface>(op))
+          for (Attribute name : inst.getReferencedModuleNamesAttr())
+            instantiated.insert(cast<StringAttr>(name));
+        scanValueUser(op, modName, canDiscard);
+      });
+    } else if (!isa<hw::HierPathOp>(top)) {
+      top.walk([&](Operation *op) {
+        scanValueUser(op, /*modName=*/StringAttr(), /*canDiscard=*/false);
+      });
+    }
+  }
+
+  LogicalResult result = success();
+  for (const auto &c : candidates) {
+    // A circuit-level user has no containing module: neither skip applies,
+    // structurally.
+    // A root-lookup miss would compare null == null and silently skip;
+    // don't lean on the lookup being total.
+    if (c.module) {
+      // In the hierpath's own root module the reference resolves relative to
+      // itself -- single-valued per root instance, the well-formed for-all
+      // shape.  Sound even for a public root: each external instance resolves
+      // to its own.
+      if (nlaPlanner.origSymToRoot.lookup(c.sym) == c.module)
+        continue;
+      // A locally-dead private module is inert: no external users (private)
+      // and no local instance, so it emits no hierarchy and cannot
+      // misresolve.  A public module is never inert this way -- it may be
+      // instantiated externally, where this reference would misresolve.
+      // Diagnose, don't skip.  Inertness excuses only a forked sym (a
+      // resolution question).  An erased sym is a validity question: the ref
+      // dangles in any surviving module, instantiated or not.  A retained
+      // choice target can outlive its only instantiator.
+      if (!erasedOrigSyms.contains(c.sym) && c.canDiscard &&
+          !instantiated.contains(c.module))
+        continue;
+    }
+    // Anything else: the reference was not repointed and cannot stand --
+    // forked: it names one arbitrary copy; erased: it dangles outright.
+    // Refuse rather than emit valid-but-wrong (or invalid) IR. With
+    // error-on-unresolved-value-user=false the caller opts to keep that
+    // reference and only warn, to ease incremental rollout -- an
+    // arbitrary-copy read for forked, a dangling ref for erased.
+    InFlightDiagnostic diag =
+        errorOnUnresolvedValueUser
+            ? c.op->emitError("value user of hierpath @")
+            : c.op->emitWarning("value user of hierpath @");
+    diag << c.sym.getValue() << " cannot be resolved after inlining: ";
+    if (erasedOrigSyms.contains(c.sym))
+      diag << "the hierpath has no surviving target (dead-rooted) and was "
+              "erased, so this reference would dangle";
+    else
+      diag << "its root module was inlined into multiple instances and this "
+              "reference cannot name a single one";
+    diag << " (see https://github.com/llvm/circt/issues/10798)";
+    if (errorOnUnresolvedValueUser)
+      result = failure();
+  }
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2475,6 +2915,7 @@ class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
     // Run Inlining: Clone (P3), and writeback (P4).
     CircuitNamespace circuitNamespace(circuit);
     Inliner inliner(circuit, symbolTable, circuitNamespace, *facts, nlaPlanner);
+    inliner.errorOnUnresolvedValueUser = errorOnUnresolvedValueUser;
     if (failed(inliner.run()))
       signalPassFailure();
 

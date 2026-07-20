@@ -2998,6 +2998,462 @@ firrtl.circuit "ModuleOnlyGCUntouched" {
 
 // -----
 
+//===----------------------------------------------------------------------===//
+// Value users: a non-annotation hierpath ref (here sv.xmr.ref) names a single
+// path member, so when inlining forks a hierpath each cloned value user must be
+// repointed to its own realized context -- not left naming one arbitrary copy
+// (the #10798 miscompile). Unlike an annotation, a value user cannot localize
+// its path away; the (now one-hop) hierpath is retained.
+//===----------------------------------------------------------------------===//
+
+// A one-hop hierpath whose leaf lives in the inlined module: inlining @Mid
+// twice clones @w into two copies, forking @xmr into two locals. Each cloned
+// xmr resolves to its own copy.
+// CHECK-LABEL: firrtl.circuit "ValueUserForkLocal"
+firrtl.circuit "ValueUserForkLocal" {
+  // CHECK:      hw.hierpath private @xmr [@ValueUserForkLocal::@w_0]
+  // CHECK-NEXT: hw.hierpath private @xmr_0 [@ValueUserForkLocal::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @xmr [@Mid::@w]
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    %x = sv.xmr.ref @xmr : !hw.inout<i1>
+  }
+  // CHECK:      firrtl.module @ValueUserForkLocal()
+  // CHECK:        %m1_w = firrtl.wire sym @w
+  // CHECK-NEXT:   sv.xmr.ref @xmr_0
+  // CHECK:        %m2_w = firrtl.wire sym @w_0
+  // CHECK-NEXT:   sv.xmr.ref @xmr
+  firrtl.module @ValueUserForkLocal() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// The forked hierpath stays multi-hop: its leaf is in @Leaf (retained), reached
+// through an instance cloned by inlining @Mid. The value user (xmr in @Mid) is
+// owned by the path's root, not its leaf -- each clone repoints to the context
+// whose first hop is its own @Leaf instance.
+// CHECK-LABEL: firrtl.circuit "ValueUserForkNonLocal"
+firrtl.circuit "ValueUserForkNonLocal" {
+  // CHECK:      hw.hierpath private @xmr [@ValueUserForkNonLocal::@l_0, @Leaf::@w]
+  // CHECK-NEXT: hw.hierpath private @xmr_0 [@ValueUserForkNonLocal::@l, @Leaf::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @xmr [@Mid::@l, @Leaf::@w]
+  firrtl.module private @Leaf() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance l sym @l @Leaf()
+    %x = sv.xmr.ref @xmr : !hw.inout<i1>
+  }
+  // CHECK:      firrtl.module @ValueUserForkNonLocal()
+  // CHECK:        firrtl.instance m1_l sym @l @Leaf()
+  // CHECK-NEXT:   sv.xmr.ref @xmr_0
+  // CHECK:        firrtl.instance m2_l sym @l_0 @Leaf()
+  // CHECK-NEXT:   sv.xmr.ref @xmr
+  firrtl.module @ValueUserForkNonLocal() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// One op names the same hierpath as both an annotation user (in its payload)
+// and a value user (in another attribute). The fork rewrites the annotation and
+// repoints the value ref independently -- the two never collide, because the
+// attribute location is the for-all/value boundary.
+// CHECK-LABEL: firrtl.circuit "ValueUserBothUsers"
+firrtl.circuit "ValueUserBothUsers" {
+  // CHECK:      hw.hierpath private @h [@ValueUserBothUsers::@w_0]
+  // CHECK-NEXT: hw.hierpath private @h_0 [@ValueUserBothUsers::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @h [@Mid::@w]
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    "test.both"() {ref = @h, annotations = [{circt.nonlocal = @h, class = "c"}]} : () -> ()
+  }
+  // CHECK:      firrtl.module @ValueUserBothUsers()
+  // CHECK:        %m1_w = firrtl.wire sym @w
+  // CHECK-NEXT:   "test.both"() {annotations = [{class = "c"}], ref = @h_0}
+  // CHECK:        %m2_w = firrtl.wire sym @w_0
+  // CHECK-NEXT:   "test.both"() {annotations = [{class = "c"}], ref = @h}
+  firrtl.module @ValueUserBothUsers() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// A value user whose path fully localizes (single inline, no fork). An
+// annotation here would drop its path; the value user keeps the (now one-hop)
+// hierpath so it still resolves.
+// CHECK-LABEL: firrtl.circuit "ValueUserLocalize"
+firrtl.circuit "ValueUserLocalize" {
+  // CHECK:      hw.hierpath private @xmr [@ValueUserLocalize::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @xmr [@ValueUserLocalize::@m, @Mid::@w]
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    %x = sv.xmr.ref @xmr : !hw.inout<i1>
+  }
+  // CHECK:      firrtl.module @ValueUserLocalize()
+  // CHECK:        %m_w = firrtl.wire sym @w
+  // CHECK-NEXT:   sv.xmr.ref @xmr
+  firrtl.module @ValueUserLocalize() {
+    firrtl.instance m sym @m @Mid()
+  }
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Off-path value users. A value user is anchored at its hierpath root and, by
+// SV upward name resolution, may sit anywhere in the root's subtree -- not just
+// on the path. When inlining forks a hierpath (its root module is multiplied),
+// a value user in a sibling branch off the path must still be repointed to the
+// fork whose root instance is its ancestor, not left naming one arbitrary copy.
+//===----------------------------------------------------------------------===//
+
+// Off-path fork, all inlined: @Mid (root of @p, path Mid->t->Tw) is inlined
+// twice; the xmr sits in sibling @D, off @p's path. Each copy must read its own
+// @Tw instance. Oracle: m1's xmr -> @p_0 (@t = m1_t), m2's xmr -> @p (@t_0 =
+// m2_t); the two never share a target.
+// CHECK-LABEL: firrtl.circuit "ValueUserOffPathFork"
+firrtl.circuit "ValueUserOffPathFork" {
+  // CHECK:      hw.hierpath private @p [@ValueUserOffPathFork::@t_0, @Tw::@w]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@ValueUserOffPathFork::@t, @Tw::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@Mid::@t, @Tw::@w]
+  firrtl.module @Tw() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @D() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance d @D()
+    firrtl.instance t sym @t @Tw()
+  }
+  // CHECK:      firrtl.module @ValueUserOffPathFork()
+  // CHECK:        sv.xmr.ref @p_0
+  // CHECK-NEXT:   firrtl.instance m1_t sym @t @Tw()
+  // CHECK:        sv.xmr.ref @p
+  // CHECK-NEXT:   firrtl.instance m2_t sym @t_0 @Tw()
+  firrtl.module @ValueUserOffPathFork() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// Off-path, NO fork (single inline): @Mid inlined once, so @p re-roots to a
+// single context that keeps @p. The off-path xmr, left naming @p, reads that
+// one correct copy -- no repoint needed, no fork minted.
+// CHECK-LABEL: firrtl.circuit "ValueUserOffPathNoFork"
+firrtl.circuit "ValueUserOffPathNoFork" {
+  // CHECK:      hw.hierpath private @p [@ValueUserOffPathNoFork::@t, @Tw::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@Mid::@t, @Tw::@w]
+  firrtl.module @Tw() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @D() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance d @D()
+    firrtl.instance t sym @t @Tw()
+  }
+  // CHECK:      firrtl.module @ValueUserOffPathNoFork()
+  // CHECK:        sv.xmr.ref @p
+  firrtl.module @ValueUserOffPathNoFork() {
+    firrtl.instance m1 @Mid()
+  }
+}
+
+// -----
+
+// Off-path, diamond: two instances of the root @M0 sit in one inlined subtree.
+// The fork is driven by the interior @M0 instance, not the outer one, so the
+// off-path xmr under m0a must repoint to m0a's fork and the one under m0b to
+// m0b's. Oracle: distinct hierpaths reaching t1_m0a_t vs t1_m0b_t.
+// CHECK-LABEL: firrtl.circuit "ValueUserOffPathDiamond"
+firrtl.circuit "ValueUserOffPathDiamond" {
+  // CHECK:      hw.hierpath private @p [@ValueUserOffPathDiamond::@t_0, @Tw::@w]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@ValueUserOffPathDiamond::@t, @Tw::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@M0::@t, @Tw::@w]
+  firrtl.module @Tw() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @D() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @M0() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance d @D()
+    firrtl.instance t sym @t @Tw()
+  }
+  firrtl.module private @T() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance m0a @M0()
+    firrtl.instance m0b @M0()
+  }
+  // CHECK:      firrtl.module @ValueUserOffPathDiamond()
+  // CHECK:        sv.xmr.ref @p_0
+  // CHECK-NEXT:   firrtl.instance t1_m0a_t sym @t @Tw()
+  // CHECK:        sv.xmr.ref @p
+  // CHECK-NEXT:   firrtl.instance t1_m0b_t sym @t_0 @Tw()
+  firrtl.module @ValueUserOffPathDiamond() {
+    firrtl.instance t1 @T()
+  }
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Public-root value users. A public module marked inline is both retained (it
+// cannot be dead-erased) and absorbed into its instance parents, so its
+// hierpath forks even at a single instance: the retained arm (primary, keeps
+// the original symbol) plus one re-rooted copy per parent. A value user in the
+// absorbed copy must be repointed to that copy's fork, not left reading the
+// retained public original.
+//===----------------------------------------------------------------------===//
+
+// Public root, on-path value user (xmr directly in @Pub, leaf a wire in @Pub).
+// Oracle: retained @Pub keeps @p -> its own @w; the copy in @Top reads @p_0 ->
+// @Top's own @w.
+// CHECK-LABEL: firrtl.circuit "ValueUserPublicRootOnPath"
+firrtl.circuit "ValueUserPublicRootOnPath" {
+  // CHECK:      hw.hierpath private @p [@Pub::@w]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@ValueUserPublicRootOnPath::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@Pub::@w]
+  firrtl.module @Pub() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  // CHECK:      firrtl.module @Pub()
+  // CHECK:        firrtl.wire sym @w
+  // CHECK-NEXT:   sv.xmr.ref @p
+  // CHECK:      firrtl.module @ValueUserPublicRootOnPath()
+  // CHECK:        %p1_w = firrtl.wire sym @w
+  // CHECK-NEXT:   sv.xmr.ref @p_0
+  firrtl.module @ValueUserPublicRootOnPath() {
+    firrtl.instance p1 @Pub()
+  }
+}
+
+// -----
+
+// Public root, off-path value user. @p routes Pub->b->B; the xmr sits in
+// private sibling @A (so @A is dead-erased after inlining, not retained). The
+// retained @Pub arm keeps @p (its absorbed xmr reads @Pub's path, resolving in
+// @Pub which is the root); the copy inlined into @Top is repointed to @p_0 ->
+// @Top's own @B copy, not the retained public original.
+// CHECK-LABEL: firrtl.circuit "ValueUserPublicRootOffPath"
+firrtl.circuit "ValueUserPublicRootOffPath" {
+  // CHECK:      hw.hierpath private @p [@Pub::@b, @B::@w]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@ValueUserPublicRootOffPath::@b, @B::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@Pub::@b, @B::@w]
+  firrtl.module @B() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @A() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module @Pub() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance a @A()
+    firrtl.instance b sym @b @B()
+  }
+  // The retained @Pub arm's absorbed xmr keeps @p.
+  // CHECK:      firrtl.module @Pub()
+  // CHECK:        sv.xmr.ref @p
+  // The copy inlined into @Top is repointed to its own fork.
+  // CHECK:      firrtl.module @ValueUserPublicRootOffPath()
+  // CHECK:        sv.xmr.ref @p_0
+  // CHECK-NEXT:   firrtl.instance p1_b sym @b @B()
+  firrtl.module @ValueUserPublicRootOffPath() {
+    firrtl.instance p1 @Pub()
+  }
+}
+
+// -----
+
+// flatten forks a path exactly as inline does, and the same root-anchored
+// repoint applies: @Top is flattened, absorbing @Mid twice, so @p forks; the
+// off-path xmr in @D repoints to its own copy. (Flatten drives the same descent
+// / setActiveNLAsForChild path as inline.)
+// CHECK-LABEL: firrtl.circuit "ValueUserFlattenFork"
+firrtl.circuit "ValueUserFlattenFork" {
+  // CHECK:      hw.hierpath private @p [@ValueUserFlattenFork::@w_0]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@ValueUserFlattenFork::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@Mid::@t, @Tw::@w]
+  firrtl.module @Tw() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @D() {
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Mid() {
+    firrtl.instance d @D()
+    firrtl.instance t sym @t @Tw()
+  }
+  // CHECK:      firrtl.module @ValueUserFlattenFork()
+  // CHECK:        sv.xmr.ref @p_0
+  // CHECK:        sv.xmr.ref @p
+  firrtl.module @ValueUserFlattenFork() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// Nested inline: the value user's own root module @Root is instantiated through
+// @Mid, which is inlined twice. @Root's single instance op (`r` in @Mid) is thus
+// cloned into two copies, so routing keyed on that original op holds both forks'
+// contexts -- it is not 1:1. The value user must still repoint per copy, which
+// requires disambiguating by the path above the root (m1 vs m2), not by the raw
+// routing of the shared instance op. Oracle: m1's xmr -> @p_0 (@l = m1_r_l),
+// m2's xmr -> @p (@l_0 = m2_r_l); each reads its own @Leaf. Found by the fuzzer.
+// CHECK-LABEL: firrtl.circuit "ValueUserNestedInlineFork"
+firrtl.circuit "ValueUserNestedInlineFork" {
+  // CHECK:      hw.hierpath private @p [@ValueUserNestedInlineFork::@l_0, @Leaf::@w]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@ValueUserNestedInlineFork::@l, @Leaf::@w]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@Root::@l, @Leaf::@w]
+  firrtl.module @Leaf() {
+    %w = firrtl.wire sym @w : !firrtl.uint<1>
+  }
+  firrtl.module private @Root() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance l sym @l @Leaf()
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance r @Root()
+  }
+  // CHECK:      firrtl.module @ValueUserNestedInlineFork()
+  // CHECK:        firrtl.instance m1_r_l sym @l @Leaf()
+  // CHECK-NEXT:   sv.xmr.ref @p_0
+  // CHECK:        firrtl.instance m2_r_l sym @l_0 @Leaf()
+  // CHECK-NEXT:   sv.xmr.ref @p
+  firrtl.module @ValueUserNestedInlineFork() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// One op naming several hierpaths (a verbatim with a symbols array). @Mid is
+// inlined twice, forking both @p and @q; the single verbatim's two refs must be
+// repointed independently, each to its own copy's fork. (Exercises the walk and
+// the replacer over an array attribute, per op.)
+// CHECK-LABEL: firrtl.circuit "ValueUserMultiSymbol"
+firrtl.circuit "ValueUserMultiSymbol" {
+  // CHECK:      hw.hierpath private @p [@ValueUserMultiSymbol::@a_0]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@ValueUserMultiSymbol::@a]
+  // CHECK-NEXT: hw.hierpath private @q [@ValueUserMultiSymbol::@b_0]
+  // CHECK-NEXT: hw.hierpath private @q_0 [@ValueUserMultiSymbol::@b]
+  hw.hierpath private @p [@Mid::@a]
+  hw.hierpath private @q [@Mid::@b]
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %a = firrtl.wire sym @a : !firrtl.uint<1>
+    %b = firrtl.wire sym @b : !firrtl.uint<1>
+    sv.verbatim "x = {{0}} y = {{1}}" {symbols = [@p, @q]}
+  }
+  // CHECK:      firrtl.module @ValueUserMultiSymbol()
+  // CHECK:        %m1_a = firrtl.wire sym @a
+  // CHECK:        %m1_b = firrtl.wire sym @b
+  // CHECK:        sv.verbatim "x = {{[{][{]}}0}} y = {{[{][{]}}1}}" {symbols = [@p_0, @q_0]}
+  // CHECK:        %m2_a = firrtl.wire sym @a_0
+  // CHECK:        %m2_b = firrtl.wire sym @b_0
+  // CHECK:        sv.verbatim "x = {{[{][{]}}0}} y = {{[{][{]}}1}}" {symbols = [@p, @q]}
+  firrtl.module @ValueUserMultiSymbol() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// A value user and an OM `circt.tracker` annotation share a hierpath whose leaf
+// (@Tw::@w) is a shared submodule reached via a forked parent path: @Mid is
+// inlined twice, forking @p. The off-path xmr in each copy must read its own
+// @Tw instance (repointed to its fork); the tracker annotation on the shared
+// leaf follows to both forks (one per parent path), so @w carries a tracker for
+// @p and for @p_0. (Tracker forking is not Layer-B-specific -- it happens on the
+// annotation path regardless -- but the xmr repoint is: without it both copies
+// name @p and one reads the wrong @Tw, #10798.)
+// NOTE: one tracker id (`distinct[0]<>`) ending up on two hierpaths is
+// pre-existing annotation-forking output, pinned here as-is; whether
+// OM/LowerClasses handles a duplicated id is a downstream question this test
+// does not endorse either way.
+// CHECK-LABEL: firrtl.circuit "OMTrackerFork"
+firrtl.circuit "OMTrackerFork" {
+  // CHECK:      hw.hierpath private @p [@OMTrackerFork::@t_0, @Tw::@w]
+  // CHECK-NEXT: hw.hierpath private @p_0 [@OMTrackerFork::@t, @Tw::@w]
+  hw.hierpath private @p [@Mid::@t, @Tw::@w]
+  // CHECK:      firrtl.module @Tw()
+  // CHECK-NEXT:   firrtl.wire sym @w {annotations = [{circt.nonlocal = @p, class = "circt.tracker", id = distinct[0]<>}, {circt.nonlocal = @p_0, class = "circt.tracker", id = distinct[0]<>}]}
+  firrtl.module @Tw() {
+    %w = firrtl.wire sym @w {annotations = [{class = "circt.tracker", id = distinct[0]<>, circt.nonlocal = @p}]} : !firrtl.uint<1>
+  }
+  firrtl.module private @D() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %x = sv.xmr.ref @p : !hw.inout<i1>
+  }
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance d @D()
+    firrtl.instance t sym @t @Tw()
+  }
+  // CHECK:      firrtl.module @OMTrackerFork()
+  // CHECK:        sv.xmr.ref @p_0
+  // CHECK-NEXT:   firrtl.instance m1_t sym @t @Tw()
+  // CHECK:        sv.xmr.ref @p
+  // CHECK-NEXT:   firrtl.instance m2_t sym @t_0 @Tw()
+  firrtl.module @OMTrackerFork() {
+    firrtl.instance m1 @Mid()
+    firrtl.instance m2 @Mid()
+  }
+}
+
+// -----
+
+// A module-only hierpath whose root module is inlined into multiple instances
+// that all collapse to the same path is not a fork: every context materializes
+// [@Top], so a value user naming it resolves unambiguously and must not be
+// rejected. Guards fork detection against comparing canonical pointers -- a
+// dropped-local context is absent from canonicalOf, so a pointer compare would
+// see it as distinct from the primary and spuriously fork (then hard-error the
+// verbatim); comparing materialized namepaths keeps the gate exact.
+// CHECK-LABEL: firrtl.circuit "ModuleOnlyCollapseNoFork"
+firrtl.circuit "ModuleOnlyCollapseNoFork" {
+  // CHECK:      hw.hierpath private @p [@ModuleOnlyCollapseNoFork]
+  // CHECK-NOT:  hw.hierpath
+  hw.hierpath private @p [@Root]
+  firrtl.module private @Root() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance s @Shared()
+  }
+  // CHECK:      firrtl.module private @Shared()
+  // CHECK-NEXT:   sv.verbatim "ref {{[{][{]}}0}}" {symbols = [@p]}
+  firrtl.module private @Shared() {
+    sv.verbatim "ref {{0}}" {symbols = [@p]}
+  }
+  firrtl.module @ModuleOnlyCollapseNoFork() {
+    firrtl.instance r1 @Root()
+    firrtl.instance r2 @Root()
+  }
+}
+
+// -----
+
 // A hierpath rooted in a module that is dead-erased is itself erased: the dead
 // root is never live, so the upward trace discovers no context, the source
 // path has no surviving target, and the writeback removes it
