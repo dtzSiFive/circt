@@ -1682,6 +1682,11 @@ private:
   /// Same key-stability argument as `clonedAnnoContexts` (I7).
   DenseMap<Operation *, SmallVector<VirtualNLA *, 2>> clonedValueUserRefs;
 
+  /// Scratch enumeration buffer for the value-user scan.
+  /// Reused across clones to keep its heap allocation out of the per-op
+  /// path; sound because the P3 walk is serial.
+  NamedAttrList scratchInherentAttrs;
+
   /// The debug scopes created for inlined instances.
   /// Scopes that are unused after inlining will be deleted again.
   SmallVector<debug::ScopeOp> debugScopes;
@@ -1874,20 +1879,61 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
   // Empty at most levels, so gate the scan on a non-empty set; an unrecorded
   // op still falls through to the diagnostic sweep, so this is a fast path,
   // not a semantic gate.
-  // The dictionary fetch stays inside the gate too: getAttrDictionary
-  // interns inherent attrs, the expensive half here.
+  // Never materialize the op's attribute dictionary: on properties ops
+  // getAttrDictionary interns a fresh DictionaryAttr per call, the dominant
+  // scan cost at clone volume.
+  // The stored dictionary plus the generated populateInherentAttrs
+  // enumeration together cover every attribute.
   if (!il.rootActiveNLAs.empty()) {
     SmallVector<VirtualNLA *, 2> valueContexts;
-    mlir::AttrTypeWalker walker;
-    walker.addWalk([&](FlatSymbolRefAttr sym) {
+    auto match = [&](FlatSymbolRefAttr sym) {
       matchContexts(sym, /*atRoot=*/true, il.rootActiveNLAs, valueContexts);
-    });
-    DictionaryAttr dict = newOp->getAttrDictionary();
-    for (NamedAttribute na : dict) {
+    };
+    // Recursion by attribute kind in place of AttrTypeWalker: common leaves
+    // terminate on a type test and no visited set is allocated.
+    // Attribute trees are DAGs, so a shared subtree may be revisited;
+    // per-op payloads are small and matchContexts records each owned
+    // context once.
+    // The generic tail visits exactly the sub-elements AttrTypeWalker
+    // would, so coverage is unchanged.
+    struct SymScanner {
+      llvm::function_ref<void(FlatSymbolRefAttr)> match;
+      void scan(Attribute attr) {
+        if (auto ref = dyn_cast<FlatSymbolRefAttr>(attr))
+          return match(ref);
+        if (isa<StringAttr, IntegerAttr, FloatAttr, UnitAttr>(attr))
+          return;
+        if (auto arr = dyn_cast<ArrayAttr>(attr)) {
+          for (Attribute elt : arr)
+            scan(elt);
+          return;
+        }
+        attr.walkImmediateSubElements([&](Attribute sub) { scan(sub); },
+                                      [&](Type type) { scanType(type); });
+      }
+      void scanType(Type type) {
+        type.walkImmediateSubElements([&](Attribute sub) { scan(sub); },
+                                      [&](Type sub) { scanType(sub); });
+      }
+    } scanner{match};
+    auto scanNamed = [&](NamedAttribute na) {
       StringRef name = na.getName().getValue();
       if (name == "annotations" || name == "portAnnotations")
-        continue;
-      walker.walk(na.getValue());
+        return;
+      scanner.scan(na.getValue());
+    };
+    // Stored dictionary: the discardable attrs of a properties op, or the
+    // complete dictionary of a non-properties op.
+    // Read in place, never built.
+    for (NamedAttribute na : newOp->getRawDictionaryAttrs())
+      scanNamed(na);
+    // Inherent side of properties ops, enumerated without interning.
+    // The scratch list is reused across clones; the walk is serial.
+    if (newOp->getPropertiesStorageSize()) {
+      scratchInherentAttrs.clear();
+      newOp->getName().populateInherentAttrs(newOp, scratchInherentAttrs);
+      for (NamedAttribute na : scratchInherentAttrs)
+        scanNamed(na);
     }
     if (!valueContexts.empty()) {
       for (auto *v : valueContexts)
