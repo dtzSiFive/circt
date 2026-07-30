@@ -2512,6 +2512,26 @@ private:
 };
 } // end anonymous namespace
 
+// Whether `rhs` may be emitted at its parent's precedence, i.e. without
+// parentheses.
+// That is sound exactly when regrouping the pair cannot change the value.
+// Repeating an operator that reassociates is one such pair.
+// Addition over subtraction is the other: SameOperandsAndResultType makes the
+// whole run one width, and at a single width + and - regroup exactly, so
+// a + (b - c) and (a + b) - c produce the same bits whatever the signedness.
+// A same-precedence operator that does not regroup keeps its parentheses:
+// a * (b / c) is not (a * b) / c for integer division.
+static bool rhsRegroupsWithParent(Operation *op, Value rhs) {
+  if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
+    return false;
+  Operation *def = rhs.getDefiningOp();
+  if (!def)
+    return false;
+  if (def->getName() == op->getName())
+    return true;
+  return isa<AddOp>(op) && isa<SubOp>(def);
+}
+
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     unsigned emitBinaryFlags) {
@@ -2543,11 +2563,11 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
   // Right associative operators are already generally variadic, we need to
   // handle things like: (a<4> == b<4>) == (c<3> == d<3>).  When processing the
-  // top operation of the tree, the rhs needs parens.  When processing
-  // known-reassociative operators like +, ^, etc we don't need parens.
+  // top operation of the tree, the rhs needs parens.  When the pair regroups,
+  // like a + (b + c), we don't need parens.
   // TODO: MLIR should have general "Associative" trait.
   auto rhsPrec = prec;
-  if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
+  if (!rhsRegroupsWithParent(op, op->getOperand(1)))
     rhsPrec = VerilogPrecedence(prec - 1);
 
   // If the RHS operand has self-determined width and always treated as

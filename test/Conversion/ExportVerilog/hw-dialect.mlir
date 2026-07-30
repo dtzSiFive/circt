@@ -457,6 +457,36 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   %b4 = comb.divu %b2, %b3: i4
   sv.assign %awire, %b4: i4
 
+  // A same-precedence right operand that does not regroup keeps its parens:
+  // a * (b / c) is not (a * b) / c for integer division.
+  // CHECK: assign awire = in1 * (in2 / in3);
+  %d1 = comb.divu %in2, %in3: i4
+  %d2 = comb.mul %in1, %d1: i4
+  sv.assign %awire, %d2: i4
+
+  // CHECK: assign awire = in1 * (in2 % in3);
+  %e1 = comb.modu %in2, %in3: i4
+  %e2 = comb.mul %in1, %e1: i4
+  sv.assign %awire, %e2: i4
+
+  // Repeating the operator still regroups, so no parens.
+  // CHECK: assign awire = in1 * in2 * in3;
+  %f1 = comb.mul %in2, %in3: i4
+  %f2 = comb.mul %in1, %f1: i4
+  sv.assign %awire, %f2: i4
+
+  // Addition and subtraction regroup, so no parens.
+  // CHECK: assign awire = in1 + in2 - in3;
+  %g1 = comb.sub %in2, %in3: i4
+  %g2 = comb.add %in1, %g1: i4
+  sv.assign %awire, %g2: i4
+
+  // Subtraction does not regroup from the right.
+  // CHECK: assign awire = in1 - (in2 - in3);
+  %h1 = comb.sub %in2, %in3: i4
+  %h2 = comb.sub %in1, %h1: i4
+  sv.assign %awire, %h2: i4
+
   // https://github.com/llvm/circt/issues/369
   // CHECK: assign awire = $unsigned($signed(4'sh5 / -4'sh3));
   %c5_i4 = hw.constant 5 : i4
