@@ -57,7 +57,7 @@
 //                   inherited unnarrowed below it
 //   - for-all user  a `circt.nonlocal` ref in an annotation payload:
 //                   it names every instance of the path
-//   - value user    a hierpath ref anywhere else (sv.xmr.ref, force,
+//   - value user    a hierpath ref anywhere else (e.g., sv.xmr.ref, force,
 //                   release): it names exactly one copy
 //   - dangling      a reference or handle kept past the point its target
 //                   is erased or renamed
@@ -98,12 +98,11 @@
 // Diagnosed and rejected:
 //  * Inlining an instance sitting under anything but a module or layer block.
 //  * Inlining a body with an inner reference to another module's body.
-//  * A value user (sv.xmr.ref / force / release) of a forked hierpath the
-//    inliner cannot repoint -- an original op in a module the fork shares.
+//  * A value user (e.g., sv.xmr.ref, force, release) of a forked hierpath the
+//    inliner cannot repoint: an original op in a module the fork shares.
 //    Cloned value users are repointed to their own fork; the rest are
 //    rejected rather than left naming one arbitrary copy (#10798).
-//    The sweep covers circuit-level carriers too: circuit-body ops and the
-//    circuit op's own attributes.
+//    Includes circuit-level operations and circuit attributes.
 //  * A value user of an erased (dead-rooted, I15) hierpath:
 //    diagnosed rather than left dangling (#10798).
 //
